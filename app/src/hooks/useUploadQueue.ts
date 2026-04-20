@@ -11,10 +11,13 @@ import {
 } from '@/services/uploadQueue';
 import { createRecordingAndUpload } from '@/services/recordings';
 
-const MAX_ATTEMPTS = 5;
+const AUTO_RETRY_LIMIT = 5;
+
+export type UploadProgressMap = Record<string, number>;
 
 export function useUploadQueue(ownerUid: string | undefined) {
   const [queue, setQueue] = useState<QueuedRecording[]>([]);
+  const [progress, setProgress] = useState<UploadProgressMap>({});
   const [draining, setDraining] = useState(false);
   const [online, setOnline] = useState<boolean>(true);
   const drainingRef = useRef(false);
@@ -24,6 +27,17 @@ export function useUploadQueue(ownerUid: string | undefined) {
     const items = await listQueue(ownerUid);
     setQueue(items);
   }, [ownerUid]);
+
+  const updateProgress = useCallback((queueId: string, percent: number | null) => {
+    setProgress((prev) => {
+      if (percent == null) {
+        // 完了 or 失敗時はクリア
+        const { [queueId]: _, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [queueId]: percent };
+    });
+  }, []);
 
   const drain = useCallback(async () => {
     if (!ownerUid) return;
@@ -36,36 +50,79 @@ export function useUploadQueue(ownerUid: string | undefined) {
         return;
       }
 
-      let items = await listQueue(ownerUid);
-      for (const item of items) {
-        if (item.status === 'uploading') continue;
-        if (item.attempts >= MAX_ATTEMPTS) continue;
+      // 毎回キューを読み直すことで、外部からの attempts リセット等の変更を拾う
+      let keepGoing = true;
+      while (keepGoing) {
+        keepGoing = false;
+        const items = await listQueue(ownerUid);
+        for (const item of items) {
+          if (item.status === 'uploading') continue;
+          if (item.attempts >= AUTO_RETRY_LIMIT) continue;
 
-        await updateQueueItem(ownerUid, item.queueId, { status: 'uploading' });
-        setQueue(await listQueue(ownerUid));
+          keepGoing = true;
+          await updateQueueItem(ownerUid, item.queueId, { status: 'uploading' });
+          setQueue(await listQueue(ownerUid));
+          updateProgress(item.queueId, 0);
 
-        try {
-          await createRecordingAndUpload({
-            ownerUid: item.ownerUid,
-            title: item.title,
-            localUri: item.localUri,
-            durationMs: item.durationMs,
-          });
-          await removeQueueItem(ownerUid, item.queueId);
-        } catch (err) {
-          await updateQueueItem(ownerUid, item.queueId, {
-            status: 'failed',
-            attempts: item.attempts + 1,
-            lastError: err instanceof Error ? err.message : String(err),
-          });
+          try {
+            await createRecordingAndUpload({
+              ownerUid: item.ownerUid,
+              title: item.title,
+              localUri: item.localUri,
+              durationMs: item.durationMs,
+              onProgress: (percent) => updateProgress(item.queueId, percent),
+            });
+            await removeQueueItem(ownerUid, item.queueId);
+          } catch (err) {
+            await updateQueueItem(ownerUid, item.queueId, {
+              status: 'failed',
+              attempts: item.attempts + 1,
+              lastError: err instanceof Error ? err.message : String(err),
+            });
+          } finally {
+            updateProgress(item.queueId, null);
+          }
+          setQueue(await listQueue(ownerUid));
+          // 1件ずつ順次処理（並列にしない：帯域を食わないため & 進捗表示を分かりやすく）
+          break;
         }
-        setQueue(await listQueue(ownerUid));
       }
     } finally {
       drainingRef.current = false;
       setDraining(false);
     }
-  }, [ownerUid]);
+  }, [ownerUid, updateProgress]);
+
+  // 失敗／自動リトライ上限到達アイテムを手動でリセットして再送
+  const retryItem = useCallback(
+    async (queueId: string) => {
+      if (!ownerUid) return;
+      await updateQueueItem(ownerUid, queueId, {
+        status: 'pending',
+        attempts: 0,
+        lastError: undefined,
+      });
+      await refresh();
+      void drain();
+    },
+    [ownerUid, refresh, drain],
+  );
+
+  const retryAll = useCallback(async () => {
+    if (!ownerUid) return;
+    const items = await listQueue(ownerUid);
+    for (const item of items) {
+      if (item.status !== 'uploading') {
+        await updateQueueItem(ownerUid, item.queueId, {
+          status: 'pending',
+          attempts: 0,
+          lastError: undefined,
+        });
+      }
+    }
+    await refresh();
+    void drain();
+  }, [ownerUid, refresh, drain]);
 
   // 初期ロード & ロスト音声ファイルの掃除
   useEffect(() => {
@@ -73,7 +130,6 @@ export function useUploadQueue(ownerUid: string | undefined) {
     (async () => {
       await pruneMissingFiles(ownerUid);
       await refresh();
-      // 起動時にオンラインならドレイン
       const net = await NetInfo.fetch();
       setOnline(!!net.isConnected);
       if (net.isConnected && net.isInternetReachable !== false) {
@@ -82,7 +138,6 @@ export function useUploadQueue(ownerUid: string | undefined) {
     })();
   }, [ownerUid, refresh, drain]);
 
-  // ネットワーク状態が「復帰」したタイミングでドレイン
   useEffect(() => {
     const unsub = NetInfo.addEventListener((state: NetInfoState) => {
       const nowOnline = !!state.isConnected && state.isInternetReachable !== false;
@@ -94,7 +149,6 @@ export function useUploadQueue(ownerUid: string | undefined) {
     return () => unsub();
   }, [drain]);
 
-  // アプリがフォアグラウンドに戻った時にドレイン
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
       if (next === 'active') {
@@ -104,5 +158,14 @@ export function useUploadQueue(ownerUid: string | undefined) {
     return () => sub.remove();
   }, [drain]);
 
-  return { queue, draining, online, refresh, drain };
+  return {
+    queue,
+    progress,
+    draining,
+    online,
+    refresh,
+    drain,
+    retryItem,
+    retryAll,
+  };
 }

@@ -130,7 +130,9 @@ export function RecordScreen({ onDone }: Props) {
       </View>
 
       <Text style={styles.offlineNote}>
-        オフラインでも録音できます。電波が復帰すると自動でアップロードされます。
+        録音は停止と同時に端末へ保存されます。
+        クラウドへのアップロードはバックグラウンドで行われ、
+        送信完了するまでローカルのファイルは消えません。
       </Text>
     </View>
   );

@@ -15,6 +15,7 @@ import { useUploadQueue } from '@/hooks/useUploadQueue';
 import { subscribeToRecordings } from '@/services/recordings';
 import { removeQueueItem, type QueuedRecording } from '@/services/uploadQueue';
 import { StatusBadge } from '@/components/StatusBadge';
+import { ProgressBar } from '@/components/ProgressBar';
 import type { Recording } from '@/types';
 
 type Props = {
@@ -31,7 +32,8 @@ export function RecordingListScreen({ onSelect, onNewRecording, onSignOut }: Pro
   const { user } = useAuth();
   const [items, setItems] = useState<Recording[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const { queue, draining, online, drain, refresh } = useUploadQueue(user?.uid);
+  const { queue, progress, draining, online, drain, refresh, retryItem, retryAll } =
+    useUploadQueue(user?.uid);
 
   useEffect(() => {
     if (!user) return;
@@ -42,7 +44,6 @@ export function RecordingListScreen({ onSelect, onNewRecording, onSignOut }: Pro
     return unsub;
   }, [user]);
 
-  // 画面がフォーカスされた時にキューを再読み込み（録音画面からの戻り直後など）
   useFocusEffect(
     useCallback(() => {
       void refresh();
@@ -55,9 +56,9 @@ export function RecordingListScreen({ onSelect, onNewRecording, onSignOut }: Pro
     ...items.map((r): ListRow => ({ kind: 'cloud', item: r })),
   ];
 
-  async function handleRetryAll() {
-    await drain();
-  }
+  const uploadingCount = queue.filter((q) => q.status === 'uploading').length;
+  const waitingCount = queue.filter((q) => q.status === 'pending').length;
+  const failedCount = queue.filter((q) => q.status === 'failed').length;
 
   async function handleDiscardQueued(item: QueuedRecording) {
     if (!user) return;
@@ -76,15 +77,24 @@ export function RecordingListScreen({ onSelect, onNewRecording, onSignOut }: Pro
 
       {queue.length > 0 || !online ? (
         <View style={[styles.banner, !online && styles.bannerOffline]}>
-          <Text style={styles.bannerText}>
-            {!online
-              ? `オフライン中：未送信 ${queue.length} 件`
-              : `未送信の録音が ${queue.length} 件あります`}
-          </Text>
-          {online && queue.length > 0 ? (
-            <Pressable onPress={handleRetryAll} disabled={draining}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.bannerText}>
+              {!online ? 'オフライン中' : 'クラウドへ送信中'}
+            </Text>
+            <Text style={styles.bannerSubText}>
+              {[
+                uploadingCount > 0 ? `送信中 ${uploadingCount}` : null,
+                waitingCount > 0 ? `待機 ${waitingCount}` : null,
+                failedCount > 0 ? `失敗 ${failedCount}` : null,
+              ]
+                .filter(Boolean)
+                .join('  ·  ') || 'すべてローカル保存済み'}
+            </Text>
+          </View>
+          {online && (waitingCount > 0 || failedCount > 0) ? (
+            <Pressable onPress={retryAll} disabled={draining}>
               <Text style={styles.bannerAction}>
-                {draining ? '送信中...' : '再試行'}
+                {draining ? '処理中...' : '再試行'}
               </Text>
             </Pressable>
           ) : null}
@@ -113,6 +123,10 @@ export function RecordingListScreen({ onSelect, onNewRecording, onSignOut }: Pro
         renderItem={({ item: row }) => {
           if (row.kind === 'queued') {
             const q = row.item;
+            const percent = progress[q.queueId];
+            const isUploading = q.status === 'uploading';
+            const isFailed = q.status === 'failed';
+
             return (
               <View style={[styles.row, styles.rowQueued]}>
                 <View style={{ flex: 1 }}>
@@ -124,22 +138,40 @@ export function RecordingListScreen({ onSelect, onNewRecording, onSignOut }: Pro
                     {'  ·  '}
                     {Math.round(q.durationMs / 1000)}秒
                   </Text>
-                  <Text style={styles.queuedLabel}>
-                    {q.status === 'uploading'
-                      ? '送信中...'
-                      : q.status === 'failed'
-                      ? `送信失敗（${q.attempts}回リトライ）`
-                      : '未送信'}
-                  </Text>
+
+                  <View style={styles.queuedStatusRow}>
+                    <Text style={[styles.queuedLabel, isFailed && styles.queuedLabelFailed]}>
+                      {isUploading
+                        ? `送信中 ${percent ?? 0}%`
+                        : isFailed
+                        ? `送信失敗（${q.attempts}回試行）`
+                        : 'ローカル保存済み・送信待ち'}
+                    </Text>
+                  </View>
+
+                  {isUploading ? (
+                    <View style={{ marginTop: 6 }}>
+                      <ProgressBar percent={percent ?? 0} />
+                    </View>
+                  ) : null}
+
                   {q.lastError ? (
-                    <Text style={styles.queuedError} numberOfLines={2}>
+                    <Text style={styles.queuedError} numberOfLines={3}>
                       {q.lastError}
                     </Text>
                   ) : null}
+
+                  {(isFailed || q.status === 'pending') && !draining ? (
+                    <View style={styles.rowActions}>
+                      <Pressable onPress={() => retryItem(q.queueId)}>
+                        <Text style={styles.retry}>再試行</Text>
+                      </Pressable>
+                      <Pressable onPress={() => handleDiscardQueued(q)}>
+                        <Text style={styles.discard}>破棄</Text>
+                      </Pressable>
+                    </View>
+                  ) : null}
                 </View>
-                <Pressable onPress={() => handleDiscardQueued(q)}>
-                  <Text style={styles.discard}>破棄</Text>
-                </Pressable>
               </View>
             );
           }
@@ -189,15 +221,16 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginBottom: 8,
     padding: 12,
-    backgroundColor: '#FEF3C7',
+    backgroundColor: '#EFF6FF',
     borderRadius: 10,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 12,
   },
-  bannerOffline: { backgroundColor: '#FEE2E2' },
-  bannerText: { color: '#92400E', fontWeight: '600' },
-  bannerAction: { color: '#2563EB', fontWeight: '600' },
+  bannerOffline: { backgroundColor: '#FEF3C7' },
+  bannerText: { color: '#1E40AF', fontWeight: '700', fontSize: 14 },
+  bannerSubText: { color: '#334155', fontSize: 12, marginTop: 2 },
+  bannerAction: { color: '#2563EB', fontWeight: '700' },
   listContent: { paddingHorizontal: 16, paddingBottom: 120 },
   emptyContent: { flex: 1, justifyContent: 'center', padding: 32 },
   empty: { alignItems: 'center' },
@@ -215,8 +248,6 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    flexDirection: 'row',
-    alignItems: 'center',
   },
   rowQueued: {
     borderStyle: 'dashed',
@@ -225,9 +256,22 @@ const styles = StyleSheet.create({
   },
   rowTitle: { fontSize: 16, fontWeight: '600', color: '#0F172A' },
   rowMeta: { marginTop: 4, color: '#64748B', fontSize: 13 },
-  queuedLabel: { marginTop: 6, color: '#92400E', fontSize: 12, fontWeight: '600' },
-  queuedError: { marginTop: 4, color: '#991B1B', fontSize: 11 },
-  discard: { color: '#DC2626', padding: 8, fontWeight: '600' },
+  queuedStatusRow: { marginTop: 6 },
+  queuedLabel: { color: '#92400E', fontSize: 12, fontWeight: '700' },
+  queuedLabelFailed: { color: '#991B1B' },
+  queuedError: {
+    marginTop: 4,
+    color: '#991B1B',
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  rowActions: {
+    flexDirection: 'row',
+    gap: 20,
+    marginTop: 10,
+  },
+  retry: { color: '#2563EB', fontWeight: '700' },
+  discard: { color: '#DC2626', fontWeight: '600' },
   fab: {
     position: 'absolute',
     bottom: 24,

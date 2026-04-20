@@ -46,7 +46,8 @@ export function LoginScreen() {
       </Pressable>
 
       <Text style={styles.notice}>
-        ※ 商談を録音する際は、必ずお客様の同意を得てください。
+        録音は常に端末に保存され、送信完了までローカルに残ります。
+        {'\n'}※ 商談を録音する際は、必ずお客様の同意を得てください。
       </Text>
     </View>
   );
