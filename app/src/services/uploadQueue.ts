@@ -2,12 +2,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
 
 import { deletePersistedRecording, persistedRecordingExists } from './audioStorage';
+import type { DealSnapshot } from '@/types';
 
 export type QueuedRecordingStatus = 'pending' | 'uploading' | 'failed';
 
 export type QueuedRecording = {
   queueId: string;
   ownerUid: string;
+  dealId: string;
+  dealSnapshot: DealSnapshot;
   title: string;
   localUri: string;
   durationMs: number;
@@ -43,6 +46,8 @@ export async function listQueue(ownerUid: string): Promise<QueuedRecording[]> {
 
 export async function enqueueRecording(params: {
   ownerUid: string;
+  dealId: string;
+  dealSnapshot: DealSnapshot;
   title: string;
   localUri: string;
   durationMs: number;
@@ -50,6 +55,8 @@ export async function enqueueRecording(params: {
   const item: QueuedRecording = {
     queueId: Crypto.randomUUID(),
     ownerUid: params.ownerUid,
+    dealId: params.dealId,
+    dealSnapshot: params.dealSnapshot,
     title: params.title,
     localUri: params.localUri,
     durationMs: params.durationMs,

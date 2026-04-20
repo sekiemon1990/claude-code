@@ -16,14 +16,49 @@
 └── firestore.indexes.json
 ```
 
-### データフロー
+## 案件必須の録音フロー
 
-1. 営業マンがアプリで録音 → ローカルに音声ファイル保存
-2. アプリが Firebase Storage へアップロード、Firestore に `recordings/{id}` を `uploaded` ステータスで作成
+**録音は必ず「マクサスコアの案件」に紐付けて行う**設計。案件なしの録音はできない。
+
+録音開始までの動線は2つ：
+
+### A. マクサスコアの案件画面から録音ボタンを押す（ディープリンク）
+
+マクサスコアの案件詳細ページに「録音アプリで開く」ボタンを設置し、
+`makxasrec://deal/{dealId}` 形式の URL を起動する。
+
+- アプリがインストールされていれば自動で起動し、その案件が選択された状態の録音画面へ
+- 未ログインなら先にログイン画面 → ログイン後に録音画面へ
+- ディープリンク受信時に次を検証し、満たさない場合はエラーダイアログ表示：
+  - 案件が存在する
+  - `assessorEmail` がログインユーザーの Email と一致（自分が担当）
+  - `status === 'scheduled'`（予約中）
+
+**CRM 側の実装例**：
+```html
+<a href="makxasrec://deal/12345">この案件で録音を開始</a>
+```
+
+### B. アプリ内から案件を選択して録音開始
+
+アプリの一覧画面から「+ 新規録音」→ 案件選択画面 → 録音画面。
+
+案件選択画面では以下のフィルタ・ソートを適用：
+- 自分が査定担当者に設定されている
+- ステータスが `予約中 (scheduled)`
+- 予約日時が現在に近い順
+
+## データフロー
+
+1. 営業マンが**案件を選択**して録音 → ローカルに音声ファイル保存（案件情報スナップショットと共に）
+2. バックグラウンドでキューをドレイン → Firebase Storage へアップロード、Firestore に `recordings/{id}` を `uploaded` ステータスで作成（`dealId` と `dealSnapshot` 付き）
 3. Cloud Functions (`onRecordingUploaded`) が発火
    - Whisper API で文字起こし → Firestore 更新（`transcribed`）
    - Claude API で議事録を構造化生成 → Firestore 更新（`completed`）
 4. アプリは Firestore をリアルタイム購読し、処理完了と同時に UI に反映
+
+`dealSnapshot` を録音時点で凍結するため、CRM 側で後から案件が変更・削除されても、
+録音時点の顧客情報・予約時刻・査定対象の記録は保持される。
 
 ## 必要なもの
 
@@ -196,14 +231,37 @@ App Store 審査時、バックグラウンド実行の用途を Privacy Manifes
 - Wi-Fi 接続時のみ送信したい場合は、ユーザー設定でトグルを追加する（`NetInfo.type === 'wifi'` で制御可能）
 - iOS のバックグラウンド更新頻度はシステム依存。より短い間隔が必要な場合は `BGProcessingTask`（長時間処理用）も検討できるが、App Store 審査ハードルが上がる
 
+## マクサスコア（CRM）連携の実装ポイント
+
+現時点では `app/src/services/crm.ts` にスタブ実装を置いてモックデータを返している。
+本番接続時は以下の3点を差し替えればよい：
+
+1. `MOCK_ENABLED = false` に変更
+2. `httpGet()` 関数に実際の fetch 処理を実装（`CRM_BASE_URL` の定義も）
+3. 認証方針の決定：
+   - 推奨：Firebase Auth の ID トークン（`user.getIdToken()`）を Authorization ヘッダで送信し、CRM サーバで Firebase Admin SDK を使って検証
+   - 代案：サーバ間の信頼関係を使った専用 API キー
+
+必要な CRM API（最小セット）:
+
+| Method | Path | 用途 |
+|--------|------|------|
+| GET | `/api/deals?assessorEmail=xxx&status=scheduled` | 案件一覧（自分担当・予約中） |
+| GET | `/api/deals/{dealId}` | 案件詳細（ディープリンク時の検証用） |
+
+議事録を CRM に書き戻したい場合は、Cloud Functions 側で以下を追加：
+
+| Method | Path | 用途 |
+|--------|------|------|
+| POST | `/api/deals/{dealId}/minutes` | 議事録を案件に添付 |
+
 ## 今後の拡張ポイント
 
-- **マクサスコア連携**：`recordings.crmDealId` フィールドを既に用意済み。
-  1. アプリ側：録音作成時に案件選択 UI を追加し `crmDealId` を保存
-  2. Cloud Functions：`completed` 遷移時に CRM API を叩いて議事録を案件に添付
-- **議事録テンプレートのカスタマイズ**：`functions/src/generateMinutes.ts` の `SYSTEM_PROMPT` を業務に合わせて調整
+- **CRM への議事録書き戻し**：Cloud Functions の `processRecording` 完了時に CRM API を叩く
+- **議事録テンプレートのカスタマイズ**：`functions/src/generateMinutes.ts` の `SYSTEM_PROMPT` を業務に合わせて調整。案件の `dealSnapshot.items` を事前情報としてプロンプトに注入すると抽出精度が向上する
 - **文字起こしの精度向上**：Whisper を `whisper-1` から `gpt-4o-transcribe` 等へ切替え、または Google Speech-to-Text（日本語カスタムモデル）との比較
 - **Google カレンダー連携**：議事録の「次回アクション」から自動で予定登録
+- **Universal Links / App Links**：`makxasrec://` のカスタムスキームから `https://app.makxas.com/deal/{id}` 形式へ移行し、iOS/Android のドメイン検証ファイルを設置すると UX が向上
 
 ## 法的・運用上の注意
 

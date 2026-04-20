@@ -89,6 +89,8 @@ export async function drainUploadQueue(options: {
     try {
       await createRecordingAndUpload({
         ownerUid: target.ownerUid,
+        dealId: target.dealId,
+        dealSnapshot: target.dealSnapshot,
         title: target.title,
         localUri: target.localUri,
         durationMs: target.durationMs,

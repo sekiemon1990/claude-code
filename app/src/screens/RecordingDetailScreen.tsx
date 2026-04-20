@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Audio } from 'expo-av';
 import { format } from 'date-fns';
+import { ja } from 'date-fns/locale';
 
 import { subscribeToRecording, deleteRecording } from '@/services/recordings';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -108,8 +109,29 @@ export function RecordingDetailScreen({ recordingId, onBack }: Props) {
         <Text style={styles.link}>← 一覧へ</Text>
       </Pressable>
 
-      <Text style={styles.title}>{recording.title}</Text>
+      {recording.dealSnapshot ? (
+        <View style={styles.dealCard}>
+          <Text style={styles.dealLabel}>案件</Text>
+          <Text style={styles.customerName}>{recording.dealSnapshot.customerName}</Text>
+          <Text style={styles.reservation}>
+            予約:{' '}
+            {format(new Date(recording.dealSnapshot.reservationAt), 'M/d (E) HH:mm', {
+              locale: ja,
+            })}
+          </Text>
+          {recording.dealSnapshot.address ? (
+            <Text style={styles.dealMeta}>{recording.dealSnapshot.address}</Text>
+          ) : null}
+          {recording.dealSnapshot.items ? (
+            <Text style={styles.dealMeta}>査定対象: {recording.dealSnapshot.items}</Text>
+          ) : null}
+        </View>
+      ) : (
+        <Text style={styles.title}>{recording.title}</Text>
+      )}
+
       <Text style={styles.meta}>
+        録音:{' '}
         {recording.createdAt
           ? format(recording.createdAt.toDate(), 'yyyy-MM-dd HH:mm')
           : ''}
@@ -183,7 +205,18 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   link: { color: '#2563EB', marginBottom: 12 },
   title: { fontSize: 22, fontWeight: '700', color: '#0F172A' },
-  meta: { marginTop: 6, color: '#64748B' },
+  meta: { marginTop: 12, color: '#64748B' },
+  dealCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  dealLabel: { color: '#64748B', fontSize: 12, fontWeight: '600' },
+  customerName: { marginTop: 6, fontSize: 18, fontWeight: '700', color: '#0F172A' },
+  reservation: { marginTop: 6, fontSize: 14, color: '#0F172A' },
+  dealMeta: { marginTop: 4, fontSize: 13, color: '#475569' },
   errorBox: {
     marginTop: 16,
     padding: 12,

@@ -3,6 +3,7 @@
     "name": "出張買取 録音",
     "slug": "sales-recording-app",
     "version": "0.1.0",
+    "scheme": "makxasrec",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",

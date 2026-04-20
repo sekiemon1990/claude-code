@@ -15,7 +15,7 @@ import { deleteObject, getDownloadURL, ref, uploadBytesResumable } from 'firebas
 import * as FileSystem from 'expo-file-system';
 
 import { firestore, storage } from '@/config/firebase';
-import type { Recording, RecordingStatus } from '@/types';
+import type { DealSnapshot, Recording, RecordingStatus } from '@/types';
 
 const RECORDINGS = 'recordings';
 
@@ -56,21 +56,24 @@ type UploadResult = {
 
 export async function createRecordingAndUpload(params: {
   ownerUid: string;
+  dealId: string;
+  dealSnapshot: DealSnapshot;
   title: string;
   localUri: string;
   durationMs: number;
   onProgress?: (percent: number) => void;
 }): Promise<UploadResult> {
-  const { ownerUid, title, localUri, durationMs, onProgress } = params;
+  const { ownerUid, dealId, dealSnapshot, title, localUri, durationMs, onProgress } = params;
 
   // 1. Firestore にレコードを先に作成（初期ステータスは uploading）
   const docRef = await addDoc(collection(firestore, RECORDINGS), {
     ownerUid,
+    dealId,
+    dealSnapshot,
     title,
     durationMs,
     status: 'uploading' satisfies RecordingStatus,
     storagePath: '',
-    crmDealId: null,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
@@ -79,7 +82,6 @@ export async function createRecordingAndUpload(params: {
   const storagePath = `recordings/${ownerUid}/${docRef.id}/audio.${extension}`;
   const storageRef = ref(storage, storagePath);
 
-  // expo-file-system で読み込んで Blob 化
   const fileInfo = await FileSystem.getInfoAsync(localUri);
   if (!fileInfo.exists) {
     throw new Error('録音ファイルが見つかりません');
@@ -106,7 +108,6 @@ export async function createRecordingAndUpload(params: {
 
   const downloadUrl = await getDownloadURL(storageRef);
 
-  // アップロード完了したら uploaded ステータスへ遷移（この後 Cloud Function が拾って transcribing へ）
   await updateDoc(docRef, {
     storagePath,
     downloadUrl,
@@ -122,7 +123,7 @@ export async function deleteRecording(recording: Recording) {
     try {
       await deleteObject(ref(storage, recording.storagePath));
     } catch {
-      // ファイルが既に無い場合は無視
+      // 既に無い場合は無視
     }
   }
   await deleteDoc(doc(firestore, RECORDINGS, recording.id));

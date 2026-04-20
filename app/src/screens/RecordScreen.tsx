@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { format } from 'date-fns';
+import { ja } from 'date-fns/locale';
 
 import { useRecorder } from '@/hooks/useRecorder';
 import { useAuth } from '@/hooks/useAuth';
 import { useStorageStatus, formatBytes } from '@/hooks/useStorageStatus';
 import { persistRecording } from '@/services/audioStorage';
 import { enqueueRecording } from '@/services/uploadQueue';
+import { toSnapshot } from '@/services/crm';
+import type { Deal } from '@/types';
 import * as Crypto from 'expo-crypto';
 
 function formatDuration(ms: number): string {
@@ -18,13 +21,16 @@ function formatDuration(ms: number): string {
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
 }
 
-type Props = { onDone: () => void };
+type Props = {
+  deal: Deal;
+  onDone: () => void;
+  onChangeDeal: () => void;
+};
 
-export function RecordScreen({ onDone }: Props) {
+export function RecordScreen({ deal, onDone, onChangeDeal }: Props) {
   const { user } = useAuth();
   const recorder = useRecorder();
   const storage = useStorageStatus();
-  const [title, setTitle] = useState('');
   const [saving, setSaving] = useState(false);
 
   async function handleStart() {
@@ -42,25 +48,25 @@ export function RecordScreen({ onDone }: Props) {
     const result = await recorder.stop();
     if (!result || !user) return;
 
-    const finalTitle =
-      title.trim() || `商談 ${format(new Date(), 'yyyy-MM-dd HH:mm')}`;
+    const title = `${deal.customerName} ${format(new Date(deal.reservationAt), 'M/d HH:mm', {
+      locale: ja,
+    })}`;
 
     setSaving(true);
     try {
-      // 1. 音声ファイルを永続ディレクトリへ移動（アプリ再起動でも残す）
       const queueId = Crypto.randomUUID();
       const persistedUri = await persistRecording(result.uri, queueId);
 
-      // 2. アップロードキューに追加（オフライン時はここで止まり、オンライン復帰時に自動送信）
       await enqueueRecording({
         ownerUid: user.uid,
-        title: finalTitle,
+        dealId: deal.id,
+        dealSnapshot: toSnapshot(deal),
+        title,
         localUri: persistedUri,
         durationMs: result.durationMs,
       });
 
       recorder.reset();
-      setTitle('');
       onDone();
     } catch (e) {
       Alert.alert('保存失敗', e instanceof Error ? e.message : '不明なエラー');
@@ -75,14 +81,25 @@ export function RecordScreen({ onDone }: Props) {
 
   return (
     <View style={styles.container}>
-      <TextInput
-        style={styles.titleInput}
-        placeholder="タイトル（空欄の場合は自動付与）"
-        placeholderTextColor="#94A3B8"
-        value={title}
-        onChangeText={setTitle}
-        editable={!saving}
-      />
+      <View style={styles.dealCard}>
+        <View style={styles.dealHeader}>
+          <Text style={styles.dealLabel}>選択中の案件</Text>
+          {isIdle ? (
+            <Pressable onPress={onChangeDeal}>
+              <Text style={styles.changeLink}>変更</Text>
+            </Pressable>
+          ) : null}
+        </View>
+        <Text style={styles.customerName}>{deal.customerName}</Text>
+        <Text style={styles.dealWhen}>
+          予約:{' '}
+          {format(new Date(deal.reservationAt), 'M/d (E) HH:mm', { locale: ja })}
+        </Text>
+        {deal.customerAddress ? (
+          <Text style={styles.dealAddress}>{deal.customerAddress}</Text>
+        ) : null}
+        {deal.items ? <Text style={styles.dealItems}>査定対象: {deal.items}</Text> : null}
+      </View>
 
       <View style={styles.timerBox}>
         <Text style={styles.timer}>{formatDuration(recorder.durationMs)}</Text>
@@ -174,26 +191,34 @@ export function RecordScreen({ onDone }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 20, backgroundColor: '#F8FAFC' },
-  titleInput: {
+  dealCard: {
     backgroundColor: '#fff',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: '#0F172A',
+    borderRadius: 12,
+    padding: 16,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: '#CBD5E1',
   },
-  timerBox: { marginTop: 32, alignItems: 'center' },
+  dealHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  dealLabel: { color: '#64748B', fontSize: 12, fontWeight: '600' },
+  changeLink: { color: '#2563EB', fontWeight: '600', fontSize: 13 },
+  customerName: { marginTop: 6, fontSize: 18, fontWeight: '700', color: '#0F172A' },
+  dealWhen: { marginTop: 6, fontSize: 14, color: '#0F172A' },
+  dealAddress: { marginTop: 4, fontSize: 13, color: '#475569' },
+  dealItems: { marginTop: 4, fontSize: 13, color: '#475569' },
+  timerBox: { marginTop: 28, alignItems: 'center' },
   timer: {
-    fontSize: 64,
+    fontSize: 60,
     fontVariant: ['tabular-nums'],
     fontWeight: '300',
     color: '#0F172A',
   },
   status: { marginTop: 8, color: '#64748B' },
   error: { marginTop: 12, color: '#DC2626', textAlign: 'center' },
-  controls: { marginTop: 32, gap: 12 },
+  controls: { marginTop: 24, gap: 12 },
   mainBtn: { paddingVertical: 18, borderRadius: 14, alignItems: 'center' },
   startBtn: { backgroundColor: '#DC2626' },
   stopBtn: { backgroundColor: '#0F172A' },
@@ -215,7 +240,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   storageWarn: {
-    marginTop: 20,
+    marginTop: 16,
     padding: 12,
     borderRadius: 10,
     backgroundColor: '#FEF3C7',

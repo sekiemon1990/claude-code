@@ -8,6 +8,7 @@ import {
   View,
 } from 'react-native';
 import { format } from 'date-fns';
+import { ja } from 'date-fns/locale';
 import { useFocusEffect } from '@react-navigation/native';
 
 import { useAuth } from '@/hooks/useAuth';
@@ -137,7 +138,7 @@ export function RecordingListScreen({ onSelect, onNewRecording, onSignOut }: Pro
             <View style={styles.empty}>
               <Text style={styles.emptyTitle}>まだ録音はありません</Text>
               <Text style={styles.emptyBody}>
-                下の「新規録音」から商談の録音を開始できます。
+                下の「新規録音」から案件を選択して録音を開始できます。
               </Text>
             </View>
           ) : null
@@ -152,11 +153,17 @@ export function RecordingListScreen({ onSelect, onNewRecording, onSignOut }: Pro
             return (
               <View style={[styles.row, styles.rowQueued]}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.rowTitle} numberOfLines={1}>
-                    {q.title}
+                  <Text style={styles.customerName} numberOfLines={1}>
+                    {q.dealSnapshot.customerName}
+                  </Text>
+                  <Text style={styles.reservation}>
+                    予約:{' '}
+                    {format(new Date(q.dealSnapshot.reservationAt), 'M/d (E) HH:mm', {
+                      locale: ja,
+                    })}
                   </Text>
                   <Text style={styles.rowMeta}>
-                    {format(new Date(q.createdAt), 'yyyy-MM-dd HH:mm')}
+                    録音: {format(new Date(q.createdAt), 'M/d HH:mm', { locale: ja })}
                     {'  ·  '}
                     {Math.round(q.durationMs / 1000)}秒
                   </Text>
@@ -201,12 +208,21 @@ export function RecordingListScreen({ onSelect, onNewRecording, onSignOut }: Pro
           return (
             <Pressable style={styles.row} onPress={() => onSelect(rec.id)}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.rowTitle} numberOfLines={1}>
-                  {rec.title}
+                <Text style={styles.customerName} numberOfLines={1}>
+                  {rec.dealSnapshot?.customerName ?? rec.title}
                 </Text>
+                {rec.dealSnapshot ? (
+                  <Text style={styles.reservation}>
+                    予約:{' '}
+                    {format(new Date(rec.dealSnapshot.reservationAt), 'M/d (E) HH:mm', {
+                      locale: ja,
+                    })}
+                  </Text>
+                ) : null}
                 <Text style={styles.rowMeta}>
+                  録音:{' '}
                   {rec.createdAt
-                    ? format(rec.createdAt.toDate(), 'yyyy-MM-dd HH:mm')
+                    ? format(rec.createdAt.toDate(), 'M/d HH:mm', { locale: ja })
                     : ''}
                   {'  ·  '}
                   {Math.round(rec.durationMs / 1000)}秒
@@ -286,8 +302,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFBEB',
     borderColor: '#FCD34D',
   },
-  rowTitle: { fontSize: 16, fontWeight: '600', color: '#0F172A' },
-  rowMeta: { marginTop: 4, color: '#64748B', fontSize: 13 },
+  customerName: { fontSize: 16, fontWeight: '700', color: '#0F172A' },
+  reservation: { marginTop: 4, color: '#0F172A', fontSize: 13 },
+  rowMeta: { marginTop: 4, color: '#64748B', fontSize: 12 },
   queuedStatusRow: { marginTop: 6 },
   queuedLabel: { color: '#92400E', fontSize: 12, fontWeight: '700' },
   queuedLabelFailed: { color: '#991B1B' },
