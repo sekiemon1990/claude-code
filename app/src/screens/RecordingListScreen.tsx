@@ -12,6 +12,7 @@ import { useFocusEffect } from '@react-navigation/native';
 
 import { useAuth } from '@/hooks/useAuth';
 import { useUploadQueue } from '@/hooks/useUploadQueue';
+import { useStorageStatus, formatBytes } from '@/hooks/useStorageStatus';
 import { subscribeToRecordings } from '@/services/recordings';
 import { removeQueueItem, type QueuedRecording } from '@/services/uploadQueue';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -34,6 +35,7 @@ export function RecordingListScreen({ onSelect, onNewRecording, onSignOut }: Pro
   const [loaded, setLoaded] = useState(false);
   const { queue, progress, draining, online, drain, refresh, retryItem, retryAll } =
     useUploadQueue(user?.uid);
+  const storage = useStorageStatus();
 
   useEffect(() => {
     if (!user) return;
@@ -74,6 +76,26 @@ export function RecordingListScreen({ onSelect, onNewRecording, onSignOut }: Pro
           <Text style={styles.signOut}>ログアウト</Text>
         </Pressable>
       </View>
+
+      {storage.level !== 'ok' ? (
+        <View
+          style={[
+            styles.storageBanner,
+            storage.level === 'critical' && styles.storageBannerCritical,
+          ]}
+        >
+          <Text
+            style={[
+              styles.storageBannerText,
+              storage.level === 'critical' && styles.storageBannerTextCritical,
+            ]}
+          >
+            {storage.level === 'critical'
+              ? `ストレージ残量が少ないです（空き ${formatBytes(storage.freeBytes)}）。録音ができない可能性があります。`
+              : `ストレージ残量が減っています（空き ${formatBytes(storage.freeBytes)}）。未送信の録音を送信するか、不要なファイルを削除してください。`}
+          </Text>
+        </View>
+      ) : null}
 
       {queue.length > 0 || !online ? (
         <View style={[styles.banner, !online && styles.bannerOffline]}>
@@ -228,6 +250,16 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   bannerOffline: { backgroundColor: '#FEF3C7' },
+  storageBanner: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    padding: 12,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 10,
+  },
+  storageBannerCritical: { backgroundColor: '#FEE2E2' },
+  storageBannerText: { color: '#92400E', fontSize: 13, lineHeight: 18 },
+  storageBannerTextCritical: { color: '#991B1B' },
   bannerText: { color: '#1E40AF', fontWeight: '700', fontSize: 14 },
   bannerSubText: { color: '#334155', fontSize: 12, marginTop: 2 },
   bannerAction: { color: '#2563EB', fontWeight: '700' },

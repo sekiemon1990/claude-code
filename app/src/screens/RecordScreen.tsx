@@ -4,6 +4,7 @@ import { format } from 'date-fns';
 
 import { useRecorder } from '@/hooks/useRecorder';
 import { useAuth } from '@/hooks/useAuth';
+import { useStorageStatus, formatBytes } from '@/hooks/useStorageStatus';
 import { persistRecording } from '@/services/audioStorage';
 import { enqueueRecording } from '@/services/uploadQueue';
 import * as Crypto from 'expo-crypto';
@@ -22,8 +23,20 @@ type Props = { onDone: () => void };
 export function RecordScreen({ onDone }: Props) {
   const { user } = useAuth();
   const recorder = useRecorder();
+  const storage = useStorageStatus();
   const [title, setTitle] = useState('');
   const [saving, setSaving] = useState(false);
+
+  async function handleStart() {
+    if (storage.level === 'critical') {
+      Alert.alert(
+        'ストレージ残量が不足しています',
+        `空き容量が ${formatBytes(storage.freeBytes)} しかありません。不要なファイルを削除してから録音してください。`,
+      );
+      return;
+    }
+    await recorder.start();
+  }
 
   async function handleStop() {
     const result = await recorder.stop();
@@ -88,7 +101,7 @@ export function RecordScreen({ onDone }: Props) {
           <Pressable
             style={[styles.mainBtn, styles.startBtn, saving && styles.disabled]}
             disabled={saving}
-            onPress={() => recorder.start()}
+            onPress={handleStart}
           >
             <Text style={styles.mainBtnText}>録音開始</Text>
           </Pressable>
@@ -128,6 +141,27 @@ export function RecordScreen({ onDone }: Props) {
           </>
         ) : null}
       </View>
+
+      {storage.level !== 'ok' ? (
+        <View
+          style={[
+            styles.storageWarn,
+            storage.level === 'critical' && styles.storageWarnCritical,
+          ]}
+        >
+          <Text
+            style={[
+              styles.storageWarnText,
+              storage.level === 'critical' && styles.storageWarnTextCritical,
+            ]}
+          >
+            端末の空き容量: {formatBytes(storage.freeBytes)}
+            {storage.level === 'critical'
+              ? '（録音できません。容量を空けてください）'
+              : '（残量が少なくなっています）'}
+          </Text>
+        </View>
+      ) : null}
 
       <Text style={styles.offlineNote}>
         録音は停止と同時に端末へ保存されます。
@@ -180,4 +214,13 @@ const styles = StyleSheet.create({
     color: '#64748B',
     textAlign: 'center',
   },
+  storageWarn: {
+    marginTop: 20,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: '#FEF3C7',
+  },
+  storageWarnCritical: { backgroundColor: '#FEE2E2' },
+  storageWarnText: { color: '#92400E', fontSize: 13, textAlign: 'center' },
+  storageWarnTextCritical: { color: '#991B1B' },
 });

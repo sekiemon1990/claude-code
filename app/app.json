@@ -17,7 +17,8 @@
       "bundleIdentifier": "com.makxas.salesrecording",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "商談の録音に使用します。お客様の同意を得た上で録音してください。",
-        "UIBackgroundModes": ["audio"]
+        "UIBackgroundModes": ["audio", "fetch", "processing"],
+        "BGTaskSchedulerPermittedIdentifiers": ["com.makxas.salesrecording.upload"]
       }
     },
     "android": {

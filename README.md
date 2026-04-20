@@ -162,11 +162,39 @@ npm run app:android      # Android エミュレータ
   - アップロード中はプログレスバー表示
   - 失敗時はエラーメッセージ、再試行・破棄ボタンを表示
 
+### バックグラウンド送信（アプリを閉じた状態でも送信）
+
+- `expo-task-manager` + `expo-background-fetch` で `com.makxas.salesrecording.upload` タスクを登録
+- アプリ起動時に `registerBackgroundUploadTask()` が呼ばれる
+- **iOS**：BGTaskScheduler 経由で約15分毎にシステムが最適化して起動（端末の状況によって実際の頻度は変動）
+- **Android**：WorkManager で実行。端末再起動後も自動再登録
+- バックグラウンドタスク内では Firebase Auth のセッションを AsyncStorage から復元するため、ログイン済みならユーザー操作なしで送信が続く
+
+#### iOS 配布時の注意
+`app.json` の `ios.infoPlist.BGTaskSchedulerPermittedIdentifiers` にタスクIDを登録済み。
+App Store 審査時、バックグラウンド実行の用途を Privacy Manifest 等に明記すること。
+
+#### 端末設定との関係
+ユーザーが端末の「App のバックグラウンド更新」をオフにしている場合、`BackgroundFetch.getStatusAsync()` が `Denied` を返し、登録をスキップする。  
+この場合でも**フォアグラウンド復帰時・一覧画面フォーカス時・ネットワーク復帰時**の送信は通常通り動作する。
+
+### ストレージ残量の監視
+
+`useStorageStatus` フックで端末の空き容量を監視：
+
+| レベル | しきい値 | 動作 |
+|--------|---------|------|
+| OK | 500MB 以上 | 通常表示 |
+| 警告 | 100〜500MB | 一覧画面・録音画面に警告バナー表示 |
+| クリティカル | 100MB 未満 | 録音開始を拒否（既存録音は送信可能） |
+
+- 1分毎と前面復帰時にポーリング
+- しきい値は `app/src/hooks/useStorageStatus.ts` の `WARN_THRESHOLD` / `CRITICAL_THRESHOLD` を変更すれば調整可能
+
 ### 既知の制約（今後の拡張候補）
 
-- アプリを閉じたままでの送信は未対応。現状は前面復帰時・フォーカス時のみ送信。完全バックグラウンド送信が必要な場合は `expo-task-manager` + `expo-background-fetch` を追加する
 - Wi-Fi 接続時のみ送信したい場合は、ユーザー設定でトグルを追加する（`NetInfo.type === 'wifi'` で制御可能）
-- 端末ストレージの空き容量が逼迫した場合のアラートは未実装（必要なら `FileSystem.getFreeDiskStorageAsync()` で監視可能）
+- iOS のバックグラウンド更新頻度はシステム依存。より短い間隔が必要な場合は `BGProcessingTask`（長時間処理用）も検討できるが、App Store 審査ハードルが上がる
 
 ## 今後の拡張ポイント
 
