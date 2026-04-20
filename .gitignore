@@ -1,0 +1,47 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Expo
+.expo/
+dist/
+web-build/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+
+# Native builds
+ios/
+android/
+
+# Firebase
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+functions/lib/
+
+# Env
+.env
+.env.local
+.env.*.local
+app/.env
+functions/.env
+GoogleService-Info.plist
+google-services.json
+
+# Editor
+.vscode/
+.idea/
+.DS_Store
+
+# Logs
+*.log
+
+# TypeScript
+*.tsbuildinfo

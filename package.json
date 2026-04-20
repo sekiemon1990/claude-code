@@ -1,0 +1,19 @@
+{
+  "name": "sales-recording-app",
+  "private": true,
+  "version": "0.1.0",
+  "description": "出張買取営業向け 録音・文字起こし・議事録生成アプリ",
+  "workspaces": [
+    "app",
+    "functions"
+  ],
+  "scripts": {
+    "app": "npm run start --workspace app",
+    "app:ios": "npm run ios --workspace app",
+    "app:android": "npm run android --workspace app",
+    "functions:build": "npm run build --workspace functions",
+    "functions:serve": "npm run serve --workspace functions",
+    "functions:deploy": "firebase deploy --only functions",
+    "deploy": "firebase deploy"
+  }
+}
