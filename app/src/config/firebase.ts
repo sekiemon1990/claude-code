@@ -7,13 +7,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const extra = Constants.expoConfig?.extra ?? {};
 
+// DEMO モード時は設定値が空でもクラッシュしないようダミーで埋める
+const demoMode = !!extra.demoMode;
 const firebaseConfig = {
-  apiKey: extra.firebaseApiKey as string,
-  authDomain: extra.firebaseAuthDomain as string,
-  projectId: extra.firebaseProjectId as string,
-  storageBucket: extra.firebaseStorageBucket as string,
-  messagingSenderId: extra.firebaseMessagingSenderId as string,
-  appId: extra.firebaseAppId as string,
+  apiKey: (extra.firebaseApiKey as string) || (demoMode ? 'demo-api-key' : ''),
+  authDomain: (extra.firebaseAuthDomain as string) || 'demo.firebaseapp.com',
+  projectId: (extra.firebaseProjectId as string) || 'demo-project',
+  storageBucket: (extra.firebaseStorageBucket as string) || 'demo-project.appspot.com',
+  messagingSenderId: (extra.firebaseMessagingSenderId as string) || '000000000000',
+  appId: (extra.firebaseAppId as string) || '1:000000000000:web:demo',
 };
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();

@@ -8,11 +8,11 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Audio } from 'expo-av';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
 
 import { subscribeToRecording, deleteRecording } from '@/services/recordings';
+import { DEMO_MODE } from '@/demo';
 import { StatusBadge } from '@/components/StatusBadge';
 import type { Recording } from '@/types';
 
@@ -21,7 +21,7 @@ type Props = { recordingId: string; onBack: () => void };
 export function RecordingDetailScreen({ recordingId, onBack }: Props) {
   const [recording, setRecording] = useState<Recording | null>(null);
   const [loading, setLoading] = useState(true);
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [sound, setSound] = useState<any>(null);
   const [playing, setPlaying] = useState(false);
 
   useEffect(() => {
@@ -38,6 +38,15 @@ export function RecordingDetailScreen({ recordingId, onBack }: Props) {
 
   async function handlePlayPause() {
     if (!recording?.downloadUrl) return;
+    if (DEMO_MODE) {
+      Alert.alert(
+        'デモモード',
+        'デモ用の録音のため再生はできません。実機ビルドでは録音を再生できます。',
+      );
+      return;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { Audio } = require('expo-av');
     if (sound) {
       if (playing) {
         await sound.pauseAsync();
@@ -52,7 +61,7 @@ export function RecordingDetailScreen({ recordingId, onBack }: Props) {
       { uri: recording.downloadUrl },
       { shouldPlay: true },
     );
-    s.setOnPlaybackStatusUpdate((status) => {
+    s.setOnPlaybackStatusUpdate((status: any) => {
       if (!status.isLoaded) return;
       if (status.didJustFinish) {
         setPlaying(false);

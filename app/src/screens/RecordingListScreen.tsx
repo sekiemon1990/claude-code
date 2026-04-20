@@ -18,6 +18,7 @@ import { subscribeToRecordings } from '@/services/recordings';
 import { removeQueueItem, type QueuedRecording } from '@/services/uploadQueue';
 import { StatusBadge } from '@/components/StatusBadge';
 import { ProgressBar } from '@/components/ProgressBar';
+import { DEMO_MODE } from '@/demo';
 import type { Recording } from '@/types';
 
 type Props = {
@@ -72,7 +73,14 @@ export function RecordingListScreen({ onSelect, onNewRecording, onSignOut }: Pro
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>商談一覧</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text style={styles.headerTitle}>商談一覧</Text>
+          {DEMO_MODE ? (
+            <View style={styles.demoBadge}>
+              <Text style={styles.demoBadgeText}>DEMO</Text>
+            </View>
+          ) : null}
+        </View>
         <Pressable onPress={onSignOut}>
           <Text style={styles.signOut}>ログアウト</Text>
         </Pressable>
@@ -255,6 +263,13 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 24, fontWeight: '700', color: '#0F172A' },
   signOut: { color: '#64748B' },
+  demoBadge: {
+    backgroundColor: '#DC2626',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  demoBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
   banner: {
     marginHorizontal: 16,
     marginBottom: 8,

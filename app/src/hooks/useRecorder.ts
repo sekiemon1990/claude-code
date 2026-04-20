@@ -1,21 +1,29 @@
 import { useEffect, useRef, useState } from 'react';
-import { Audio } from 'expo-av';
+import { Platform } from 'react-native';
+
+import { DEMO_MODE } from '@/demo';
 
 export type RecorderState = 'idle' | 'recording' | 'paused' | 'stopped';
 
+// DEMO / web 環境ではネイティブ録音モジュールが動かないため、
+// タイマーのみで状態遷移を模擬する。
+const USE_FAKE_RECORDER = DEMO_MODE || Platform.OS === 'web';
+
 export function useRecorder() {
-  const recordingRef = useRef<Audio.Recording | null>(null);
   const [state, setState] = useState<RecorderState>('idle');
   const [durationMs, setDurationMs] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimestampRef = useRef<number | null>(null);
   const elapsedBeforePauseRef = useRef(0);
+  const realRecordingRef = useRef<any>(null);
 
   useEffect(() => {
     return () => {
       if (tickRef.current) clearInterval(tickRef.current);
-      recordingRef.current?.stopAndUnloadAsync().catch(() => {});
+      if (!USE_FAKE_RECORDER && realRecordingRef.current) {
+        realRecordingRef.current.stopAndUnloadAsync?.().catch(() => {});
+      }
     };
   }, []);
 
@@ -39,6 +47,18 @@ export function useRecorder() {
   async function start() {
     try {
       setError(null);
+
+      if (USE_FAKE_RECORDER) {
+        elapsedBeforePauseRef.current = 0;
+        setDurationMs(0);
+        setState('recording');
+        startTicker();
+        return;
+      }
+
+      // 実機モード: expo-av を動的 require（Web バンドルに混入しないように）
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { Audio } = require('expo-av');
       const perm = await Audio.requestPermissionsAsync();
       if (!perm.granted) {
         setError('マイクへのアクセスが許可されていません');
@@ -53,7 +73,7 @@ export function useRecorder() {
       const { recording } = await Audio.Recording.createAsync(
         Audio.RecordingOptionsPresets.HIGH_QUALITY,
       );
-      recordingRef.current = recording;
+      realRecordingRef.current = recording;
       elapsedBeforePauseRef.current = 0;
       setDurationMs(0);
       setState('recording');
@@ -64,8 +84,10 @@ export function useRecorder() {
   }
 
   async function pause() {
-    if (!recordingRef.current || state !== 'recording') return;
-    await recordingRef.current.pauseAsync();
+    if (state !== 'recording') return;
+    if (!USE_FAKE_RECORDER && realRecordingRef.current) {
+      await realRecordingRef.current.pauseAsync();
+    }
     stopTicker();
     if (startTimestampRef.current != null) {
       elapsedBeforePauseRef.current += Date.now() - startTimestampRef.current;
@@ -75,23 +97,32 @@ export function useRecorder() {
   }
 
   async function resume() {
-    if (!recordingRef.current || state !== 'paused') return;
-    await recordingRef.current.startAsync();
+    if (state !== 'paused') return;
+    if (!USE_FAKE_RECORDER && realRecordingRef.current) {
+      await realRecordingRef.current.startAsync();
+    }
     startTicker();
     setState('recording');
   }
 
   async function stop(): Promise<{ uri: string; durationMs: number } | null> {
-    const rec = recordingRef.current;
-    if (!rec) return null;
     stopTicker();
-    await rec.stopAndUnloadAsync();
     const finalDuration =
       state === 'recording' && startTimestampRef.current != null
         ? elapsedBeforePauseRef.current + (Date.now() - startTimestampRef.current)
         : elapsedBeforePauseRef.current;
+
+    if (USE_FAKE_RECORDER) {
+      setState('stopped');
+      setDurationMs(finalDuration);
+      return { uri: `demo://fake-recording-${Date.now()}.m4a`, durationMs: finalDuration };
+    }
+
+    const rec = realRecordingRef.current;
+    if (!rec) return null;
+    await rec.stopAndUnloadAsync();
     const uri = rec.getURI();
-    recordingRef.current = null;
+    realRecordingRef.current = null;
     setState('stopped');
     setDurationMs(finalDuration);
     if (!uri) return null;

@@ -8,6 +8,7 @@ import {
   updateQueueItem,
 } from '@/services/uploadQueue';
 import { createRecordingAndUpload } from '@/services/recordings';
+import { DEMO_MODE } from '@/demo';
 
 export const AUTO_RETRY_LIMIT = 5;
 
@@ -56,6 +57,10 @@ export async function drainUploadQueue(options: {
   onProgress?: DrainProgressCallback;
   respectAutoRetryLimit?: boolean;
 }): Promise<DrainResult> {
+  if (DEMO_MODE) {
+    // デモではキューを使わず RecordScreen から直接 demoStore に流すため、ドレインは不要
+    return { uploaded: 0, failed: 0, skipped: 0, reason: 'empty' };
+  }
   const respectLimit = options.respectAutoRetryLimit ?? true;
   let ownerUid = options.ownerUid;
   if (!ownerUid) {

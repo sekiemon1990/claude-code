@@ -1,9 +1,11 @@
 import 'dotenv/config';
 import type { ExpoConfig } from 'expo/config';
 
+const DEMO_MODE = process.env.EXPO_PUBLIC_DEMO === 'true';
+
 const required = (name: string): string => {
   const v = process.env[name];
-  if (!v) {
+  if (!v && !DEMO_MODE) {
     // 欠損を silent に空にせず、ビルド時に気付けるよう警告
     console.warn(`[app.config] ${name} is not set. Did you copy .env.example to .env?`);
   }
@@ -24,6 +26,9 @@ const config: ExpoConfig = {
     backgroundColor: '#0a2540',
   },
   assetBundlePatterns: ['**/*'],
+  web: {
+    bundler: 'metro',
+  },
   ios: {
     supportsTablet: false,
     bundleIdentifier: 'com.makxas.salesrecording',
@@ -57,6 +62,7 @@ const config: ExpoConfig = {
     ],
   ],
   extra: {
+    demoMode: DEMO_MODE,
     firebaseApiKey: required('FIREBASE_API_KEY'),
     firebaseAuthDomain: required('FIREBASE_AUTH_DOMAIN'),
     firebaseProjectId: required('FIREBASE_PROJECT_ID'),

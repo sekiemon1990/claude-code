@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
 
 import { deletePersistedRecording, persistedRecordingExists } from './audioStorage';
+import { DEMO_MODE } from '@/demo';
 import type { DealSnapshot } from '@/types';
 
 export type QueuedRecordingStatus = 'pending' | 'uploading' | 'failed';
@@ -96,6 +97,7 @@ export async function removeQueueItem(ownerUid: string, queueId: string): Promis
  * 起動時クリーンアップ。音声ファイルが失われているアイテムはキューから除外する。
  */
 export async function pruneMissingFiles(ownerUid: string): Promise<void> {
+  if (DEMO_MODE) return;
   const queue = await readQueue(ownerUid);
   const checked = await Promise.all(
     queue.map(async (item) => ({ item, exists: await persistedRecordingExists(item.localUri) })),

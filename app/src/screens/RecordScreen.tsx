@@ -8,7 +8,9 @@ import { useAuth } from '@/hooks/useAuth';
 import { useStorageStatus, formatBytes } from '@/hooks/useStorageStatus';
 import { persistRecording } from '@/services/audioStorage';
 import { enqueueRecording } from '@/services/uploadQueue';
+import { createRecordingAndUpload } from '@/services/recordings';
 import { toSnapshot } from '@/services/crm';
+import { DEMO_MODE } from '@/demo';
 import type { Deal } from '@/types';
 import * as Crypto from 'expo-crypto';
 
@@ -54,17 +56,29 @@ export function RecordScreen({ deal, onDone, onChangeDeal }: Props) {
 
     setSaving(true);
     try {
-      const queueId = Crypto.randomUUID();
-      const persistedUri = await persistRecording(result.uri, queueId);
+      if (DEMO_MODE) {
+        // デモ: 永続化・キューをスキップし、直接 demoStore に流し込む
+        await createRecordingAndUpload({
+          ownerUid: user.uid,
+          dealId: deal.id,
+          dealSnapshot: toSnapshot(deal),
+          title,
+          localUri: result.uri,
+          durationMs: result.durationMs,
+        });
+      } else {
+        const queueId = Crypto.randomUUID();
+        const persistedUri = await persistRecording(result.uri, queueId);
 
-      await enqueueRecording({
-        ownerUid: user.uid,
-        dealId: deal.id,
-        dealSnapshot: toSnapshot(deal),
-        title,
-        localUri: persistedUri,
-        durationMs: result.durationMs,
-      });
+        await enqueueRecording({
+          ownerUid: user.uid,
+          dealId: deal.id,
+          dealSnapshot: toSnapshot(deal),
+          title,
+          localUri: persistedUri,
+          durationMs: result.durationMs,
+        });
+      }
 
       recorder.reset();
       onDone();

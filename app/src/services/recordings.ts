@@ -15,6 +15,7 @@ import { deleteObject, getDownloadURL, ref, uploadBytesResumable } from 'firebas
 import * as FileSystem from 'expo-file-system';
 
 import { firestore, storage } from '@/config/firebase';
+import { DEMO_MODE, demoStore } from '@/demo';
 import type { DealSnapshot, Recording, RecordingStatus } from '@/types';
 
 const RECORDINGS = 'recordings';
@@ -23,6 +24,9 @@ export function subscribeToRecordings(
   ownerUid: string,
   onUpdate: (recordings: Recording[]) => void,
 ): Unsubscribe {
+  if (DEMO_MODE) {
+    return demoStore.subscribeList(onUpdate);
+  }
   const q = query(
     collection(firestore, RECORDINGS),
     where('ownerUid', '==', ownerUid),
@@ -38,6 +42,9 @@ export function subscribeToRecording(
   recordingId: string,
   onUpdate: (recording: Recording | null) => void,
 ): Unsubscribe {
+  if (DEMO_MODE) {
+    return demoStore.subscribeDetail(recordingId, onUpdate);
+  }
   const docRef = doc(firestore, RECORDINGS, recordingId);
   return onSnapshot(docRef, (snap) => {
     if (!snap.exists()) {
@@ -65,7 +72,25 @@ export async function createRecordingAndUpload(params: {
 }): Promise<UploadResult> {
   const { ownerUid, dealId, dealSnapshot, title, localUri, durationMs, onProgress } = params;
 
-  // 1. Firestore にレコードを先に作成（初期ステータスは uploading）
+  if (DEMO_MODE) {
+    // デモ: 段階的な進捗を演出しつつ、demoStore にレコード作成
+    for (const p of [15, 40, 70, 100]) {
+      await new Promise((r) => setTimeout(r, 250));
+      onProgress?.(p);
+    }
+    const id = demoStore.createAndSimulate({
+      ownerUid,
+      dealSnapshot,
+      title,
+      durationMs,
+    });
+    return {
+      recordingId: id,
+      downloadUrl: `demo://${id}`,
+      storagePath: `demo/${id}/audio.m4a`,
+    };
+  }
+
   const docRef = await addDoc(collection(firestore, RECORDINGS), {
     ownerUid,
     dealId,
@@ -119,6 +144,10 @@ export async function createRecordingAndUpload(params: {
 }
 
 export async function deleteRecording(recording: Recording) {
+  if (DEMO_MODE) {
+    demoStore.remove(recording.id);
+    return;
+  }
   if (recording.storagePath) {
     try {
       await deleteObject(ref(storage, recording.storagePath));
