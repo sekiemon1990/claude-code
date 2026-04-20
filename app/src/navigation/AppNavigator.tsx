@@ -47,8 +47,10 @@ export function AppNavigator() {
         <Stack.Screen name="Record" options={{ headerShown: true, title: '新規録音' }}>
           {({ navigation }) => (
             <RecordScreen
-              onDone={(id) => {
-                navigation.replace('Detail', { recordingId: id });
+              onDone={() => {
+                // オフラインでもローカル保存が完了したら一覧へ戻る
+                // （オンラインなら一覧側のフォーカス時ドレインで自動アップロード開始）
+                navigation.goBack();
               }}
             />
           )}

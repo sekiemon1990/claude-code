@@ -1,18 +1,12 @@
 import React, { useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { format } from 'date-fns';
 
 import { useRecorder } from '@/hooks/useRecorder';
 import { useAuth } from '@/hooks/useAuth';
-import { createRecordingAndUpload } from '@/services/recordings';
+import { persistRecording } from '@/services/audioStorage';
+import { enqueueRecording } from '@/services/uploadQueue';
+import * as Crypto from 'expo-crypto';
 
 function formatDuration(ms: number): string {
   const totalSec = Math.floor(ms / 1000);
@@ -23,14 +17,13 @@ function formatDuration(ms: number): string {
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
 }
 
-type Props = { onDone: (recordingId: string) => void };
+type Props = { onDone: () => void };
 
 export function RecordScreen({ onDone }: Props) {
   const { user } = useAuth();
   const recorder = useRecorder();
   const [title, setTitle] = useState('');
-  const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
+  const [saving, setSaving] = useState(false);
 
   async function handleStop() {
     const result = await recorder.stop();
@@ -39,23 +32,27 @@ export function RecordScreen({ onDone }: Props) {
     const finalTitle =
       title.trim() || `商談 ${format(new Date(), 'yyyy-MM-dd HH:mm')}`;
 
-    setUploading(true);
+    setSaving(true);
     try {
-      const { recordingId } = await createRecordingAndUpload({
+      // 1. 音声ファイルを永続ディレクトリへ移動（アプリ再起動でも残す）
+      const queueId = Crypto.randomUUID();
+      const persistedUri = await persistRecording(result.uri, queueId);
+
+      // 2. アップロードキューに追加（オフライン時はここで止まり、オンライン復帰時に自動送信）
+      await enqueueRecording({
         ownerUid: user.uid,
         title: finalTitle,
-        localUri: result.uri,
+        localUri: persistedUri,
         durationMs: result.durationMs,
-        onProgress: setUploadProgress,
       });
+
       recorder.reset();
       setTitle('');
-      setUploadProgress(0);
-      onDone(recordingId);
+      onDone();
     } catch (e) {
-      Alert.alert('アップロード失敗', e instanceof Error ? e.message : '不明なエラー');
+      Alert.alert('保存失敗', e instanceof Error ? e.message : '不明なエラー');
     } finally {
-      setUploading(false);
+      setSaving(false);
     }
   }
 
@@ -71,7 +68,7 @@ export function RecordScreen({ onDone }: Props) {
         placeholderTextColor="#94A3B8"
         value={title}
         onChangeText={setTitle}
-        editable={!uploading}
+        editable={!saving}
       />
 
       <View style={styles.timerBox}>
@@ -86,69 +83,61 @@ export function RecordScreen({ onDone }: Props) {
 
       {recorder.error ? <Text style={styles.error}>{recorder.error}</Text> : null}
 
-      {uploading ? (
-        <View style={styles.uploadBox}>
-          <ActivityIndicator />
-          <Text style={styles.uploadText}>
-            アップロード中... {uploadProgress}%
-          </Text>
-        </View>
-      ) : (
-        <View style={styles.controls}>
-          {isIdle || recorder.state === 'stopped' ? (
-            <Pressable
-              style={[styles.mainBtn, styles.startBtn]}
-              onPress={() => recorder.start()}
-            >
-              <Text style={styles.mainBtnText}>録音開始</Text>
+      <View style={styles.controls}>
+        {isIdle || recorder.state === 'stopped' ? (
+          <Pressable
+            style={[styles.mainBtn, styles.startBtn, saving && styles.disabled]}
+            disabled={saving}
+            onPress={() => recorder.start()}
+          >
+            <Text style={styles.mainBtnText}>録音開始</Text>
+          </Pressable>
+        ) : null}
+
+        {isRecording ? (
+          <>
+            <Pressable style={styles.secondaryBtn} onPress={() => recorder.pause()}>
+              <Text style={styles.secondaryBtnText}>一時停止</Text>
             </Pressable>
-          ) : null}
+            <Pressable
+              style={[styles.mainBtn, styles.stopBtn, saving && styles.disabled]}
+              disabled={saving}
+              onPress={handleStop}
+            >
+              <Text style={styles.mainBtnText}>
+                {saving ? '保存中...' : '停止して保存'}
+              </Text>
+            </Pressable>
+          </>
+        ) : null}
 
-          {isRecording ? (
-            <>
-              <Pressable
-                style={[styles.secondaryBtn]}
-                onPress={() => recorder.pause()}
-              >
-                <Text style={styles.secondaryBtnText}>一時停止</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.mainBtn, styles.stopBtn]}
-                onPress={handleStop}
-              >
-                <Text style={styles.mainBtnText}>停止してアップロード</Text>
-              </Pressable>
-            </>
-          ) : null}
+        {isPaused ? (
+          <>
+            <Pressable style={styles.secondaryBtn} onPress={() => recorder.resume()}>
+              <Text style={styles.secondaryBtnText}>再開</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.mainBtn, styles.stopBtn, saving && styles.disabled]}
+              disabled={saving}
+              onPress={handleStop}
+            >
+              <Text style={styles.mainBtnText}>
+                {saving ? '保存中...' : '停止して保存'}
+              </Text>
+            </Pressable>
+          </>
+        ) : null}
+      </View>
 
-          {isPaused ? (
-            <>
-              <Pressable
-                style={[styles.secondaryBtn]}
-                onPress={() => recorder.resume()}
-              >
-                <Text style={styles.secondaryBtnText}>再開</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.mainBtn, styles.stopBtn]}
-                onPress={handleStop}
-              >
-                <Text style={styles.mainBtnText}>停止してアップロード</Text>
-              </Pressable>
-            </>
-          ) : null}
-        </View>
-      )}
+      <Text style={styles.offlineNote}>
+        オフラインでも録音できます。電波が復帰すると自動でアップロードされます。
+      </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 20,
-    backgroundColor: '#F8FAFC',
-  },
+  container: { flex: 1, padding: 20, backgroundColor: '#F8FAFC' },
   titleInput: {
     backgroundColor: '#fff',
     borderRadius: 10,
@@ -159,44 +148,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
-  timerBox: {
-    marginTop: 32,
-    alignItems: 'center',
-  },
+  timerBox: { marginTop: 32, alignItems: 'center' },
   timer: {
     fontSize: 64,
     fontVariant: ['tabular-nums'],
     fontWeight: '300',
     color: '#0F172A',
   },
-  status: {
-    marginTop: 8,
-    color: '#64748B',
-  },
-  error: {
-    marginTop: 12,
-    color: '#DC2626',
-    textAlign: 'center',
-  },
-  uploadBox: {
-    marginTop: 32,
-    alignItems: 'center',
-    gap: 8,
-  },
-  uploadText: {
-    color: '#475569',
-  },
-  controls: {
-    marginTop: 32,
-    gap: 12,
-  },
-  mainBtn: {
-    paddingVertical: 18,
-    borderRadius: 14,
-    alignItems: 'center',
-  },
+  status: { marginTop: 8, color: '#64748B' },
+  error: { marginTop: 12, color: '#DC2626', textAlign: 'center' },
+  controls: { marginTop: 32, gap: 12 },
+  mainBtn: { paddingVertical: 18, borderRadius: 14, alignItems: 'center' },
   startBtn: { backgroundColor: '#DC2626' },
   stopBtn: { backgroundColor: '#0F172A' },
+  disabled: { opacity: 0.5 },
   mainBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   secondaryBtn: {
     paddingVertical: 14,
@@ -207,4 +172,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   secondaryBtnText: { color: '#0F172A', fontWeight: '600' },
+  offlineNote: {
+    marginTop: 24,
+    fontSize: 12,
+    color: '#64748B',
+    textAlign: 'center',
+  },
 });
