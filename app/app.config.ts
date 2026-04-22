@@ -29,6 +29,11 @@ const config: ExpoConfig = {
   web: {
     bundler: 'metro',
   },
+  experiments: {
+    // GitHub Pages の `https://<user>.github.io/claude-code/demo/` 配下に
+    // 配信するためのベースパス。DEMO ビルド時のみ影響する。
+    baseUrl: DEMO_MODE ? '/claude-code/demo' : undefined,
+  },
   ios: {
     supportsTablet: false,
     bundleIdentifier: 'com.makxas.salesrecording',
