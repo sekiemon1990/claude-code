@@ -12,22 +12,24 @@ import { format, formatDistanceToNowStrict } from 'date-fns';
 import { ja } from 'date-fns/locale';
 
 import { useCrmContext } from '@/hooks/useCrmContext';
-import { fetchAssignedScheduledDeals } from '@/services/crm';
+import { fetchAssignedScheduledDeals, type DealsResult } from '@/services/crm';
 import type { Deal } from '@/types';
 
 type Props = { onSelect: (deal: Deal) => void; onBack: () => void };
 
 export function DealSelectScreen({ onSelect, onBack }: Props) {
   const crm = useCrmContext();
-  const [deals, setDeals] = useState<Deal[] | null>(null);
+  const [result, setResult] = useState<DealsResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+
+  const deals: Deal[] | null = result?.deals ?? null;
 
   const load = useCallback(async () => {
     setError(null);
     try {
-      const list = await fetchAssignedScheduledDeals(crm);
-      setDeals(list);
+      const r = await fetchAssignedScheduledDeals(crm);
+      setResult(r);
     } catch (e) {
       setError(e instanceof Error ? e.message : '案件の取得に失敗しました');
     }
@@ -60,6 +62,23 @@ export function DealSelectScreen({ onSelect, onBack }: Props) {
         <Text style={styles.matchInfo}>
           照合中の Google アカウント: {crm.userEmail}
         </Text>
+      ) : null}
+      {result?.source === 'cache' ? (
+        <View style={styles.offlineBanner}>
+          <Text style={styles.offlineText}>
+            📡 オフライン中（最終取得:{' '}
+            {result.cachedAt
+              ? formatDistanceToNowStrict(new Date(result.cachedAt), {
+                  addSuffix: true,
+                  locale: ja,
+                })
+              : '不明'}
+            ）
+          </Text>
+          <Text style={styles.offlineHint}>
+            案件リストはローカルキャッシュから表示しています。録音は通常通り行えます。
+          </Text>
+        </View>
       ) : null}
 
       {deals == null && !error ? (
@@ -149,6 +168,15 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '500',
   },
+  offlineBanner: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    padding: 10,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 8,
+  },
+  offlineText: { color: '#92400E', fontWeight: '700', fontSize: 13 },
+  offlineHint: { color: '#92400E', fontSize: 11, marginTop: 2 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   errorText: { color: '#DC2626', textAlign: 'center', marginBottom: 16 },
   retryBtn: {

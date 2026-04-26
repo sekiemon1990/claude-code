@@ -19,7 +19,21 @@ export type QueuedRecording = {
   attempts: number;
   lastError?: string;
   status: QueuedRecordingStatus;
+  /** 失敗後、次に自動リトライ可能になる時刻 (ms epoch)。指数バックオフで設定 */
+  nextRetryAt?: number;
 };
+
+/**
+ * 試行回数に応じた次回リトライまでのバックオフ時間。
+ * 5秒 → 30秒 → 2分 → 5分 → 15分。
+ * これより長く失敗が続く場合は手動再試行で対応。
+ */
+const BACKOFF_MS = [5_000, 30_000, 120_000, 300_000, 900_000];
+
+export function computeNextRetryAt(attempts: number): number {
+  const idx = Math.min(attempts, BACKOFF_MS.length - 1);
+  return Date.now() + BACKOFF_MS[idx];
+}
 
 const STORAGE_PREFIX = '@upload_queue/';
 

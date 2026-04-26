@@ -229,9 +229,15 @@ export function RecordingListScreen({ onSelect, onNewRecording, onSignOut }: Pro
                   <View style={styles.queuedStatusRow}>
                     <Text style={[styles.queuedLabel, isFailed && styles.queuedLabelFailed]}>
                       {isUploading
-                        ? `送信中 ${percent ?? 0}%`
+                        ? `送信中 ${percent ?? 0}%${!online ? '（電波待ち）' : ''}`
                         : isFailed
-                        ? `送信失敗（${q.attempts}回試行）`
+                        ? `送信失敗（${q.attempts}回試行）${
+                            q.nextRetryAt && q.nextRetryAt > Date.now()
+                              ? ` · 次回 ${Math.ceil((q.nextRetryAt - Date.now()) / 60000)}分後`
+                              : ''
+                          }`
+                        : !online
+                        ? 'ローカル保存済み・電波復帰待ち'
                         : 'ローカル保存済み・送信待ち'}
                     </Text>
                   </View>

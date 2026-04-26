@@ -59,6 +59,7 @@ export function useUploadQueue(ownerUid: string | undefined) {
         status: 'pending',
         attempts: 0,
         lastError: undefined,
+        nextRetryAt: undefined,
       });
       await refresh();
       void drain();
@@ -75,6 +76,7 @@ export function useUploadQueue(ownerUid: string | undefined) {
           status: 'pending',
           attempts: 0,
           lastError: undefined,
+          nextRetryAt: undefined,
         });
       }
     }

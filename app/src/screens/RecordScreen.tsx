@@ -127,10 +127,16 @@ export function RecordScreen({ deal, onDone, onChangeDeal }: Props) {
 
       <View style={styles.timerBox}>
         <Text style={styles.timer}>{formatDuration(recorder.durationMs)}</Text>
-        <Text style={styles.status}>
+        <Text
+          style={[
+            styles.status,
+            isPaused && recorder.pauseReason === 'interruption' ? styles.statusInterrupted : null,
+          ]}
+        >
           {isIdle && '待機中'}
           {isRecording && '● 録音中'}
-          {isPaused && '一時停止中'}
+          {isPaused && recorder.pauseReason === 'user' && '⏸ 一時停止中（手動）'}
+          {isPaused && recorder.pauseReason === 'interruption' && '⏸ 中断（電話/他アプリ優先）— 復帰すれば自動で再開します'}
           {recorder.state === 'stopped' && '停止'}
         </Text>
         <AudioMeter level={recorder.meterDb} active={isRecording} />
@@ -250,7 +256,8 @@ const styles = StyleSheet.create({
     fontWeight: '300',
     color: '#0F172A',
   },
-  status: { marginTop: 8, color: '#64748B' },
+  status: { marginTop: 8, color: '#64748B', textAlign: 'center' },
+  statusInterrupted: { color: '#92400E', fontWeight: '600' },
   error: { marginTop: 12, color: '#DC2626', textAlign: 'center' },
   controls: { marginTop: 24, gap: 12 },
   mainBtn: { paddingVertical: 18, borderRadius: 14, alignItems: 'center' },

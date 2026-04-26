@@ -13,6 +13,7 @@ import {
 } from 'firebase/firestore';
 import { deleteObject, getDownloadURL, ref, uploadBytesResumable } from 'firebase/storage';
 import * as FileSystem from 'expo-file-system';
+import NetInfo from '@react-native-community/netinfo';
 
 import { firestore, storage } from '@/config/firebase';
 import { DEMO_MODE, demoStore } from '@/demo';
@@ -118,18 +119,47 @@ export async function createRecordingAndUpload(params: {
     contentType: inferContentType(extension),
   });
 
-  await new Promise<void>((resolve, reject) => {
-    task.on(
-      'state_changed',
-      (snap) => {
-        if (onProgress) {
-          onProgress(Math.round((snap.bytesTransferred / snap.totalBytes) * 100));
-        }
-      },
-      reject,
-      () => resolve(),
-    );
+  // ネットワーク状態を監視し、オフライン時はアップロードを一時停止、
+  // 復帰時に再開する。Wi-Fi <-> モバイル切替えでも一時的な瞬断に耐える。
+  let pausedByNetwork = false;
+  const netUnsub = NetInfo.addEventListener((state) => {
+    const online = !!state.isConnected && state.isInternetReachable !== false;
+    if (!online && !pausedByNetwork) {
+      try {
+        task.pause();
+        pausedByNetwork = true;
+      } catch {
+        // pause は冪等なはず。失敗しても致命ではない
+      }
+    } else if (online && pausedByNetwork) {
+      try {
+        task.resume();
+        pausedByNetwork = false;
+      } catch {
+        // resume も冪等
+      }
+    }
   });
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      task.on(
+        'state_changed',
+        (snap) => {
+          if (onProgress) {
+            onProgress(Math.round((snap.bytesTransferred / snap.totalBytes) * 100));
+          }
+        },
+        // 一時的なエラーは外側のキューリトライで再開する。
+        // 基本的にここで reject = キューが「失敗」扱いするが、
+        // 元ファイルは残っているので次回ドレイン時に再アップロードされる。
+        reject,
+        () => resolve(),
+      );
+    });
+  } finally {
+    netUnsub();
+  }
 
   const downloadUrl = await getDownloadURL(storageRef);
 

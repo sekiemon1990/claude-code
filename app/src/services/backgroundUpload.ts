@@ -3,6 +3,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 
 import { firebaseAuth } from '@/config/firebase';
 import {
+  computeNextRetryAt,
   listQueue,
   removeQueueItem,
   updateQueueItem,
@@ -82,9 +83,12 @@ export async function drainUploadQueue(options: {
   // 1件ずつ送信。外部からの変更を反映するため毎回キューを読み直す
   while (true) {
     const items = await listQueue(ownerUid);
+    const now = Date.now();
     const target = items.find((it) => {
       if (it.status === 'uploading') return false;
       if (respectLimit && it.attempts >= AUTO_RETRY_LIMIT) return false;
+      // バックオフ中はスキップ（次のドレインで時刻が来ていれば実行される）
+      if (it.nextRetryAt && it.nextRetryAt > now) return false;
       return true;
     });
     if (!target) break;
@@ -110,6 +114,7 @@ export async function drainUploadQueue(options: {
         status: 'failed',
         attempts: nextAttempts,
         lastError: err instanceof Error ? err.message : String(err),
+        nextRetryAt: computeNextRetryAt(nextAttempts),
       });
       failed += 1;
       // 自動リトライ上限に到達した時のみ errorLog にも記録（リトライ毎に書かない）

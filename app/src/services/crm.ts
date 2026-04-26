@@ -1,4 +1,7 @@
+import NetInfo from '@react-native-community/netinfo';
+
 import type { Deal, DealSnapshot } from '@/types';
+import { getCachedDeals, setCachedDeals } from './dealsCache';
 
 /**
  * マクサスコア（CRM）との通信クライアント。
@@ -118,32 +121,73 @@ async function httpGet<T>(_context: CrmContext, _path: string): Promise<T> {
   throw new Error('CRM HTTP client not implemented yet');
 }
 
+export type DealsResult = {
+  deals: Deal[];
+  /** どこから取得したか。UI で「オフライン中」表示の判断に使う */
+  source: 'network' | 'cache';
+  /** キャッシュから返した場合の取得時刻（ms） */
+  cachedAt?: number;
+};
+
 /**
  * 自分が査定担当者に割り当てられており、予約中（scheduled）の案件のみを返す。
  * 予約日時が現在に近い順にソート済み。
  *
+ * オフライン時はローカルキャッシュから返す（ユーザーごとに保存）。
  * クライアント側でも assessorEmail のチェックを再度行う（多層防御）。
  */
-export async function fetchAssignedScheduledDeals(context: CrmContext): Promise<Deal[]> {
-  let deals: Deal[];
-  if (MOCK_ENABLED) {
-    deals = mockDeals();
-  } else {
-    deals = await httpGet<Deal[]>(
-      context,
-      `/api/deals?assessorEmail=${encodeURIComponent(context.userEmail ?? '')}&status=scheduled`,
-    );
+export async function fetchAssignedScheduledDeals(
+  context: CrmContext,
+): Promise<DealsResult> {
+  const userKey = context.userEmail ?? 'anonymous';
+  const now = Date.now();
+  const sortAndFilter = (deals: Deal[]): Deal[] =>
+    deals
+      .filter((d) => d.status === 'scheduled')
+      .filter((d) => emailsMatch(d.assessorEmail, context.userEmail))
+      .sort((a, b) => {
+        const da = Math.abs(new Date(a.reservationAt).getTime() - now);
+        const db = Math.abs(new Date(b.reservationAt).getTime() - now);
+        return da - db;
+      });
+
+  // オフラインの場合は最初からキャッシュを参照
+  const net = await NetInfo.fetch();
+  const offline = !net.isConnected || net.isInternetReachable === false;
+
+  if (offline) {
+    const cached = await getCachedDeals(userKey);
+    if (cached) {
+      return { deals: sortAndFilter(cached.deals), source: 'cache', cachedAt: cached.fetchedAt };
+    }
+    return { deals: [], source: 'cache', cachedAt: 0 };
   }
 
-  const now = Date.now();
-  return deals
-    .filter((d) => d.status === 'scheduled')
-    .filter((d) => emailsMatch(d.assessorEmail, context.userEmail))
-    .sort((a, b) => {
-      const da = Math.abs(new Date(a.reservationAt).getTime() - now);
-      const db = Math.abs(new Date(b.reservationAt).getTime() - now);
-      return da - db;
-    });
+  // オンラインなら fetch を試みて、失敗したらキャッシュに fallback
+  try {
+    let raw: Deal[];
+    if (MOCK_ENABLED) {
+      raw = mockDeals();
+    } else {
+      raw = await httpGet<Deal[]>(
+        context,
+        `/api/deals?assessorEmail=${encodeURIComponent(context.userEmail ?? '')}&status=scheduled`,
+      );
+    }
+    // 取得できた生データをそのまま（フィルタ前で）キャッシュ → 次回オフライン時にも使える
+    await setCachedDeals(userKey, raw);
+    return { deals: sortAndFilter(raw), source: 'network' };
+  } catch (err) {
+    const cached = await getCachedDeals(userKey);
+    if (cached) {
+      return {
+        deals: sortAndFilter(cached.deals),
+        source: 'cache',
+        cachedAt: cached.fetchedAt,
+      };
+    }
+    throw err;
+  }
 }
 
 /**
