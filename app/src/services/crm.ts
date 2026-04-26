@@ -22,25 +22,25 @@ export type CrmContext = {
 };
 
 /**
- * マクサスコアのベース URL。
- * 案件 ID から URL を構築する際に使う。
- * 本番接続時は環境変数（app.config.ts の extra）から読む形に差し替え推奨。
+ * マクサスコアのベース URL（本番）。
+ * 環境別に切替えたい場合は app.config.ts の extra から読む形に変更可能。
  *
- * 想定される本番URL: https://makxascore.com
- * 想定されるステージング: https://core-stg.makxas.net
+ * 本番:        https://core.makxas.xyz
+ * ステージング: https://core-stg.makxas.net
  */
-export const MAKXAS_BASE_URL = 'https://makxascore.com';
+export const MAKXAS_BASE_URL = 'https://core.makxas.xyz';
 
 /**
  * Deal から案件詳細ページの URL を取得する。
- * `deal.dealUrl` があればそれを優先、無ければベース URL から構築。
+ * 形式: `${BASE}/projects/{案件ID}/edit`
+ * 例: https://core.makxas.xyz/projects/qqpgo2hv811rf1vhse3knt0sqpm/edit
  *
- * 案件 URL のパス形式が決まり次第、ここを修正する。
- * 現状は仮で `/deals/{id}` としている。
+ * `deal.dealUrl` が CRM API から返ってきている場合はそちらを優先する
+ * （CRM 側で URL 形式が変わっても追従できるように）。
  */
 export function getDealUrl(deal: { id: string; dealUrl?: string }): string {
   if (deal.dealUrl) return deal.dealUrl;
-  return `${MAKXAS_BASE_URL}/deals/${encodeURIComponent(deal.id)}`;
+  return `${MAKXAS_BASE_URL}/projects/${encodeURIComponent(deal.id)}/edit`;
 }
 
 /**
@@ -63,9 +63,10 @@ function mockDeals(): Deal[] {
   // デモ用のログインユーザー email（DEMO_USER と一致させる）
   const ME = 'demo@makxas.co.jp';
   const SOMEONE_ELSE = 'other.staff@makxas.co.jp';
+  // ID は本物の URL に近づけるため、makxas が使っている形式（小文字英数 26 桁前後）に合わせる
   return [
     {
-      id: 'deal_001',
+      id: 'qqpgo2hv811rf1vhse3knt0sqpm',
       customerName: '田中 太郎 様',
       customerAddress: '東京都渋谷区恵比寿1-2-3',
       customerPhone: '090-0000-0001',
@@ -77,7 +78,7 @@ function mockDeals(): Deal[] {
       notes: 'マンション1階、駐車場あり',
     },
     {
-      id: 'deal_002',
+      id: 'r5ynf3kbc92sg2wjte4lou1trqn',
       customerName: '山田 花子 様',
       customerAddress: '神奈川県横浜市港北区新横浜2-3-4',
       customerPhone: '090-0000-0002',
@@ -88,7 +89,7 @@ function mockDeals(): Deal[] {
       items: '着物一式、貴金属',
     },
     {
-      id: 'deal_003',
+      id: 's6zog4lcd03th3xkuf5mpv2usro',
       customerName: '佐藤 次郎 様',
       customerAddress: '千葉県船橋市本町4-5-6',
       reservationAt: hours(26),
@@ -99,7 +100,7 @@ function mockDeals(): Deal[] {
     },
     // 別の査定担当者の案件 → email 不一致でフィルタされて表示されない
     {
-      id: 'deal_999',
+      id: 't7aph5mde14ui4ylvg6nqw3vtsp',
       customerName: '【他人案件】鈴木 三郎 様',
       customerAddress: '大阪府大阪市北区',
       reservationAt: hours(3),
