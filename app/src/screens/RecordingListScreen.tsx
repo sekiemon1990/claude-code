@@ -5,6 +5,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { format } from 'date-fns';
@@ -43,6 +44,36 @@ type ListRow =
   | { kind: 'queued'; item: QueuedRecording }
   | { kind: 'cloud'; item: Recording };
 
+type StatusFilter = 'all' | 'pending' | 'processing' | 'completed' | 'failed';
+
+const STATUS_FILTERS: Array<{ key: StatusFilter; label: string }> = [
+  { key: 'all', label: '全て' },
+  { key: 'pending', label: '未送信' },
+  { key: 'processing', label: '処理中' },
+  { key: 'completed', label: '完了' },
+  { key: 'failed', label: '失敗' },
+];
+
+function classifyRow(row: ListRow): StatusFilter {
+  if (row.kind === 'queued') {
+    if (row.item.status === 'failed') return 'failed';
+    return 'pending'; // pending or uploading
+  }
+  const s = row.item.status;
+  if (s === 'completed') return 'completed';
+  if (s === 'failed') return 'failed';
+  return 'processing'; // uploading / uploaded / transcribing / transcribed / generating_minutes
+}
+
+function rowSearchText(row: ListRow): string {
+  if (row.kind === 'queued') {
+    const q = row.item;
+    return `${q.dealSnapshot.customerName} ${q.dealSnapshot.address ?? ''} ${q.dealSnapshot.items ?? ''}`.toLowerCase();
+  }
+  const r = row.item;
+  return `${r.dealSnapshot?.customerName ?? ''} ${r.dealSnapshot?.address ?? ''} ${r.dealSnapshot?.items ?? ''} ${r.minutes?.summary ?? ''} ${r.minutes?.customerInfo ?? ''}`.toLowerCase();
+}
+
 export function RecordingListScreen({
   onSelect,
   onNewRecording,
@@ -54,6 +85,8 @@ export function RecordingListScreen({
   const [loaded, setLoaded] = useState(false);
   const [dashboardOpen, setDashboardOpen] = useState(true);
   const [toast, setToast] = useState<Recording | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const previouslyCompletedIds = useRef<Set<string>>(new Set());
   const { queue, progress, draining, online, drain, refresh, retryItem, retryAll } =
     useUploadQueue(user?.uid);
@@ -95,6 +128,14 @@ export function RecordingListScreen({
     ...queue.map((q): ListRow => ({ kind: 'queued', item: q })),
     ...items.map((r): ListRow => ({ kind: 'cloud', item: r })),
   ];
+
+  // 検索 + ステータスでフィルタ
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const filteredRows = rows.filter((row) => {
+    if (statusFilter !== 'all' && classifyRow(row) !== statusFilter) return false;
+    if (normalizedQuery && !rowSearchText(row).includes(normalizedQuery)) return false;
+    return true;
+  });
 
   const uploadingCount = queue.filter((q) => q.status === 'uploading').length;
   const waitingCount = queue.filter((q) => q.status === 'pending').length;
@@ -226,7 +267,53 @@ export function RecordingListScreen({
           </View>
         ) : null}
         {rows.length > 0 ? (
-          <Text style={styles.listSectionTitle}>📁 過去の録音</Text>
+          <>
+            <Text style={styles.listSectionTitle}>📁 過去の録音</Text>
+            <View style={styles.searchBox}>
+              <TextInput
+                style={styles.searchInput}
+                placeholder="🔍 顧客名 / 住所 / 議事録の内容で検索"
+                placeholderTextColor="#94A3B8"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="search"
+                clearButtonMode="while-editing"
+              />
+              {searchQuery !== '' ? (
+                <Pressable
+                  onPress={() => setSearchQuery('')}
+                  hitSlop={8}
+                  style={styles.clearBtn}
+                >
+                  <Text style={styles.clearBtnText}>×</Text>
+                </Pressable>
+              ) : null}
+            </View>
+            <View style={styles.filterChips}>
+              {STATUS_FILTERS.map((f) => {
+                const active = statusFilter === f.key;
+                return (
+                  <Pressable
+                    key={f.key}
+                    style={[styles.filterChip, active && styles.filterChipActive]}
+                    onPress={() => setStatusFilter(f.key)}
+                  >
+                    <Text
+                      style={[styles.filterChipText, active && styles.filterChipTextActive]}
+                    >
+                      {f.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Text style={styles.resultCount}>
+              {filteredRows.length}件
+              {filteredRows.length !== rows.length ? ` / 全 ${rows.length}件` : ''}
+            </Text>
+          </>
         ) : null}
 
         {rows.length === 0 && loaded ? (
@@ -238,7 +325,16 @@ export function RecordingListScreen({
           </View>
         ) : null}
 
-        {rows.map((row) => {
+        {rows.length > 0 && filteredRows.length === 0 ? (
+          <View style={styles.empty}>
+            <Text style={styles.emptyTitle}>該当する録音がありません</Text>
+            <Text style={styles.emptyBody}>
+              検索条件・フィルタを変更してみてください。
+            </Text>
+          </View>
+        ) : null}
+
+        {filteredRows.map((row) => {
           if (row.kind === 'queued') {
             const q = row.item;
             const percent = progress[q.queueId];
@@ -416,6 +512,56 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: '#0F172A',
+  },
+  searchBox: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#0F172A',
+  },
+  clearBtn: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  clearBtnText: { fontSize: 18, color: '#94A3B8', fontWeight: '600' },
+  filterChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    paddingHorizontal: 16,
+    marginBottom: 6,
+  },
+  filterChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  filterChipActive: {
+    backgroundColor: '#0F172A',
+    borderColor: '#0F172A',
+  },
+  filterChipText: { fontSize: 12, color: '#475569', fontWeight: '600' },
+  filterChipTextActive: { color: '#fff' },
+  resultCount: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '500',
   },
   emptyContent: { flex: 1, justifyContent: 'center', padding: 32 },
   empty: { alignItems: 'center' },
