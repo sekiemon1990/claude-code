@@ -73,15 +73,23 @@ export function RecordingListScreen({ onSelect, onNewRecording, onSignOut }: Pro
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Text style={styles.headerTitle}>商談一覧</Text>
-          {DEMO_MODE ? (
-            <View style={styles.demoBadge}>
-              <Text style={styles.demoBadgeText}>DEMO</Text>
-            </View>
+        <View style={{ flex: 1 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Text style={styles.headerTitle}>商談一覧</Text>
+            {DEMO_MODE ? (
+              <View style={styles.demoBadge}>
+                <Text style={styles.demoBadgeText}>DEMO</Text>
+              </View>
+            ) : null}
+          </View>
+          {user ? (
+            <Text style={styles.userInfo} numberOfLines={1}>
+              {user.displayName ? `${user.displayName} · ` : ''}
+              {user.email}
+            </Text>
           ) : null}
         </View>
-        <Pressable onPress={onSignOut}>
+        <Pressable onPress={onSignOut} hitSlop={8}>
           <Text style={styles.signOut}>ログアウト</Text>
         </Pressable>
       </View>
@@ -262,6 +270,7 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   headerTitle: { fontSize: 24, fontWeight: '700', color: '#0F172A' },
+  userInfo: { marginTop: 2, fontSize: 12, color: '#64748B' },
   signOut: { color: '#64748B' },
   demoBadge: {
     backgroundColor: '#DC2626',

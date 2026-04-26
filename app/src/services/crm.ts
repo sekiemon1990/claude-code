@@ -7,9 +7,13 @@ import type { Deal, DealSnapshot } from '@/types';
  * 実装時は `fetchAssignedScheduledDeals` / `fetchDeal` を
  * 実際の HTTP クライアント（fetch + 認証ヘッダ）に差し替えればよい。
  *
- * 認証方針（暫定）:
- *   マクサスコアは Google アカウント認証のため、Firebase Auth の ID トークンを
- *   Authorization: Bearer として送信し、サーバ側で検証する想定。
+ * 認証・査定担当者特定の方針:
+ *   - マクサスコアは Google アカウント認証
+ *   - 本アプリも Google サインイン → Firebase Auth で同じ Google アカウントを認証
+ *   - 営業マンの email を「査定担当者の特定キー」として使う
+ *   - サーバ側は Firebase Auth の ID トークンを Authorization: Bearer で受け取り検証、
+ *     かつ各 Deal の assessorEmail が認証ユーザーの email と一致するもののみ返す
+ *   - クライアント側でも assessorEmail を email 比較で再フィルタ（防御的）
  */
 
 export type CrmContext = {
@@ -17,13 +21,26 @@ export type CrmContext = {
   userEmail: string | null;
 };
 
+/**
+ * email を正規化して比較する（小文字化、前後空白除去）。
+ * Google アカウントの email は基本的にケースインセンシティブのため、
+ * 大文字小文字違いで弾かれる事故を防ぐ。
+ */
+export function emailsMatch(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) return false;
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
 // ======================== スタブデータ ========================
 // 実装時はこの mock ブロックを削除
 const MOCK_ENABLED = true;
 
-function mockDeals(context: CrmContext): Deal[] {
+function mockDeals(): Deal[] {
   const now = Date.now();
   const hours = (h: number) => new Date(now + h * 60 * 60 * 1000).toISOString();
+  // デモ用のログインユーザー email（DEMO_USER と一致させる）
+  const ME = 'demo@makxas.co.jp';
+  const SOMEONE_ELSE = 'other.staff@makxas.co.jp';
   return [
     {
       id: 'deal_001',
@@ -31,8 +48,8 @@ function mockDeals(context: CrmContext): Deal[] {
       customerAddress: '東京都渋谷区恵比寿1-2-3',
       customerPhone: '090-0000-0001',
       reservationAt: hours(2),
-      assessorEmail: context.userEmail ?? undefined,
-      assessorName: '（自分）',
+      assessorEmail: ME,
+      assessorName: '自分',
       status: 'scheduled',
       items: '腕時計（ロレックス）、ブランドバッグ数点',
       notes: 'マンション1階、駐車場あり',
@@ -43,8 +60,8 @@ function mockDeals(context: CrmContext): Deal[] {
       customerAddress: '神奈川県横浜市港北区新横浜2-3-4',
       customerPhone: '090-0000-0002',
       reservationAt: hours(5),
-      assessorEmail: context.userEmail ?? undefined,
-      assessorName: '（自分）',
+      assessorEmail: ME,
+      assessorName: '自分',
       status: 'scheduled',
       items: '着物一式、貴金属',
     },
@@ -53,10 +70,21 @@ function mockDeals(context: CrmContext): Deal[] {
       customerName: '佐藤 次郎 様',
       customerAddress: '千葉県船橋市本町4-5-6',
       reservationAt: hours(26),
-      assessorEmail: context.userEmail ?? undefined,
-      assessorName: '（自分）',
+      assessorEmail: ME,
+      assessorName: '自分',
       status: 'scheduled',
       items: '切手コレクション',
+    },
+    // 別の査定担当者の案件 → email 不一致でフィルタされて表示されない
+    {
+      id: 'deal_999',
+      customerName: '【他人案件】鈴木 三郎 様',
+      customerAddress: '大阪府大阪市北区',
+      reservationAt: hours(3),
+      assessorEmail: SOMEONE_ELSE,
+      assessorName: '別の営業マン',
+      status: 'scheduled',
+      items: 'これはあなたに割り当てられていない案件です',
     },
   ];
 }
@@ -70,11 +98,13 @@ async function httpGet<T>(_context: CrmContext, _path: string): Promise<T> {
 /**
  * 自分が査定担当者に割り当てられており、予約中（scheduled）の案件のみを返す。
  * 予約日時が現在に近い順にソート済み。
+ *
+ * クライアント側でも assessorEmail のチェックを再度行う（多層防御）。
  */
 export async function fetchAssignedScheduledDeals(context: CrmContext): Promise<Deal[]> {
   let deals: Deal[];
   if (MOCK_ENABLED) {
-    deals = mockDeals(context);
+    deals = mockDeals();
   } else {
     deals = await httpGet<Deal[]>(
       context,
@@ -85,6 +115,7 @@ export async function fetchAssignedScheduledDeals(context: CrmContext): Promise<
   const now = Date.now();
   return deals
     .filter((d) => d.status === 'scheduled')
+    .filter((d) => emailsMatch(d.assessorEmail, context.userEmail))
     .sort((a, b) => {
       const da = Math.abs(new Date(a.reservationAt).getTime() - now);
       const db = Math.abs(new Date(b.reservationAt).getTime() - now);
@@ -98,7 +129,7 @@ export async function fetchAssignedScheduledDeals(context: CrmContext): Promise<
  */
 export async function fetchDeal(context: CrmContext, dealId: string): Promise<Deal | null> {
   if (MOCK_ENABLED) {
-    const all = mockDeals(context);
+    const all = mockDeals();
     return all.find((d) => d.id === dealId) ?? null;
   }
   return httpGet<Deal | null>(context, `/api/deals/${encodeURIComponent(dealId)}`);

@@ -56,6 +56,11 @@ export function DealSelectScreen({ onSelect, onBack }: Props) {
       <Text style={styles.subtitle}>
         自分が査定担当者の予約中案件（予約日時が近い順）
       </Text>
+      {crm.userEmail ? (
+        <Text style={styles.matchInfo}>
+          照合中の Google アカウント: {crm.userEmail}
+        </Text>
+      ) : null}
 
       {deals == null && !error ? (
         <View style={styles.center}>
@@ -133,9 +138,16 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#0F172A' },
   subtitle: {
     paddingHorizontal: 20,
-    paddingBottom: 8,
+    paddingBottom: 4,
     color: '#64748B',
     fontSize: 13,
+  },
+  matchInfo: {
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+    color: '#2563EB',
+    fontSize: 11,
+    fontWeight: '500',
   },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   errorText: { color: '#DC2626', textAlign: 'center', marginBottom: 16 },

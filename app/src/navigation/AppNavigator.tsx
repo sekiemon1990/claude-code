@@ -10,7 +10,7 @@ import * as Linking from 'expo-linking';
 
 import { useAuth } from '@/hooks/useAuth';
 import { useCrmContext } from '@/hooks/useCrmContext';
-import { fetchDeal } from '@/services/crm';
+import { emailsMatch, fetchDeal } from '@/services/crm';
 import { LoginScreen } from '@/screens/LoginScreen';
 import { RecordingListScreen } from '@/screens/RecordingListScreen';
 import { RecordScreen } from '@/screens/RecordScreen';
@@ -82,14 +82,10 @@ export function AppNavigator() {
           setPendingDealId(null);
           return;
         }
-        if (
-          deal.assessorEmail &&
-          user.email &&
-          deal.assessorEmail.toLowerCase() !== user.email.toLowerCase()
-        ) {
+        if (deal.assessorEmail && !emailsMatch(deal.assessorEmail, user.email)) {
           Alert.alert(
             'アクセス権がありません',
-            'この案件はあなたに割り当てられていません。',
+            `この案件は別の担当者（${deal.assessorEmail}）に割り当てられています。\nあなた: ${user.email}`,
           );
           setPendingDealId(null);
           return;
