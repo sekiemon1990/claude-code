@@ -60,12 +60,86 @@ export function emailsMatch(a: string | null | undefined, b: string | null | und
 // 実装時はこの mock ブロックを削除
 const MOCK_ENABLED = true;
 
+// デモ用のログインユーザー email（DEMO_USER と一致させる）
+const ME = 'demo@makxas.co.jp';
+const SOMEONE_ELSE = 'other.staff@makxas.co.jp';
+
+/**
+ * 過去の完了済み案件のモック。
+ * 「録音漏れ」検知用に CRM 上で完了になっている案件を返す。
+ *
+ * 実装時: GET /api/projects?assessorEmail=...&status=completed&since=<7d ago>
+ *
+ * 過去7日内に完了した案件を返す前提。本物のデータでは、
+ * このうちアプリ内に対応する recording.dealId が無いものが「録音漏れ」。
+ */
+export const MOCK_PAST_COMPLETED_DEAL_IDS = {
+  /** 録音あり（demoStore に seed する） */
+  recorded: ['past_001', 'past_002'],
+  /** 録音漏れ（CRM上は完了だがアプリに録音なし） */
+  missed: ['past_003', 'past_004', 'past_005'],
+};
+
+export function mockPastCompletedDeals(): Deal[] {
+  const now = Date.now();
+  const days = (d: number) => new Date(now - d * 24 * 60 * 60 * 1000).toISOString();
+  return [
+    {
+      id: 'past_001',
+      customerName: '高橋 二郎 様',
+      customerAddress: '埼玉県さいたま市浦和区',
+      reservationAt: days(1),
+      assessorEmail: ME,
+      assessorName: '自分',
+      status: 'completed',
+      items: '腕時計、ネックレス、指輪',
+    },
+    {
+      id: 'past_002',
+      customerName: '伊藤 三郎 様',
+      customerAddress: '東京都世田谷区',
+      reservationAt: days(2),
+      assessorEmail: ME,
+      assessorName: '自分',
+      status: 'completed',
+      items: 'ブランドバッグ2点、財布',
+    },
+    {
+      id: 'past_003',
+      customerName: '渡辺 四郎 様',
+      customerAddress: '千葉県千葉市',
+      reservationAt: days(3),
+      assessorEmail: ME,
+      assessorName: '自分',
+      status: 'completed',
+      items: '時計、コイン3点',
+    },
+    {
+      id: 'past_004',
+      customerName: '中村 五郎 様',
+      customerAddress: '神奈川県川崎市',
+      reservationAt: days(4),
+      assessorEmail: ME,
+      assessorName: '自分',
+      status: 'completed',
+      items: '着物一式',
+    },
+    {
+      id: 'past_005',
+      customerName: '小林 六郎 様',
+      customerAddress: '東京都品川区',
+      reservationAt: days(6),
+      assessorEmail: ME,
+      assessorName: '自分',
+      status: 'completed',
+      items: '貴金属、宝石類',
+    },
+  ];
+}
+
 function mockDeals(): Deal[] {
   const now = Date.now();
   const hours = (h: number) => new Date(now + h * 60 * 60 * 1000).toISOString();
-  // デモ用のログインユーザー email（DEMO_USER と一致させる）
-  const ME = 'demo@makxas.co.jp';
-  const SOMEONE_ELSE = 'other.staff@makxas.co.jp';
   // ID は本物の URL に近づけるため、makxas が使っている形式（小文字英数 26 桁前後）に合わせる
   return [
     {
@@ -200,6 +274,26 @@ export async function fetchDeal(context: CrmContext, dealId: string): Promise<De
     return all.find((d) => d.id === dealId) ?? null;
   }
   return httpGet<Deal | null>(context, `/api/deals/${encodeURIComponent(dealId)}`);
+}
+
+/**
+ * 過去 N 日に完了した自分の案件を取得する。
+ * アプリ側で recording の dealId と突き合わせ、欠けているものを
+ * 「録音漏れ」として可視化する用途。
+ */
+export async function fetchRecentCompletedDeals(
+  context: CrmContext,
+  days = 7,
+): Promise<Deal[]> {
+  if (MOCK_ENABLED) {
+    return mockPastCompletedDeals().filter((d) => emailsMatch(d.assessorEmail, context.userEmail));
+  }
+  return httpGet<Deal[]>(
+    context,
+    `/api/deals?assessorEmail=${encodeURIComponent(
+      context.userEmail ?? '',
+    )}&status=completed&since=${days}d`,
+  );
 }
 
 /**

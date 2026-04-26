@@ -127,6 +127,7 @@ export function AppNavigator() {
             <RecordingListScreen
               onSelect={(id) => navigation.navigate('Detail', { recordingId: id })}
               onNewRecording={() => navigation.navigate('DealSelect')}
+              onSelectDeal={(deal) => navigation.navigate('Record', { deal })}
               onSignOut={signOut}
             />
           )}

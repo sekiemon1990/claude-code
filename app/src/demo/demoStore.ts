@@ -3,6 +3,10 @@ import type { Recording, RecordingStatus, DealSnapshot } from '@/types';
 /**
  * インメモリのデモストア。Firestore/Storage の代わりに録音データを保持し、
  * 文字起こし → 議事録生成のパイプラインを setTimeout でシミュレートする。
+ *
+ * モジュール読み込み時に、過去の完了済み録音を seed することで、
+ * ダッシュボードの集計（平均査定時間 / 収益性 / 録音漏れ率 など）が
+ * デモ初回起動時から意味のある値を表示できるようにする。
  */
 
 type Listener = (items: Recording[]) => void;
@@ -143,6 +147,93 @@ export const demoStore = {
     emitDetail(id);
   },
 };
+
+// ============= 過去録音の seed（デモ用の履歴データ） =============
+
+type SeedSpec = {
+  recordingId: string;
+  dealId: string;
+  customerName: string;
+  reservationDaysAgo: number;
+  address: string;
+  items: string;
+  durationSec: number;
+  offeredPriceText: string;
+};
+
+function makeTimestamp(daysAgo: number): Recording['createdAt'] {
+  const d = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000);
+  return {
+    toDate: () => d,
+    seconds: Math.floor(d.getTime() / 1000),
+    nanoseconds: 0,
+  } as unknown as Recording['createdAt'];
+}
+
+const SEEDS: SeedSpec[] = [
+  {
+    recordingId: 'seed_001',
+    dealId: 'past_001',
+    customerName: '高橋 二郎 様',
+    reservationDaysAgo: 1,
+    address: '埼玉県さいたま市浦和区',
+    items: '腕時計、ネックレス、指輪',
+    durationSec: 32 * 60, // 32分
+    offeredPriceText: '合計 320,000 円で合意',
+  },
+  {
+    recordingId: 'seed_002',
+    dealId: 'past_002',
+    customerName: '伊藤 三郎 様',
+    reservationDaysAgo: 2,
+    address: '東京都世田谷区',
+    items: 'ブランドバッグ2点、財布',
+    durationSec: 22 * 60, // 22分
+    offeredPriceText: '合計 180,000 円で合意',
+  },
+];
+
+function seedHistoricalRecordings() {
+  for (const s of SEEDS) {
+    const ts = makeTimestamp(s.reservationDaysAgo);
+    const rec: Recording = {
+      id: s.recordingId,
+      ownerUid: 'demo-user-01',
+      dealId: s.dealId,
+      dealSnapshot: {
+        id: s.dealId,
+        customerName: s.customerName,
+        reservationAt: new Date(
+          Date.now() - s.reservationDaysAgo * 24 * 60 * 60 * 1000,
+        ).toISOString(),
+        address: s.address,
+        items: s.items,
+      },
+      title: s.customerName,
+      storagePath: `demo/${s.recordingId}/audio.m4a`,
+      downloadUrl: `https://demo-storage.makxas.xyz/recordings/${s.recordingId}/audio.m4a`,
+      durationMs: s.durationSec * 1000,
+      status: 'completed',
+      transcript: '（過去録音のダミー文字起こし）',
+      minutes: {
+        summary: `${s.customerName}との出張買取商談。合意に至った。`,
+        customerInfo: `${s.customerName}、${s.address}`,
+        items: s.items,
+        offeredPrice: s.offeredPriceText,
+        nextActions: '書類送付、入金処理',
+        generatedAt: ts,
+      },
+      createdAt: ts,
+      updatedAt: ts,
+    };
+    records.set(s.recordingId, rec);
+  }
+}
+
+// モジュール読み込み時に1回だけ seed
+seedHistoricalRecordings();
+
+// =================================================================
 
 function makeFakeTranscript(deal: DealSnapshot): string {
   return [

@@ -18,8 +18,12 @@ import { subscribeToRecordings } from '@/services/recordings';
 import { removeQueueItem, type QueuedRecording } from '@/services/uploadQueue';
 import { StatusBadge } from '@/components/StatusBadge';
 import { ProgressBar } from '@/components/ProgressBar';
-import { StatsPanel } from '@/components/StatsPanel';
+import { HomeDashboard } from '@/components/HomeDashboard';
 import { CompletionToast } from '@/components/CompletionToast';
+import { useTodayDeals } from '@/hooks/useTodayDeals';
+import { useRecentCompletedDeals } from '@/hooks/useRecentCompletedDeals';
+import { useDealActions } from '@/hooks/useDealActions';
+import type { Deal } from '@/types';
 import {
   isPipelineProcessing,
   pipelineLabel,
@@ -31,6 +35,7 @@ import type { Recording } from '@/types';
 type Props = {
   onSelect: (recordingId: string) => void;
   onNewRecording: () => void;
+  onSelectDeal: (deal: Deal) => void;
   onSignOut: () => void;
 };
 
@@ -38,16 +43,24 @@ type ListRow =
   | { kind: 'queued'; item: QueuedRecording }
   | { kind: 'cloud'; item: Recording };
 
-export function RecordingListScreen({ onSelect, onNewRecording, onSignOut }: Props) {
+export function RecordingListScreen({
+  onSelect,
+  onNewRecording,
+  onSelectDeal,
+  onSignOut,
+}: Props) {
   const { user } = useAuth();
   const [items, setItems] = useState<Recording[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const [statsOpen, setStatsOpen] = useState(false);
+  const [dashboardOpen, setDashboardOpen] = useState(true);
   const [toast, setToast] = useState<Recording | null>(null);
   const previouslyCompletedIds = useRef<Set<string>>(new Set());
   const { queue, progress, draining, online, drain, refresh, retryItem, retryAll } =
     useUploadQueue(user?.uid);
   const storage = useStorageStatus();
+  const { todayDeals, source: todayDealsSource } = useTodayDeals();
+  const { completedDeals: recentCompletedDeals } = useRecentCompletedDeals();
+  const { forgotten, markForgotten, unmarkForgotten } = useDealActions(user?.email ?? user?.uid);
 
   useEffect(() => {
     if (!user) return;
@@ -112,16 +125,32 @@ export function RecordingListScreen({ onSelect, onNewRecording, onSignOut }: Pro
             </Text>
           ) : null}
         </View>
-        <Pressable onPress={() => setStatsOpen((v) => !v)} hitSlop={8} style={{ marginRight: 14 }}>
-          <Text style={styles.iconBtn}>📊</Text>
+        <Pressable
+          onPress={() => setDashboardOpen((v) => !v)}
+          hitSlop={8}
+          style={{ marginRight: 14 }}
+        >
+          <Text style={styles.iconBtn}>{dashboardOpen ? '📊' : '📊'}</Text>
         </Pressable>
         <Pressable onPress={onSignOut} hitSlop={8}>
           <Text style={styles.signOut}>ログアウト</Text>
         </Pressable>
       </View>
 
-      {statsOpen ? (
-        <StatsPanel queue={queue} recordings={items} freeBytes={storage.freeBytes} />
+      {dashboardOpen ? (
+        <HomeDashboard
+          todayDeals={todayDeals}
+          todayDealsSource={todayDealsSource}
+          recordings={items}
+          queue={queue}
+          freeBytes={storage.freeBytes}
+          recentCompletedDeals={recentCompletedDeals}
+          forgottenDealIds={forgotten}
+          onSelectDeal={onSelectDeal}
+          onShowAllDeals={onNewRecording}
+          onMarkForgotten={markForgotten}
+          onUnmarkForgotten={unmarkForgotten}
+        />
       ) : null}
 
       {toast ? (
