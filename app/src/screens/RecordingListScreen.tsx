@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  FlatList,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -106,6 +106,49 @@ export function RecordingListScreen({
     await refresh();
   }
 
+  // ダッシュボード + 各種バナーを FlatList の ListHeaderComponent に
+  // まとめて入れることで、ヘッダ以外のすべてが一緒にスクロールする。
+  // これがないとダッシュボードが大きい時、画面外に出た部分にアクセスできない。
+  const listHeader = (
+    <>
+      {dashboardOpen ? (
+        <HomeDashboard
+          todayDeals={todayDeals}
+          todayDealsSource={todayDealsSource}
+          recordings={items}
+          queue={queue}
+          freeBytes={storage.freeBytes}
+          recentCompletedDeals={recentCompletedDeals}
+          forgottenDealIds={forgotten}
+          onSelectDeal={onSelectDeal}
+          onShowAllDeals={onNewRecording}
+          onMarkForgotten={markForgotten}
+          onUnmarkForgotten={unmarkForgotten}
+        />
+      ) : null}
+
+      {storage.level !== 'ok' ? (
+        <View
+          style={[
+            styles.storageBanner,
+            storage.level === 'critical' && styles.storageBannerCritical,
+          ]}
+        >
+          <Text
+            style={[
+              styles.storageBannerText,
+              storage.level === 'critical' && styles.storageBannerTextCritical,
+            ]}
+          >
+            {storage.level === 'critical'
+              ? `ストレージ残量が少ないです（空き ${formatBytes(storage.freeBytes)}）。録音ができない可能性があります。`
+              : `ストレージ残量が減っています（空き ${formatBytes(storage.freeBytes)}）。未送信の録音を送信するか、不要なファイルを削除してください。`}
+          </Text>
+        </View>
+      ) : null}
+    </>
+  );
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -137,22 +180,6 @@ export function RecordingListScreen({
         </Pressable>
       </View>
 
-      {dashboardOpen ? (
-        <HomeDashboard
-          todayDeals={todayDeals}
-          todayDealsSource={todayDealsSource}
-          recordings={items}
-          queue={queue}
-          freeBytes={storage.freeBytes}
-          recentCompletedDeals={recentCompletedDeals}
-          forgottenDealIds={forgotten}
-          onSelectDeal={onSelectDeal}
-          onShowAllDeals={onNewRecording}
-          onMarkForgotten={markForgotten}
-          onUnmarkForgotten={unmarkForgotten}
-        />
-      ) : null}
-
       {toast ? (
         <CompletionToast
           recording={toast}
@@ -165,72 +192,53 @@ export function RecordingListScreen({
         />
       ) : null}
 
-      {storage.level !== 'ok' ? (
-        <View
-          style={[
-            styles.storageBanner,
-            storage.level === 'critical' && styles.storageBannerCritical,
-          ]}
-        >
-          <Text
-            style={[
-              styles.storageBannerText,
-              storage.level === 'critical' && styles.storageBannerTextCritical,
-            ]}
-          >
-            {storage.level === 'critical'
-              ? `ストレージ残量が少ないです（空き ${formatBytes(storage.freeBytes)}）。録音ができない可能性があります。`
-              : `ストレージ残量が減っています（空き ${formatBytes(storage.freeBytes)}）。未送信の録音を送信するか、不要なファイルを削除してください。`}
-          </Text>
-        </View>
-      ) : null}
-
-      {queue.length > 0 || !online ? (
-        <View style={[styles.banner, !online && styles.bannerOffline]}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.bannerText}>
-              {!online ? 'オフライン中' : 'クラウドへ送信中'}
-            </Text>
-            <Text style={styles.bannerSubText}>
-              {[
-                uploadingCount > 0 ? `送信中 ${uploadingCount}` : null,
-                waitingCount > 0 ? `待機 ${waitingCount}` : null,
-                failedCount > 0 ? `失敗 ${failedCount}` : null,
-              ]
-                .filter(Boolean)
-                .join('  ·  ') || 'すべてローカル保存済み'}
-            </Text>
-          </View>
-          {online && (waitingCount > 0 || failedCount > 0) ? (
-            <Pressable onPress={retryAll} disabled={draining}>
-              <Text style={styles.bannerAction}>
-                {draining ? '処理中...' : '再試行'}
-              </Text>
-            </Pressable>
-          ) : null}
-        </View>
-      ) : null}
-
-      <FlatList
-        data={rows}
-        keyExtractor={(row) =>
-          row.kind === 'queued' ? `q:${row.item.queueId}` : `c:${row.item.id}`
-        }
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.listContent}
         refreshControl={
           <RefreshControl refreshing={!loaded} onRefresh={() => drain()} />
         }
-        contentContainerStyle={rows.length === 0 ? styles.emptyContent : styles.listContent}
-        ListEmptyComponent={
-          loaded ? (
-            <View style={styles.empty}>
-              <Text style={styles.emptyTitle}>まだ録音はありません</Text>
-              <Text style={styles.emptyBody}>
-                下の「新規録音」から案件を選択して録音を開始できます。
+      >
+        {listHeader}
+        {queue.length > 0 || !online ? (
+          <View style={[styles.banner, !online && styles.bannerOffline]}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.bannerText}>
+                {!online ? 'オフライン中' : 'クラウドへ送信中'}
+              </Text>
+              <Text style={styles.bannerSubText}>
+                {[
+                  uploadingCount > 0 ? `送信中 ${uploadingCount}` : null,
+                  waitingCount > 0 ? `待機 ${waitingCount}` : null,
+                  failedCount > 0 ? `失敗 ${failedCount}` : null,
+                ]
+                  .filter(Boolean)
+                  .join('  ·  ') || 'すべてローカル保存済み'}
               </Text>
             </View>
-          ) : null
-        }
-        renderItem={({ item: row }) => {
+            {online && (waitingCount > 0 || failedCount > 0) ? (
+              <Pressable onPress={retryAll} disabled={draining}>
+                <Text style={styles.bannerAction}>
+                  {draining ? '処理中...' : '再試行'}
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
+        {rows.length > 0 ? (
+          <Text style={styles.listSectionTitle}>📁 過去の録音</Text>
+        ) : null}
+
+        {rows.length === 0 && loaded ? (
+          <View style={styles.empty}>
+            <Text style={styles.emptyTitle}>まだ録音はありません</Text>
+            <Text style={styles.emptyBody}>
+              下の「新規録音」から案件を選択して録音を開始できます。
+            </Text>
+          </View>
+        ) : null}
+
+        {rows.map((row) => {
           if (row.kind === 'queued') {
             const q = row.item;
             const percent = progress[q.queueId];
@@ -238,7 +246,7 @@ export function RecordingListScreen({
             const isFailed = q.status === 'failed';
 
             return (
-              <View style={[styles.row, styles.rowQueued]}>
+              <View key={`q:${q.queueId}`} style={[styles.row, styles.rowQueued]}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.customerName} numberOfLines={1}>
                     {q.dealSnapshot.customerName}
@@ -301,7 +309,11 @@ export function RecordingListScreen({
           const processing = isPipelineProcessing(rec.status);
           const percent = pipelinePercent(rec.status);
           return (
-            <Pressable style={styles.row} onPress={() => onSelect(rec.id)}>
+            <Pressable
+              key={`c:${rec.id}`}
+              style={styles.row}
+              onPress={() => onSelect(rec.id)}
+            >
               <View style={{ flex: 1 }}>
                 <Text style={styles.customerName} numberOfLines={1}>
                   {rec.dealSnapshot?.customerName ?? rec.title}
@@ -341,8 +353,8 @@ export function RecordingListScreen({
               </View>
             </Pressable>
           );
-        }}
-      />
+        })}
+      </ScrollView>
 
       <Pressable style={styles.fab} onPress={onNewRecording}>
         <Text style={styles.fabText}>+ 新規録音</Text>
@@ -396,7 +408,15 @@ const styles = StyleSheet.create({
   bannerText: { color: '#1E40AF', fontWeight: '700', fontSize: 14 },
   bannerSubText: { color: '#334155', fontSize: 12, marginTop: 2 },
   bannerAction: { color: '#2563EB', fontWeight: '700' },
-  listContent: { paddingHorizontal: 16, paddingBottom: 120 },
+  listContent: { paddingBottom: 120 },
+  listSectionTitle: {
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 8,
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
   emptyContent: { flex: 1, justifyContent: 'center', padding: 32 },
   empty: { alignItems: 'center' },
   emptyTitle: { fontSize: 16, fontWeight: '600', color: '#0F172A' },
@@ -410,6 +430,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     padding: 16,
     borderRadius: 12,
+    marginHorizontal: 16,
     marginBottom: 10,
     borderWidth: 1,
     borderColor: '#E2E8F0',
