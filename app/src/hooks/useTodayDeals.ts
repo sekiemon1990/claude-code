@@ -5,19 +5,17 @@ import type { Deal } from '@/types';
 
 import { useCrmContext } from './useCrmContext';
 
-function isSameDay(a: Date, b: Date): boolean {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
-}
+const NEAR_FUTURE_WINDOW_MS = 24 * 60 * 60 * 1000; // 24時間
+const NEAR_PAST_WINDOW_MS = 6 * 60 * 60 * 1000; // 6時間（直前にズレた案件を拾うため）
 
 /**
- * 今日の予約案件を取得する。
- * - 既存の `fetchAssignedScheduledDeals` をそのまま流用（オフライン時は
- *   キャッシュ）
- * - 取得結果を「予約日が今日」でフィルタしてソート
+ * 直近の予約案件を取得する。
+ * - 既存の `fetchAssignedScheduledDeals` をそのまま流用（オフライン時はキャッシュ）
+ * - 取得結果を「今から24時間以内 + 直近6時間以内に過ぎた案件」でフィルタ
+ *
+ * 当日扱いを「カレンダー上の今日」で見るとカレンダー深夜帯（23時に
+ * 開いた時の翌1時の予約など）がフィルタアウトされてしまうため、
+ * 「今からの相対時間」で判定する。
  */
 export function useTodayDeals() {
   const crm = useCrmContext();
@@ -29,10 +27,11 @@ export function useTodayDeals() {
     setLoading(true);
     try {
       const result = await fetchAssignedScheduledDeals(crm);
-      const today = new Date();
-      const filtered = result.deals.filter((d) =>
-        isSameDay(new Date(d.reservationAt), today),
-      );
+      const now = Date.now();
+      const filtered = result.deals.filter((d) => {
+        const t = new Date(d.reservationAt).getTime();
+        return t >= now - NEAR_PAST_WINDOW_MS && t <= now + NEAR_FUTURE_WINDOW_MS;
+      });
       setAllTodayDeals(filtered);
       setSource(result.source);
     } catch {

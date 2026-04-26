@@ -101,9 +101,23 @@ export function mockPastCompletedDeals(): Deal[] {
 
 function mockDeals(): Deal[] {
   const now = Date.now();
+  const minutes = (m: number) => new Date(now + m * 60 * 1000).toISOString();
   const hours = (h: number) => new Date(now + h * 60 * 60 * 1000).toISOString();
   // ID は本物の URL に近づけるため、makxas が使っている形式（小文字英数 26 桁前後）に合わせる
   return [
+    // 動作確認用の常に直近にある案件（時間に関係なく必ずダッシュボードに表示される）
+    {
+      id: 'test_now_recording_target',
+      customerName: '【テスト用】常時表示テスト案件 様',
+      customerAddress: '東京都千代田区千代田1-1（テスト）',
+      customerPhone: '090-9999-9999',
+      reservationAt: minutes(30),
+      assessorEmail: ME,
+      assessorName: '自分',
+      status: 'scheduled',
+      items: '動作確認用テスト品目（録音テストにご利用ください）',
+      notes: 'この案件は時刻に関係なく常に直近30分後の予定として表示されます',
+    },
     {
       id: 'qqpgo2hv811rf1vhse3knt0sqpm',
       customerName: '田中 太郎 様',
