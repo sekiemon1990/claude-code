@@ -25,6 +25,8 @@ export type Deal = {
   status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
   items?: string;
   notes?: string;
+  /** マクサスコアの案件詳細ページ URL。未指定時はベース URL から生成 */
+  dealUrl?: string;
 };
 
 /**
@@ -37,6 +39,7 @@ export type DealSnapshot = {
   reservationAt: string;
   address?: string;
   items?: string;
+  dealUrl?: string;
 };
 
 export type Recording = {

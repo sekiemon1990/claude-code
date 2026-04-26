@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
 
@@ -9,7 +9,7 @@ import { useStorageStatus, formatBytes } from '@/hooks/useStorageStatus';
 import { persistRecording } from '@/services/audioStorage';
 import { enqueueRecording } from '@/services/uploadQueue';
 import { createRecordingAndUpload } from '@/services/recordings';
-import { toSnapshot } from '@/services/crm';
+import { getDealUrl, toSnapshot } from '@/services/crm';
 import { DEMO_MODE } from '@/demo';
 import type { Deal } from '@/types';
 import * as Crypto from 'expo-crypto';
@@ -113,6 +113,13 @@ export function RecordScreen({ deal, onDone, onChangeDeal }: Props) {
           <Text style={styles.dealAddress}>{deal.customerAddress}</Text>
         ) : null}
         {deal.items ? <Text style={styles.dealItems}>査定対象: {deal.items}</Text> : null}
+
+        <Pressable
+          style={styles.openCrmBtn}
+          onPress={() => Linking.openURL(getDealUrl(deal)).catch(() => undefined)}
+        >
+          <Text style={styles.openCrmBtnText}>マクサスコアで案件を開く ↗</Text>
+        </Pressable>
       </View>
 
       <View style={styles.timerBox}>
@@ -223,6 +230,15 @@ const styles = StyleSheet.create({
   dealWhen: { marginTop: 6, fontSize: 14, color: '#0F172A' },
   dealAddress: { marginTop: 4, fontSize: 13, color: '#475569' },
   dealItems: { marginTop: 4, fontSize: 13, color: '#475569' },
+  openCrmBtn: {
+    marginTop: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#2563EB',
+    alignItems: 'center',
+  },
+  openCrmBtnText: { color: '#2563EB', fontWeight: '600', fontSize: 13 },
   timerBox: { marginTop: 28, alignItems: 'center' },
   timer: {
     fontSize: 60,

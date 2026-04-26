@@ -22,6 +22,28 @@ export type CrmContext = {
 };
 
 /**
+ * マクサスコアのベース URL。
+ * 案件 ID から URL を構築する際に使う。
+ * 本番接続時は環境変数（app.config.ts の extra）から読む形に差し替え推奨。
+ *
+ * 想定される本番URL: https://makxascore.com
+ * 想定されるステージング: https://core-stg.makxas.net
+ */
+export const MAKXAS_BASE_URL = 'https://makxascore.com';
+
+/**
+ * Deal から案件詳細ページの URL を取得する。
+ * `deal.dealUrl` があればそれを優先、無ければベース URL から構築。
+ *
+ * 案件 URL のパス形式が決まり次第、ここを修正する。
+ * 現状は仮で `/deals/{id}` としている。
+ */
+export function getDealUrl(deal: { id: string; dealUrl?: string }): string {
+  if (deal.dealUrl) return deal.dealUrl;
+  return `${MAKXAS_BASE_URL}/deals/${encodeURIComponent(deal.id)}`;
+}
+
+/**
  * email を正規化して比較する（小文字化、前後空白除去）。
  * Google アカウントの email は基本的にケースインセンシティブのため、
  * 大文字小文字違いで弾かれる事故を防ぐ。
@@ -142,5 +164,6 @@ export function toSnapshot(deal: Deal): DealSnapshot {
     reservationAt: deal.reservationAt,
     address: deal.customerAddress,
     items: deal.items,
+    dealUrl: getDealUrl(deal),
   };
 }

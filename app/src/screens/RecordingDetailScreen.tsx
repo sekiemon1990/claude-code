@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -134,6 +135,16 @@ export function RecordingDetailScreen({ recordingId, onBack }: Props) {
           {recording.dealSnapshot.items ? (
             <Text style={styles.dealMeta}>査定対象: {recording.dealSnapshot.items}</Text>
           ) : null}
+          {recording.dealSnapshot.dealUrl ? (
+            <Pressable
+              style={styles.openCrmBtn}
+              onPress={() =>
+                Linking.openURL(recording.dealSnapshot!.dealUrl!).catch(() => undefined)
+              }
+            >
+              <Text style={styles.openCrmBtnText}>マクサスコアで案件を開く ↗</Text>
+            </Pressable>
+          ) : null}
         </View>
       ) : (
         <Text style={styles.title}>{recording.title}</Text>
@@ -226,6 +237,15 @@ const styles = StyleSheet.create({
   customerName: { marginTop: 6, fontSize: 18, fontWeight: '700', color: '#0F172A' },
   reservation: { marginTop: 6, fontSize: 14, color: '#0F172A' },
   dealMeta: { marginTop: 4, fontSize: 13, color: '#475569' },
+  openCrmBtn: {
+    marginTop: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#2563EB',
+    alignItems: 'center',
+  },
+  openCrmBtnText: { color: '#2563EB', fontWeight: '600', fontSize: 13 },
   errorBox: {
     marginTop: 16,
     padding: 12,
