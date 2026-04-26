@@ -10,6 +10,8 @@ import { persistRecording } from '@/services/audioStorage';
 import { enqueueRecording } from '@/services/uploadQueue';
 import { createRecordingAndUpload } from '@/services/recordings';
 import { getDealUrl, toSnapshot } from '@/services/crm';
+import { logError } from '@/services/errorLog';
+import { AudioMeter } from '@/components/AudioMeter';
 import { DEMO_MODE } from '@/demo';
 import type { Deal } from '@/types';
 import * as Crypto from 'expo-crypto';
@@ -84,6 +86,7 @@ export function RecordScreen({ deal, onDone, onChangeDeal }: Props) {
       onDone();
     } catch (e) {
       Alert.alert('保存失敗', e instanceof Error ? e.message : '不明なエラー');
+      void logError('recording_failed', e, { dealId: deal.id });
     } finally {
       setSaving(false);
     }
@@ -130,6 +133,7 @@ export function RecordScreen({ deal, onDone, onChangeDeal }: Props) {
           {isPaused && '一時停止中'}
           {recorder.state === 'stopped' && '停止'}
         </Text>
+        <AudioMeter level={recorder.meterDb} active={isRecording} />
       </View>
 
       {recorder.error ? <Text style={styles.error}>{recorder.error}</Text> : null}

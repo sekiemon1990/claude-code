@@ -8,6 +8,7 @@ import {
   updateQueueItem,
 } from '@/services/uploadQueue';
 import { createRecordingAndUpload } from '@/services/recordings';
+import { logError } from '@/services/errorLog';
 import { DEMO_MODE } from '@/demo';
 
 export const AUTO_RETRY_LIMIT = 5;
@@ -104,12 +105,21 @@ export async function drainUploadQueue(options: {
       await removeQueueItem(ownerUid, target.queueId);
       uploaded += 1;
     } catch (err) {
+      const nextAttempts = target.attempts + 1;
       await updateQueueItem(ownerUid, target.queueId, {
         status: 'failed',
-        attempts: target.attempts + 1,
+        attempts: nextAttempts,
         lastError: err instanceof Error ? err.message : String(err),
       });
       failed += 1;
+      // 自動リトライ上限に到達した時のみ errorLog にも記録（リトライ毎に書かない）
+      if (nextAttempts >= AUTO_RETRY_LIMIT) {
+        void logError('upload_failed', err, {
+          queueId: target.queueId,
+          dealId: target.dealId,
+          attempts: nextAttempts,
+        });
+      }
     } finally {
       options.onProgress?.(target.queueId, null);
     }

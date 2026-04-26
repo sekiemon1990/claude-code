@@ -158,6 +158,29 @@ export async function fetchDeal(context: CrmContext, dealId: string): Promise<De
   return httpGet<Deal | null>(context, `/api/deals/${encodeURIComponent(dealId)}`);
 }
 
+/**
+ * 議事録をマクサスコア側の案件メモへ書き戻す。
+ * 現状はスタブ。実 API が用意され次第、CRM 側の対応エンドポイント
+ * （例: POST /api/projects/{id}/notes）に置き換える。
+ */
+export async function postMinutesToCrm(
+  context: CrmContext,
+  dealId: string,
+  body: { minutesText: string; audioUrl?: string; recordingId: string },
+): Promise<{ ok: boolean }> {
+  if (MOCK_ENABLED) {
+    // eslint-disable-next-line no-console
+    console.info('[crm:postMinutesToCrm:mock]', { dealId, ...body });
+    await new Promise((r) => setTimeout(r, 600));
+    return { ok: true };
+  }
+  const res = await httpGet<{ ok: boolean }>(
+    context,
+    `/api/projects/${encodeURIComponent(dealId)}/notes`,
+  );
+  return res;
+}
+
 export function toSnapshot(deal: Deal): DealSnapshot {
   return {
     id: deal.id,

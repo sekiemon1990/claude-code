@@ -98,7 +98,14 @@ export const demoStore = {
     emitDetail(id);
 
     // シミュレーション: uploading → uploaded → transcribing → transcribed → generating_minutes → completed
-    setTimeout(() => patch(id, { status: 'uploaded' }), 1200);
+    setTimeout(
+      () =>
+        patch(id, {
+          status: 'uploaded',
+          downloadUrl: `https://demo-storage.makxas.xyz/recordings/${id}/audio.m4a`,
+        }),
+      1200,
+    );
     setTimeout(() => patch(id, { status: 'transcribing' }), 2400);
     setTimeout(
       () =>

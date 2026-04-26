@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 
 import { DEMO_MODE } from '@/demo';
+import { logError } from '@/services/errorLog';
 
 export type RecorderState = 'idle' | 'recording' | 'paused' | 'stopped';
 
@@ -13,7 +14,10 @@ export function useRecorder() {
   const [state, setState] = useState<RecorderState>('idle');
   const [durationMs, setDurationMs] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  /** -160 (silence) 〜 0 (max). 録音中以外は -160 */
+  const [meterDb, setMeterDb] = useState(-160);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const meterTickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimestampRef = useRef<number | null>(null);
   const elapsedBeforePauseRef = useRef(0);
   const realRecordingRef = useRef<any>(null);
@@ -21,6 +25,7 @@ export function useRecorder() {
   useEffect(() => {
     return () => {
       if (tickRef.current) clearInterval(tickRef.current);
+      if (meterTickRef.current) clearInterval(meterTickRef.current);
       if (!USE_FAKE_RECORDER && realRecordingRef.current) {
         realRecordingRef.current.stopAndUnloadAsync?.().catch(() => {});
       }
@@ -44,6 +49,25 @@ export function useRecorder() {
     }
   }
 
+  function startFakeMeter() {
+    if (meterTickRef.current) clearInterval(meterTickRef.current);
+    let phase = 0;
+    meterTickRef.current = setInterval(() => {
+      // ゆらぎのある自然な変動（-50dB〜-15dB あたりを揺れる）
+      phase += 0.4;
+      const base = -33 + Math.sin(phase) * 12 + (Math.random() - 0.5) * 8;
+      setMeterDb(Math.max(-60, Math.min(0, base)));
+    }, 100);
+  }
+
+  function stopMeter() {
+    if (meterTickRef.current) {
+      clearInterval(meterTickRef.current);
+      meterTickRef.current = null;
+    }
+    setMeterDb(-160);
+  }
+
   async function start() {
     try {
       setError(null);
@@ -53,6 +77,7 @@ export function useRecorder() {
         setDurationMs(0);
         setState('recording');
         startTicker();
+        startFakeMeter();
         return;
       }
 
@@ -62,6 +87,7 @@ export function useRecorder() {
       const perm = await Audio.requestPermissionsAsync();
       if (!perm.granted) {
         setError('マイクへのアクセスが許可されていません');
+        void logError('recording_failed', new Error('microphone permission denied'));
         return;
       }
       await Audio.setAudioModeAsync({
@@ -70,16 +96,25 @@ export function useRecorder() {
         staysActiveInBackground: true,
         shouldDuckAndroid: true,
       });
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY,
-      );
+      const { recording } = await Audio.Recording.createAsync({
+        ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
+        isMeteringEnabled: true,
+      });
+      recording.setProgressUpdateInterval(100);
+      recording.setOnRecordingStatusUpdate((status: any) => {
+        if (typeof status?.metering === 'number') {
+          setMeterDb(status.metering);
+        }
+      });
       realRecordingRef.current = recording;
       elapsedBeforePauseRef.current = 0;
       setDurationMs(0);
       setState('recording');
       startTicker();
     } catch (e) {
-      setError(e instanceof Error ? e.message : '録音開始に失敗しました');
+      const msg = e instanceof Error ? e.message : '録音開始に失敗しました';
+      setError(msg);
+      void logError('recording_failed', e);
     }
   }
 
@@ -89,6 +124,7 @@ export function useRecorder() {
       await realRecordingRef.current.pauseAsync();
     }
     stopTicker();
+    stopMeter();
     if (startTimestampRef.current != null) {
       elapsedBeforePauseRef.current += Date.now() - startTimestampRef.current;
       startTimestampRef.current = null;
@@ -100,6 +136,8 @@ export function useRecorder() {
     if (state !== 'paused') return;
     if (!USE_FAKE_RECORDER && realRecordingRef.current) {
       await realRecordingRef.current.startAsync();
+    } else if (USE_FAKE_RECORDER) {
+      startFakeMeter();
     }
     startTicker();
     setState('recording');
@@ -107,6 +145,7 @@ export function useRecorder() {
 
   async function stop(): Promise<{ uri: string; durationMs: number } | null> {
     stopTicker();
+    stopMeter();
     const finalDuration =
       state === 'recording' && startTimestampRef.current != null
         ? elapsedBeforePauseRef.current + (Date.now() - startTimestampRef.current)
@@ -136,5 +175,5 @@ export function useRecorder() {
     startTimestampRef.current = null;
   }
 
-  return { state, durationMs, error, start, pause, resume, stop, reset };
+  return { state, durationMs, meterDb, error, start, pause, resume, stop, reset };
 }

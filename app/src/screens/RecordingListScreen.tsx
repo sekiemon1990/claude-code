@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   FlatList,
   Pressable,
@@ -18,6 +18,13 @@ import { subscribeToRecordings } from '@/services/recordings';
 import { removeQueueItem, type QueuedRecording } from '@/services/uploadQueue';
 import { StatusBadge } from '@/components/StatusBadge';
 import { ProgressBar } from '@/components/ProgressBar';
+import { StatsPanel } from '@/components/StatsPanel';
+import { CompletionToast } from '@/components/CompletionToast';
+import {
+  isPipelineProcessing,
+  pipelineLabel,
+  pipelinePercent,
+} from '@/services/pipelineProgress';
 import { DEMO_MODE } from '@/demo';
 import type { Recording } from '@/types';
 
@@ -35,6 +42,9 @@ export function RecordingListScreen({ onSelect, onNewRecording, onSignOut }: Pro
   const { user } = useAuth();
   const [items, setItems] = useState<Recording[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [statsOpen, setStatsOpen] = useState(false);
+  const [toast, setToast] = useState<Recording | null>(null);
+  const previouslyCompletedIds = useRef<Set<string>>(new Set());
   const { queue, progress, draining, online, drain, refresh, retryItem, retryAll } =
     useUploadQueue(user?.uid);
   const storage = useStorageStatus();
@@ -44,6 +54,19 @@ export function RecordingListScreen({ onSelect, onNewRecording, onSignOut }: Pro
     const unsub = subscribeToRecordings(user.uid, (recordings) => {
       setItems(recordings);
       setLoaded(true);
+
+      // 新たに completed に変わった録音があれば通知トーストを出す
+      // 初回ロード時の既存 completed は通知対象外
+      const initial = previouslyCompletedIds.current.size === 0;
+      const justCompleted = recordings.find(
+        (r) => r.status === 'completed' && !previouslyCompletedIds.current.has(r.id),
+      );
+      recordings.forEach((r) => {
+        if (r.status === 'completed') previouslyCompletedIds.current.add(r.id);
+      });
+      if (!initial && justCompleted) {
+        setToast(justCompleted);
+      }
     });
     return unsub;
   }, [user]);
@@ -89,10 +112,29 @@ export function RecordingListScreen({ onSelect, onNewRecording, onSignOut }: Pro
             </Text>
           ) : null}
         </View>
+        <Pressable onPress={() => setStatsOpen((v) => !v)} hitSlop={8} style={{ marginRight: 14 }}>
+          <Text style={styles.iconBtn}>📊</Text>
+        </Pressable>
         <Pressable onPress={onSignOut} hitSlop={8}>
           <Text style={styles.signOut}>ログアウト</Text>
         </Pressable>
       </View>
+
+      {statsOpen ? (
+        <StatsPanel queue={queue} recordings={items} freeBytes={storage.freeBytes} />
+      ) : null}
+
+      {toast ? (
+        <CompletionToast
+          recording={toast}
+          onPress={() => {
+            const id = toast.id;
+            setToast(null);
+            onSelect(id);
+          }}
+          onDismiss={() => setToast(null)}
+        />
+      ) : null}
 
       {storage.level !== 'ok' ? (
         <View
@@ -221,6 +263,8 @@ export function RecordingListScreen({ onSelect, onNewRecording, onSignOut }: Pro
             );
           }
           const rec = row.item;
+          const processing = isPipelineProcessing(rec.status);
+          const percent = pipelinePercent(rec.status);
           return (
             <Pressable style={styles.row} onPress={() => onSelect(rec.id)}>
               <View style={{ flex: 1 }}>
@@ -243,9 +287,22 @@ export function RecordingListScreen({ onSelect, onNewRecording, onSignOut }: Pro
                   {'  ·  '}
                   {Math.round(rec.durationMs / 1000)}秒
                 </Text>
-                <View style={{ marginTop: 6 }}>
-                  <StatusBadge status={rec.status} />
-                </View>
+
+                {processing ? (
+                  <View style={{ marginTop: 8 }}>
+                    <View style={styles.pipelineRow}>
+                      <Text style={styles.pipelineLabel}>{pipelineLabel(rec.status)}</Text>
+                      <Text style={styles.pipelinePercent}>{percent}%</Text>
+                    </View>
+                    <View style={{ marginTop: 4 }}>
+                      <ProgressBar percent={percent} />
+                    </View>
+                  </View>
+                ) : (
+                  <View style={{ marginTop: 6 }}>
+                    <StatusBadge status={rec.status} />
+                  </View>
+                )}
               </View>
             </Pressable>
           );
@@ -271,6 +328,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 24, fontWeight: '700', color: '#0F172A' },
   userInfo: { marginTop: 2, fontSize: 12, color: '#64748B' },
+  iconBtn: { fontSize: 18 },
   signOut: { color: '#64748B' },
   demoBadge: {
     backgroundColor: '#DC2626',
@@ -329,6 +387,13 @@ const styles = StyleSheet.create({
   customerName: { fontSize: 16, fontWeight: '700', color: '#0F172A' },
   reservation: { marginTop: 4, color: '#0F172A', fontSize: 13 },
   rowMeta: { marginTop: 4, color: '#64748B', fontSize: 12 },
+  pipelineRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+  },
+  pipelineLabel: { fontSize: 12, fontWeight: '700', color: '#92400E' },
+  pipelinePercent: { fontSize: 12, fontWeight: '700', color: '#0F172A' },
   queuedStatusRow: { marginTop: 6 },
   queuedLabel: { color: '#92400E', fontSize: 12, fontWeight: '700' },
   queuedLabelFailed: { color: '#991B1B' },

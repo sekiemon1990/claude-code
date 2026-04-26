@@ -8,11 +8,13 @@ import '@/services/backgroundTask';
 
 import { AppNavigator } from '@/navigation/AppNavigator';
 import { registerBackgroundUploadTask } from '@/services/backgroundTask';
+import { registerPushNotifications } from '@/services/notifications';
 
 export default function App() {
   useEffect(() => {
-    // 起動時にバックグラウンドアップロードタスクを登録
+    // 起動時にバックグラウンドアップロードタスクとプッシュ通知を登録
     void registerBackgroundUploadTask();
+    void registerPushNotifications();
   }, []);
 
   return (

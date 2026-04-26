@@ -9,12 +9,24 @@ import {
   Text,
   View,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
 
 import { subscribeToRecording, deleteRecording } from '@/services/recordings';
+import { postMinutesToCrm } from '@/services/crm';
+import { useCrmContext } from '@/hooks/useCrmContext';
+import { formatMinutesAsText } from '@/services/minutesFormat';
+import { logError } from '@/services/errorLog';
+import {
+  PIPELINE_STAGES,
+  isPipelineProcessing,
+  pipelineLabel,
+  pipelinePercent,
+} from '@/services/pipelineProgress';
 import { DEMO_MODE } from '@/demo';
 import { StatusBadge } from '@/components/StatusBadge';
+import { ProgressBar } from '@/components/ProgressBar';
 import type { Recording } from '@/types';
 
 type Props = { recordingId: string; onBack: () => void };
@@ -24,6 +36,8 @@ export function RecordingDetailScreen({ recordingId, onBack }: Props) {
   const [loading, setLoading] = useState(true);
   const [sound, setSound] = useState<any>(null);
   const [playing, setPlaying] = useState(false);
+  const [postingToCrm, setPostingToCrm] = useState(false);
+  const crm = useCrmContext();
 
   useEffect(() => {
     const unsub = subscribeToRecording(recordingId, (rec) => {
@@ -72,6 +86,53 @@ export function RecordingDetailScreen({ recordingId, onBack }: Props) {
     setPlaying(true);
   }
 
+  async function handleCopyMinutes() {
+    if (!recording) return;
+    const text = formatMinutesAsText(recording);
+    try {
+      await Clipboard.setStringAsync(text);
+      Alert.alert('コピーしました', '議事録をクリップボードにコピーしました。');
+    } catch (e) {
+      Alert.alert('コピー失敗', e instanceof Error ? e.message : '不明なエラー');
+      void logError('other', e, { feature: 'copy_minutes' });
+    }
+  }
+
+  async function handleCopyAudioUrl() {
+    if (!recording?.downloadUrl) return;
+    try {
+      await Clipboard.setStringAsync(recording.downloadUrl);
+      Alert.alert(
+        '録音URLをコピーしました',
+        '同僚や上長と共有して内容確認に使えます。',
+      );
+    } catch (e) {
+      Alert.alert('コピー失敗', e instanceof Error ? e.message : '不明なエラー');
+    }
+  }
+
+  async function handlePostToCrm() {
+    if (!recording || !recording.minutes) return;
+    setPostingToCrm(true);
+    try {
+      const result = await postMinutesToCrm(crm, recording.dealId, {
+        minutesText: formatMinutesAsText(recording),
+        audioUrl: recording.downloadUrl,
+        recordingId: recording.id,
+      });
+      if (result.ok) {
+        Alert.alert('送信完了', 'マクサスコアへ議事録を書き戻しました。');
+      } else {
+        throw new Error('CRM への書き戻しが失敗しました');
+      }
+    } catch (e) {
+      Alert.alert('送信失敗', e instanceof Error ? e.message : '不明なエラー');
+      void logError('crm_failed', e, { recordingId: recording.id, dealId: recording.dealId });
+    } finally {
+      setPostingToCrm(false);
+    }
+  }
+
   async function handleDelete() {
     if (!recording) return;
     Alert.alert('削除しますか？', 'この操作は取り消せません。', [
@@ -107,11 +168,8 @@ export function RecordingDetailScreen({ recordingId, onBack }: Props) {
     );
   }
 
-  const isProcessing =
-    recording.status === 'uploading' ||
-    recording.status === 'uploaded' ||
-    recording.status === 'transcribing' ||
-    recording.status === 'generating_minutes';
+  const isProcessing = isPipelineProcessing(recording.status);
+  const percent = pipelinePercent(recording.status);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -178,9 +236,40 @@ export function RecordingDetailScreen({ recordingId, onBack }: Props) {
 
       {isProcessing ? (
         <View style={styles.processing}>
-          <ActivityIndicator />
+          <View style={styles.processingHeader}>
+            <Text style={styles.processingLabel}>{pipelineLabel(recording.status)}</Text>
+            <Text style={styles.processingPercent}>{percent}%</Text>
+          </View>
+          <ProgressBar percent={percent} />
+          <View style={styles.stageList}>
+            {PIPELINE_STAGES.filter((s) => s.status !== 'uploading').map((s) => {
+              const reached = percent >= s.percent;
+              const current = s.status === recording.status;
+              return (
+                <View key={s.status} style={styles.stageRow}>
+                  <Text
+                    style={[
+                      styles.stageMark,
+                      reached ? styles.stageMarkDone : styles.stageMarkPending,
+                      current ? styles.stageMarkCurrent : null,
+                    ]}
+                  >
+                    {reached ? '✓' : '○'}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.stageLabel,
+                      current ? styles.stageLabelCurrent : null,
+                    ]}
+                  >
+                    {s.label}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
           <Text style={styles.processingText}>
-            処理中です。完了まで数分かかる場合があります。
+            完了までしばらくお待ちください。アプリを閉じても処理は続行されます。
           </Text>
         </View>
       ) : null}
@@ -193,6 +282,37 @@ export function RecordingDetailScreen({ recordingId, onBack }: Props) {
           <MinutesRow label="査定品目" value={recording.minutes.items} />
           <MinutesRow label="提示額" value={recording.minutes.offeredPrice} />
           <MinutesRow label="次回アクション" value={recording.minutes.nextActions} />
+
+          <View style={styles.actionRow}>
+            <Pressable style={styles.actionBtn} onPress={handleCopyMinutes}>
+              <Text style={styles.actionBtnText}>📋 議事録をコピー</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.actionBtn, styles.actionBtnPrimary, postingToCrm && styles.disabled]}
+              disabled={postingToCrm}
+              onPress={handlePostToCrm}
+            >
+              <Text style={styles.actionBtnPrimaryText}>
+                {postingToCrm ? '送信中...' : '↗ マクサスコアへ書き戻す'}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
+
+      {recording.downloadUrl ? (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>録音内容を確認するURL</Text>
+          <Text style={styles.urlText} numberOfLines={2}>
+            {recording.downloadUrl}
+          </Text>
+          <Text style={styles.urlNote}>
+            このURLにアクセスすると録音音声を直接再生できます。
+            上長や同僚と内容を確認したい時にコピーして共有してください。
+          </Text>
+          <Pressable style={styles.actionBtn} onPress={handleCopyAudioUrl}>
+            <Text style={styles.actionBtnText}>📋 録音URLをコピー</Text>
+          </Pressable>
         </View>
       ) : null}
 
@@ -263,13 +383,27 @@ const styles = StyleSheet.create({
   playButtonText: { color: '#fff', fontWeight: '600', fontSize: 16 },
   processing: {
     marginTop: 20,
-    alignItems: 'center',
-    gap: 8,
     padding: 16,
     backgroundColor: '#FEF3C7',
     borderRadius: 10,
   },
-  processingText: { color: '#92400E', textAlign: 'center' },
+  processingHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    marginBottom: 8,
+  },
+  processingLabel: { color: '#92400E', fontSize: 14, fontWeight: '700' },
+  processingPercent: { color: '#0F172A', fontSize: 18, fontWeight: '800' },
+  stageList: { marginTop: 12, gap: 4 },
+  stageRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  stageMark: { fontSize: 14, width: 18, textAlign: 'center' },
+  stageMarkDone: { color: '#16A34A' },
+  stageMarkPending: { color: '#94A3B8' },
+  stageMarkCurrent: { color: '#92400E', fontWeight: '700' },
+  stageLabel: { fontSize: 13, color: '#475569' },
+  stageLabelCurrent: { color: '#0F172A', fontWeight: '600' },
+  processingText: { color: '#92400E', textAlign: 'center', marginTop: 12, fontSize: 12 },
   section: {
     marginTop: 24,
     backgroundColor: '#fff',
@@ -287,6 +421,43 @@ const styles = StyleSheet.create({
   minutesRow: { marginBottom: 12 },
   minutesLabel: { fontSize: 12, color: '#64748B', marginBottom: 2 },
   minutesValue: { fontSize: 14, color: '#0F172A', lineHeight: 20 },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
+  },
+  actionBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#fff',
+    marginTop: 8,
+  },
+  actionBtnText: { color: '#0F172A', fontWeight: '600', fontSize: 13 },
+  actionBtnPrimary: {
+    backgroundColor: '#2563EB',
+    borderColor: '#2563EB',
+  },
+  actionBtnPrimaryText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  disabled: { opacity: 0.6 },
+  urlText: {
+    fontSize: 12,
+    color: '#0F172A',
+    backgroundColor: '#F1F5F9',
+    padding: 10,
+    borderRadius: 6,
+    fontFamily: 'monospace',
+    marginBottom: 6,
+  },
+  urlNote: {
+    fontSize: 12,
+    color: '#64748B',
+    lineHeight: 18,
+    marginBottom: 8,
+  },
   transcript: {
     fontSize: 14,
     color: '#0F172A',
