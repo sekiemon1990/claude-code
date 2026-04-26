@@ -5,7 +5,7 @@ import {
   type LinkingOptions,
 } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { ActivityIndicator, Alert, View } from 'react-native';
+import { ActivityIndicator, Alert, Platform, View } from 'react-native';
 import * as Linking from 'expo-linking';
 
 import { useAuth } from '@/hooks/useAuth';
@@ -27,24 +27,25 @@ export type RootStackParamList = {
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-const linking: LinkingOptions<RootStackParamList> = {
-  prefixes: [
-    Linking.createURL('/'), // Expo Go 用
-    'makxasrec://',
-    'https://app.makxas.com', // 将来的な Universal Link 想定
-  ],
-  config: {
-    screens: {
-      List: '',
-      DealSelect: 'deals',
-      // Record は Deal オブジェクト経由で渡すため、直接 URL では紐付けない
-      // 代わりに DealSelect の下層として deal/:dealId を扱う（下の getStateFromPath で変換）
-      Detail: 'recordings/:recordingId',
-    },
-  },
-  // `makxasrec://deal/{id}` を受け取った時は、案件取得後に Record へ遷移するため
-  // 独自処理する。ここでは subscribe で URL 変化を拾う。
-};
+// 実機（ネイティブ）でだけ React Navigation の linking 機能を有効化する。
+// Web/DEMO 環境で linking を有効にすると、baseUrl と React Navigation の
+// 内部 path 解釈が噛み合わず、navigation.navigate がブラウザ URL を意図せず
+// 上書きしてボタンが反応しないように見える挙動になるため、Web ではオフ。
+// なお `makxasrec://deal/{id}` のディープリンクは下記の Linking.addEventListener
+// で独自に拾うので、linking 設定なしでも問題ない。
+const linking: LinkingOptions<RootStackParamList> | undefined =
+  Platform.OS === 'web'
+    ? undefined
+    : {
+        prefixes: ['makxasrec://', 'https://app.makxas.com'],
+        config: {
+          screens: {
+            List: '',
+            DealSelect: 'deals',
+            Detail: 'recordings/:recordingId',
+          },
+        },
+      };
 
 export function AppNavigator() {
   const { user, loading, signOut } = useAuth();
