@@ -171,6 +171,7 @@ function makeTimestamp(daysAgo: number): Recording['createdAt'] {
 }
 
 const SEEDS: SeedSpec[] = [
+  // 直近1週間
   {
     recordingId: 'seed_001',
     dealId: 'past_001',
@@ -178,7 +179,7 @@ const SEEDS: SeedSpec[] = [
     reservationDaysAgo: 1,
     address: '埼玉県さいたま市浦和区',
     items: '腕時計、ネックレス、指輪',
-    durationSec: 32 * 60, // 32分
+    durationSec: 32 * 60,
     offeredPriceText: '合計 320,000 円で合意',
   },
   {
@@ -188,8 +189,40 @@ const SEEDS: SeedSpec[] = [
     reservationDaysAgo: 2,
     address: '東京都世田谷区',
     items: 'ブランドバッグ2点、財布',
-    durationSec: 22 * 60, // 22分
+    durationSec: 22 * 60,
     offeredPriceText: '合計 180,000 円で合意',
+  },
+  // 1ヶ月以内
+  {
+    recordingId: 'seed_003',
+    dealId: 'past_006',
+    customerName: '加藤 七郎 様',
+    reservationDaysAgo: 9,
+    address: '東京都新宿区',
+    items: 'ロレックス2点',
+    durationSec: 28 * 60,
+    offeredPriceText: '合計 850,000 円で合意',
+  },
+  {
+    recordingId: 'seed_004',
+    dealId: 'past_007',
+    customerName: '吉田 八郎 様',
+    reservationDaysAgo: 12,
+    address: '神奈川県横浜市',
+    items: 'ダイヤモンドネックレス',
+    durationSec: 18 * 60,
+    offeredPriceText: '合計 450,000 円で合意',
+  },
+  // 3ヶ月以内（1件のみ録音あり）
+  {
+    recordingId: 'seed_005',
+    dealId: 'past_012',
+    customerName: '林 百三 様',
+    reservationDaysAgo: 40,
+    address: '東京都杉並区',
+    items: '宝石類、金貨',
+    durationSec: 35 * 60,
+    offeredPriceText: '合計 1,200,000 円で合意',
   },
 ];
 

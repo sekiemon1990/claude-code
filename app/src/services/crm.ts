@@ -73,67 +73,29 @@ const SOMEONE_ELSE = 'other.staff@makxas.co.jp';
  * 過去7日内に完了した案件を返す前提。本物のデータでは、
  * このうちアプリ内に対応する recording.dealId が無いものが「録音漏れ」。
  */
-export const MOCK_PAST_COMPLETED_DEAL_IDS = {
-  /** 録音あり（demoStore に seed する） */
-  recorded: ['past_001', 'past_002'],
-  /** 録音漏れ（CRM上は完了だがアプリに録音なし） */
-  missed: ['past_003', 'past_004', 'past_005'],
-};
-
 export function mockPastCompletedDeals(): Deal[] {
   const now = Date.now();
   const days = (d: number) => new Date(now - d * 24 * 60 * 60 * 1000).toISOString();
+  // 90 日に分散させて、3ヶ月期間・1ヶ月期間・1週間期間それぞれで意味のある集計が出るように
   return [
-    {
-      id: 'past_001',
-      customerName: '高橋 二郎 様',
-      customerAddress: '埼玉県さいたま市浦和区',
-      reservationAt: days(1),
-      assessorEmail: ME,
-      assessorName: '自分',
-      status: 'completed',
-      items: '腕時計、ネックレス、指輪',
-    },
-    {
-      id: 'past_002',
-      customerName: '伊藤 三郎 様',
-      customerAddress: '東京都世田谷区',
-      reservationAt: days(2),
-      assessorEmail: ME,
-      assessorName: '自分',
-      status: 'completed',
-      items: 'ブランドバッグ2点、財布',
-    },
-    {
-      id: 'past_003',
-      customerName: '渡辺 四郎 様',
-      customerAddress: '千葉県千葉市',
-      reservationAt: days(3),
-      assessorEmail: ME,
-      assessorName: '自分',
-      status: 'completed',
-      items: '時計、コイン3点',
-    },
-    {
-      id: 'past_004',
-      customerName: '中村 五郎 様',
-      customerAddress: '神奈川県川崎市',
-      reservationAt: days(4),
-      assessorEmail: ME,
-      assessorName: '自分',
-      status: 'completed',
-      items: '着物一式',
-    },
-    {
-      id: 'past_005',
-      customerName: '小林 六郎 様',
-      customerAddress: '東京都品川区',
-      reservationAt: days(6),
-      assessorEmail: ME,
-      assessorName: '自分',
-      status: 'completed',
-      items: '貴金属、宝石類',
-    },
+    // 直近1週間 (5件、うち2件録音あり)
+    { id: 'past_001', customerName: '高橋 二郎 様', customerAddress: '埼玉県さいたま市浦和区', reservationAt: days(1), assessorEmail: ME, assessorName: '自分', status: 'completed', items: '腕時計、ネックレス、指輪' },
+    { id: 'past_002', customerName: '伊藤 三郎 様', customerAddress: '東京都世田谷区', reservationAt: days(2), assessorEmail: ME, assessorName: '自分', status: 'completed', items: 'ブランドバッグ2点、財布' },
+    { id: 'past_003', customerName: '渡辺 四郎 様', customerAddress: '千葉県千葉市', reservationAt: days(3), assessorEmail: ME, assessorName: '自分', status: 'completed', items: '時計、コイン3点' },
+    { id: 'past_004', customerName: '中村 五郎 様', customerAddress: '神奈川県川崎市', reservationAt: days(4), assessorEmail: ME, assessorName: '自分', status: 'completed', items: '着物一式' },
+    { id: 'past_005', customerName: '小林 六郎 様', customerAddress: '東京都品川区', reservationAt: days(6), assessorEmail: ME, assessorName: '自分', status: 'completed', items: '貴金属、宝石類' },
+    // 1ヶ月（8〜30日前、6件、うち2件録音あり）
+    { id: 'past_006', customerName: '加藤 七郎 様', customerAddress: '東京都新宿区', reservationAt: days(9), assessorEmail: ME, assessorName: '自分', status: 'completed', items: 'ロレックス2点' },
+    { id: 'past_007', customerName: '吉田 八郎 様', customerAddress: '神奈川県横浜市', reservationAt: days(12), assessorEmail: ME, assessorName: '自分', status: 'completed', items: 'ダイヤモンドネックレス' },
+    { id: 'past_008', customerName: '山口 九郎 様', customerAddress: '千葉県市川市', reservationAt: days(15), assessorEmail: ME, assessorName: '自分', status: 'completed', items: '陶磁器コレクション' },
+    { id: 'past_009', customerName: '松本 十郎 様', customerAddress: '埼玉県川越市', reservationAt: days(20), assessorEmail: ME, assessorName: '自分', status: 'completed', items: '切手、古銭' },
+    { id: 'past_010', customerName: '井上 百一 様', customerAddress: '東京都目黒区', reservationAt: days(24), assessorEmail: ME, assessorName: '自分', status: 'completed', items: '骨董品3点' },
+    { id: 'past_011', customerName: '木村 百二 様', customerAddress: '神奈川県藤沢市', reservationAt: days(28), assessorEmail: ME, assessorName: '自分', status: 'completed', items: 'ブランド時計、財布' },
+    // 3ヶ月（31〜90日前、4件、うち1件録音あり）
+    { id: 'past_012', customerName: '林 百三 様', customerAddress: '東京都杉並区', reservationAt: days(40), assessorEmail: ME, assessorName: '自分', status: 'completed', items: '宝石類、金貨' },
+    { id: 'past_013', customerName: '清水 百四 様', customerAddress: '埼玉県越谷市', reservationAt: days(55), assessorEmail: ME, assessorName: '自分', status: 'completed', items: '着物、帯' },
+    { id: 'past_014', customerName: '山本 百五 様', customerAddress: '千葉県松戸市', reservationAt: days(70), assessorEmail: ME, assessorName: '自分', status: 'completed', items: '楽器（バイオリン）' },
+    { id: 'past_015', customerName: '池田 百六 様', customerAddress: '東京都板橋区', reservationAt: days(85), assessorEmail: ME, assessorName: '自分', status: 'completed', items: 'カメラ、レンズ多数' },
   ];
 }
 

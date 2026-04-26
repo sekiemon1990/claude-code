@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { format, formatDistanceToNowStrict } from 'date-fns';
 import { ja } from 'date-fns/locale';
@@ -6,7 +6,14 @@ import { ja } from 'date-fns/locale';
 import type { Recording, Deal } from '@/types';
 import type { QueuedRecording } from '@/services/uploadQueue';
 import { formatBytes } from '@/hooks/useStorageStatus';
-import { countItems, formatYen, parsePrice } from '@/services/metrics';
+import {
+  ESTIMATED_GROSS_MARGIN_RATE,
+  countItems,
+  estimateGrossProfit,
+  formatYen,
+  parsePrice,
+} from '@/services/metrics';
+import { PeriodSelector, presetToRange, type PeriodRange } from './PeriodSelector';
 
 type Props = {
   todayDeals: Deal[];
@@ -23,8 +30,6 @@ type Props = {
   onMarkForgotten: (dealId: string) => void;
   onUnmarkForgotten: (dealId: string) => void;
 };
-
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 export function HomeDashboard({
   todayDeals,
@@ -47,8 +52,12 @@ export function HomeDashboard({
     }
     return m;
   }, [recordings]);
+
+  // 集計期間（査定パフォーマンス・録音漏れの両方に効く）
+  const [period, setPeriod] = useState<PeriodRange>(
+    () => presetToRange('1m')!, // 既定: 直近1ヶ月
+  );
   const stats = useMemo(() => {
-    const now = Date.now();
     const today = new Date();
     const isToday = (r: Recording) => {
       const d = r.createdAt?.toDate?.();
@@ -60,11 +69,15 @@ export function HomeDashboard({
       );
     };
     const recsToday = recordings.filter(isToday);
-    const recsThisWeek = recordings.filter((r) => {
+
+    // 期間内の録音
+    const fromMs = period.from.getTime();
+    const toMs = period.to.getTime();
+    const recsInPeriod = recordings.filter((r) => {
       const t = r.createdAt?.toDate?.()?.getTime?.() ?? 0;
-      return now - t < WEEK_MS;
+      return t >= fromMs && t <= toMs;
     });
-    const completedThisWeek = recsThisWeek.filter((r) => r.status === 'completed');
+    const completedInPeriod = recsInPeriod.filter((r) => r.status === 'completed');
 
     const totalConvSecToday = recsToday.reduce(
       (sum, r) => sum + Math.round(r.durationMs / 1000),
@@ -76,16 +89,11 @@ export function HomeDashboard({
     const visitedToday = todayDeals.filter((d) => completedDealIds.has(d.id)).length;
     const remainingToday = todayDeals.length - visitedToday;
 
-    const successRate =
-      recsThisWeek.length === 0
-        ? null
-        : Math.round((completedThisWeek.length / recsThisWeek.length) * 100);
-
     // ===== 査定パフォーマンス =====
     const completedSecs: number[] = [];
     const completedPrices: number[] = [];
     const completedItemCounts: number[] = [];
-    for (const r of completedThisWeek) {
+    for (const r of completedInPeriod) {
       const sec = Math.round(r.durationMs / 1000);
       const price = parsePrice(r.minutes?.offeredPrice);
       const itemCount = countItems(r.dealSnapshot?.items);
@@ -97,20 +105,24 @@ export function HomeDashboard({
       completedSecs.length > 0
         ? Math.round(completedSecs.reduce((a, b) => a + b, 0) / completedSecs.length)
         : null;
-    const avgPrice =
-      completedPrices.length > 0
-        ? Math.round(completedPrices.reduce((a, b) => a + b, 0) / completedPrices.length)
-        : null;
     const totalSec = completedSecs.reduce((a, b) => a + b, 0);
     const totalPrice = completedPrices.reduce((a, b) => a + b, 0);
     const totalItems = completedItemCounts.reduce((a, b) => a + b, 0);
-    const yenPerMinute = totalSec > 0 && totalPrice > 0 ? Math.round(totalPrice / (totalSec / 60)) : null;
+    const totalGrossProfit = estimateGrossProfit(totalPrice) ?? 0;
+    const grossPerHour =
+      totalSec > 0 && totalGrossProfit > 0
+        ? Math.round(totalGrossProfit / (totalSec / 3600))
+        : null;
     const secPerItem = totalItems > 0 && totalSec > 0 ? Math.round(totalSec / totalItems) : null;
 
-    // ===== 録音漏れ =====
-    // 過去 CRM 完了案件のうち録音なし、または明示的に「忘れた」マークがあるもの
+    // ===== 録音漏れ（期間内）=====
     const allRecordedDealIds = new Set(recordings.map((r) => r.dealId));
-    const missedFromCompleted = recentCompletedDeals.filter(
+
+    const completedInPeriodDeals = recentCompletedDeals.filter((d) => {
+      const t = new Date(d.reservationAt).getTime();
+      return t >= fromMs && t <= toMs;
+    });
+    const missedFromCompleted = completedInPeriodDeals.filter(
       (d) => !allRecordedDealIds.has(d.id),
     );
     const missedFromMarked = todayDeals.filter(
@@ -121,7 +133,7 @@ export function HomeDashboard({
     [...missedFromCompleted, ...missedFromMarked].forEach((d) => missedById.set(d.id, d));
     const missedDeals = [...missedById.values()];
 
-    const totalCompleted = recentCompletedDeals.length + missedFromMarked.length;
+    const totalCompleted = completedInPeriodDeals.length + missedFromMarked.length;
     const missedCount = missedDeals.length;
     const missRate =
       totalCompleted === 0 ? null : Math.round((missedCount / totalCompleted) * 100);
@@ -143,11 +155,10 @@ export function HomeDashboard({
       totalConvSecToday,
       visitedToday,
       remainingToday,
-      thisWeekCount: recsThisWeek.length,
-      successRate,
+      periodCount: completedInPeriod.length,
       avgAssessSec,
-      avgPrice,
-      yenPerMinute,
+      grossPerHour,
+      totalGrossProfit,
       secPerItem,
       pendingQueueCount: queue.length,
       queueBytesEstimate,
@@ -158,7 +169,7 @@ export function HomeDashboard({
       totalCompleted,
       unhandledTodayCount,
     };
-  }, [todayDeals, recordings, queue, recentCompletedDeals, forgottenDealIds]);
+  }, [todayDeals, recordings, queue, recentCompletedDeals, forgottenDealIds, period]);
 
   const upcomingDeals = useMemo(() => {
     const now = Date.now();
@@ -292,9 +303,21 @@ export function HomeDashboard({
         </View>
       </View>
 
+      {/* ===== 期間選択（パフォーマンス・録音漏れ共通）===== */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>🗓 集計期間</Text>
+        <PeriodSelector value={period} onChange={setPeriod} />
+        <Text style={styles.periodLabel}>
+          {period.label}（{stats.periodCount}件の完了録音）
+        </Text>
+      </View>
+
       {/* ===== 査定パフォーマンス ===== */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>🧮 査定パフォーマンス（過去7日）</Text>
+        <Text style={styles.sectionTitle}>
+          🧮 査定パフォーマンス
+          <Text style={styles.sectionSub}>（{period.label}）</Text>
+        </Text>
         <View style={styles.statsGrid}>
           <Stat
             label="平均査定時間"
@@ -306,14 +329,21 @@ export function HomeDashboard({
               stats.secPerItem == null ? '—' : formatDuration(stats.secPerItem)
             }
           />
-          <Stat label="平均提示額" value={formatYen(stats.avgPrice)} />
           <Stat
-            label="時間あたり収益"
+            label="想定粗利合計"
+            value={formatYen(stats.totalGrossProfit > 0 ? stats.totalGrossProfit : null)}
+          />
+          <Stat
+            label="時間あたり粗利"
             value={
-              stats.yenPerMinute == null ? '—' : `${formatYen(stats.yenPerMinute)}/分`
+              stats.grossPerHour == null ? '—' : `${formatYen(stats.grossPerHour)}/時`
             }
           />
         </View>
+        <Text style={styles.formulaNote}>
+          ※想定粗利 = 提示額 × {Math.round(ESTIMATED_GROSS_MARGIN_RATE * 100)}%（暫定）。
+          CRM に実粗利が入った時点で実績値に置き換え可能。
+        </Text>
       </View>
 
       {/* ===== 録音漏れ ===== */}
@@ -323,7 +353,7 @@ export function HomeDashboard({
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>
             {stats.missedCount > 0 ? '⚠️ 録音漏れ' : '✅ 録音漏れなし'}
-            <Text style={styles.sectionSub}>（過去7日）</Text>
+            <Text style={styles.sectionSub}>（{period.label}）</Text>
           </Text>
         </View>
         <View style={styles.statsGrid}>
@@ -449,6 +479,18 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   emptyText: { fontSize: 13, color: '#64748B', textAlign: 'center', paddingVertical: 8 },
+  periodLabel: {
+    marginTop: 6,
+    fontSize: 11,
+    color: '#475569',
+    fontWeight: '600',
+  },
+  formulaNote: {
+    marginTop: 8,
+    fontSize: 10,
+    color: '#94A3B8',
+    lineHeight: 14,
+  },
   dealCard: {
     paddingVertical: 6,
     borderTopWidth: 1,

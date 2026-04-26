@@ -64,3 +64,26 @@ export function formatYen(amount: number | null): string {
   }
   return `${amount.toLocaleString()}円`;
 }
+
+/**
+ * 想定粗利率（買取額に対する粗利の割合）。
+ *
+ * 出張買取の業態では:
+ *   提示額（=買取額、原価）→ 商品再販 → 売値 → 粗利 = 売値 - 買取額
+ *
+ * 本来は CRM 側で実績値（実売値・実粗利）が入った時点で更新するのが理想だが、
+ * 商談直後はまだ売れていないため、業界標準的な粗利率を使って即時推計する。
+ *
+ * デフォルトは 50%（買取100に対し売値150 → 粗利50）に仮置き。
+ * 業務実績に合わせて変更可能。
+ */
+export const ESTIMATED_GROSS_MARGIN_RATE = 0.5;
+
+/**
+ * 提示額（買取額）から想定粗利を算出。
+ * CRM 側に実粗利のフィールドがあれば、そちらを優先するロジックに差し替える。
+ */
+export function estimateGrossProfit(offeredYen: number | null): number | null {
+  if (offeredYen == null) return null;
+  return Math.round(offeredYen * ESTIMATED_GROSS_MARGIN_RATE);
+}
