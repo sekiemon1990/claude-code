@@ -91,6 +91,149 @@ function AppContent() {
 // 起動できたら原因はこれらの依存にある。逆にこれでも落ちるなら
 // もっと根本（RN 0.79 のネイティブモジュール / プロビジョニング等）。
 const SAFE_MODE = true;
+// 自己診断モード: 各依存モジュールを順に require してどれが落ちるか特定する
+const SELF_TEST = true;
+
+type TestResult = { name: string; ok: boolean; error?: string };
+
+function runSelfTests(): TestResult[] {
+  const results: TestResult[] = [];
+  function probe(name: string, fn: () => void) {
+    try {
+      fn();
+      results.push({ name, ok: true });
+    } catch (e) {
+      results.push({
+        name,
+        ok: false,
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+
+  // 1. ナビゲーション系
+  probe('react-native-safe-area-context', () => {
+    require('react-native-safe-area-context');
+  });
+  probe('react-native-screens', () => {
+    require('react-native-screens');
+  });
+  probe('@react-navigation/native', () => {
+    require('@react-navigation/native');
+  });
+  probe('@react-navigation/native-stack', () => {
+    require('@react-navigation/native-stack');
+  });
+
+  // 2. ストレージ
+  probe('@react-native-async-storage/async-storage', () => {
+    require('@react-native-async-storage/async-storage');
+  });
+
+  // 3. Firebase
+  probe('firebase/app require', () => {
+    require('firebase/app');
+  });
+  probe('firebase/auth require', () => {
+    require('firebase/auth');
+  });
+  probe('firebase/firestore require', () => {
+    require('firebase/firestore');
+  });
+  probe('firebase/storage require', () => {
+    require('firebase/storage');
+  });
+
+  // 4. Firebase 初期化（最も怪しい）
+  probe('firebase config init (initializeApp + initializeAuth)', () => {
+    require('@/config/firebase');
+  });
+
+  // 5. Google Sign-in
+  probe('expo-auth-session/providers/google', () => {
+    require('expo-auth-session/providers/google');
+  });
+  probe('expo-web-browser', () => {
+    require('expo-web-browser');
+  });
+
+  // 6. その他
+  probe('expo-constants', () => {
+    require('expo-constants');
+  });
+  probe('expo-linking', () => {
+    require('expo-linking');
+  });
+  probe('expo-file-system', () => {
+    require('expo-file-system');
+  });
+  probe('expo-clipboard', () => {
+    require('expo-clipboard');
+  });
+  probe('@react-native-community/netinfo', () => {
+    require('@react-native-community/netinfo');
+  });
+
+  return results;
+}
+
+function SelfTestScreen() {
+  const [results, setResults] = React.useState<TestResult[] | null>(null);
+  const [phase, setPhase] = React.useState('starting');
+
+  React.useEffect(() => {
+    setPhase('running tests');
+    const r = runSelfTests();
+    setResults(r);
+    setPhase('done');
+  }, []);
+
+  return (
+    <ScrollView
+      style={{ flex: 1, backgroundColor: '#0a2540' }}
+      contentContainerStyle={{ padding: 20, paddingTop: 60, paddingBottom: 40 }}
+    >
+      <Text style={{ color: '#fff', fontSize: 20, fontWeight: '700', marginBottom: 4 }}>
+        自己診断 ({phase})
+      </Text>
+      <Text style={{ color: '#94A3B8', fontSize: 12, marginBottom: 16 }}>
+        ✗ が付いているモジュールがクラッシュ原因の候補です。
+      </Text>
+      {results == null ? (
+        <Text style={{ color: '#fff' }}>診断中…</Text>
+      ) : (
+        results.map((r, i) => (
+          <View
+            key={i}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'flex-start',
+              marginBottom: 6,
+              backgroundColor: r.ok ? '#0f3052' : '#7f1d1d',
+              padding: 8,
+              borderRadius: 6,
+            }}
+          >
+            <Text style={{ color: r.ok ? '#10b981' : '#fca5a5', fontWeight: '700', marginRight: 8 }}>
+              {r.ok ? '✓' : '✗'}
+            </Text>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: '#fff', fontSize: 12 }}>{r.name}</Text>
+              {r.error ? (
+                <Text style={{ color: '#fca5a5', fontSize: 10, marginTop: 2 }}>
+                  {r.error}
+                </Text>
+              ) : null}
+            </View>
+          </View>
+        ))
+      )}
+      <Text style={{ color: '#64748B', fontSize: 11, marginTop: 24, textAlign: 'center' }}>
+        この画面のスクショを送ってください
+      </Text>
+    </ScrollView>
+  );
+}
 
 function SafeModeScreen() {
   const [tapped, setTapped] = React.useState(0);
@@ -158,7 +301,7 @@ export default function App() {
   if (SAFE_MODE) {
     return (
       <AppErrorBoundary>
-        <SafeModeScreen />
+        {SELF_TEST ? <SelfTestScreen /> : <SafeModeScreen />}
       </AppErrorBoundary>
     );
   }
