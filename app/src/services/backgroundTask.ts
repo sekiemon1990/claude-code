@@ -7,7 +7,14 @@ export const BACKGROUND_UPLOAD_TASK = 'com.makxas.salesrecording.upload';
 // DEMO / web 環境ではバックグラウンドタスクは動かさない
 const SKIP_BACKGROUND = DEMO_MODE || Platform.OS === 'web';
 
-if (!SKIP_BACKGROUND) {
+// 注意: 以前は import 時の副作用として `TaskManager.defineTask` を呼んでいたが、
+// SDK 55 で `expo-background-fetch` が非推奨になり、端末によっては require の
+// 段階で例外を投げ、JS バンドル全体の起動が止まる事象が出た。そのため
+// `defineTask` は **登録関数の中** で初めて呼ぶ遅延化に変更し、ネイティブモジュール
+// が無くても JS の評価は止まらないようにする。
+let _taskDefined = false;
+function defineTaskOnce() {
+  if (_taskDefined || SKIP_BACKGROUND) return;
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const TaskManager = require('expo-task-manager');
   // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -29,6 +36,7 @@ if (!SKIP_BACKGROUND) {
       return BackgroundFetch.BackgroundFetchResult.Failed;
     }
   });
+  _taskDefined = true;
 }
 
 /**
@@ -43,6 +51,7 @@ export async function registerBackgroundUploadTask(): Promise<{
     return { registered: false, reason: 'skipped in demo/web mode' };
   }
   try {
+    defineTaskOnce();
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const TaskManager = require('expo-task-manager');
     // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -79,12 +88,16 @@ export async function registerBackgroundUploadTask(): Promise<{
 
 export async function unregisterBackgroundUploadTask(): Promise<void> {
   if (SKIP_BACKGROUND) return;
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const TaskManager = require('expo-task-manager');
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const BackgroundFetch = require('expo-background-fetch');
-  const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_UPLOAD_TASK);
-  if (isRegistered) {
-    await BackgroundFetch.unregisterTaskAsync(BACKGROUND_UPLOAD_TASK);
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const TaskManager = require('expo-task-manager');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const BackgroundFetch = require('expo-background-fetch');
+    const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_UPLOAD_TASK);
+    if (isRegistered) {
+      await BackgroundFetch.unregisterTaskAsync(BACKGROUND_UPLOAD_TASK);
+    }
+  } catch {
+    // モジュール未インストール / 登録なしは無視
   }
 }

@@ -1,25 +1,58 @@
 import React, { useEffect } from 'react';
-import { Platform } from 'react-native';
+import { Platform, ScrollView, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-// Background task の TaskManager.defineTask をモジュールロード時に呼ぶため、
-// ここで import するだけで副作用として定義される
-import '@/services/backgroundTask';
+/**
+ * トップレベルのエラーバウンダリ。React のレンダリング中に例外が出た場合、
+ * 真っ黒な画面で止まる代わりに何が起きたかを表示する。
+ *
+ * iOS のスプラッシュ画面（ネイビー）が消えない症状はだいたいこのレベルで
+ * 例外が出ているケース。バウンダリで救えれば原因が画面に出る。
+ */
+class AppErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { error: Error | null }
+> {
+  state: { error: Error | null } = { error: null };
 
-import { AppNavigator } from '@/navigation/AppNavigator';
-import { registerBackgroundUploadTask } from '@/services/backgroundTask';
-import { registerPushNotifications } from '@/services/notifications';
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, info: { componentStack?: string }) {
+    // eslint-disable-next-line no-console
+    console.error('[AppErrorBoundary]', error, info);
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <ScrollView
+          style={{ flex: 1, backgroundColor: '#fff' }}
+          contentContainerStyle={{ padding: 24, paddingTop: 64 }}
+        >
+          <Text style={{ fontSize: 18, fontWeight: '700', marginBottom: 12, color: '#DC2626' }}>
+            起動エラー
+          </Text>
+          <Text style={{ color: '#0F172A', marginBottom: 12 }}>
+            {this.state.error.message || String(this.state.error)}
+          </Text>
+          {this.state.error.stack ? (
+            <Text style={{ color: '#64748B', fontSize: 11, fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace' }) }}>
+              {this.state.error.stack}
+            </Text>
+          ) : null}
+        </ScrollView>
+      );
+    }
+    return this.props.children as React.ReactElement;
+  }
+}
 
 /**
  * iOS Safari / Android Chrome の Web ビルド向けに、単指スクロールが
  * Pressable に吸われずに動くよう touch-action を強制する。
- *
- * 症状: ScrollView の中に Pressable（案件カード等）がいると、単指タッチが
- *       Pressable のタップ判定に持っていかれて、ドラッグしても画面が
- *       スクロールしない（2本指スクロール=ピンチではなんとか動く）。
- * 対処: スクロール可能領域に touch-action: pan-y を強制し、ブラウザに
- *       「ここは縦パンが優先」と早めに判定させる。タップは引き続き有効。
  */
 function injectWebTouchFix() {
   if (Platform.OS !== 'web') return () => {};
@@ -27,16 +60,10 @@ function injectWebTouchFix() {
   const style = document.createElement('style');
   style.id = 'rn-touch-action-fix';
   style.textContent = `
-    /* iOS Safari の単指スクロール改善:
-       react-native-web の Pressable は touch-action: manipulation を付けるため、
-       単指タッチが Pressable に吸われて親 ScrollView の縦スクロールが
-       開始されない症状が出る。全要素に touch-action: pan-y を強制し、
-       「単指の縦移動は常にパンとして扱う」ことを明示。タップ判定は維持される。 */
     * {
       touch-action: pan-y !important;
       -webkit-tap-highlight-color: transparent;
     }
-    /* スクロール領域の慣性スクロール / オーバースクロール挙動を健全に */
     html, body {
       -webkit-overflow-scrolling: touch;
       overscroll-behavior-y: contain;
@@ -48,18 +75,47 @@ function injectWebTouchFix() {
   };
 }
 
+// AppNavigator は遅延ロードする。`navigation/AppNavigator` の中で読み込まれる
+// firebase などが万一例外を投げても、その瞬間の AppErrorBoundary で捕まえて
+// 画面に出せるようにするため。
+function AppContent() {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { AppNavigator } = require('@/navigation/AppNavigator');
+  return <AppNavigator />;
+}
+
 export default function App() {
   useEffect(() => {
-    // 起動時にバックグラウンドアップロードタスクとプッシュ通知を登録
-    void registerBackgroundUploadTask();
-    void registerPushNotifications();
+    // 起動後に、副作用 import ではなく明示的に呼ぶ。
+    // ネイティブモジュール不足等で投げても try/catch で握り潰し、
+    // メイン UI には影響させない。
+    (async () => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { registerBackgroundUploadTask } = require('@/services/backgroundTask');
+        await registerBackgroundUploadTask();
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn('[App] registerBackgroundUploadTask failed:', err);
+      }
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { registerPushNotifications } = require('@/services/notifications');
+        await registerPushNotifications();
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn('[App] registerPushNotifications failed:', err);
+      }
+    })();
     return injectWebTouchFix();
   }, []);
 
   return (
-    <SafeAreaProvider>
-      <StatusBar style="auto" />
-      <AppNavigator />
-    </SafeAreaProvider>
+    <AppErrorBoundary>
+      <SafeAreaProvider>
+        <StatusBar style="auto" />
+        <AppContent />
+      </SafeAreaProvider>
+    </AppErrorBoundary>
   );
 }
