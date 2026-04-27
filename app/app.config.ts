@@ -29,6 +29,10 @@ const config: ExpoConfig = {
   web: {
     bundler: 'metro',
   },
+  // 新アーキテクチャ（Fabric/TurboModules）は SDK 55 でデフォルト有効だが、
+  // 一部のサードパーティ依存がまだ完全対応しておらずフリーズする現象が出るため
+  // 一旦無効化。安定してから true に戻す。
+  newArchEnabled: false,
   experiments: {
     // GitHub Pages の `https://<user>.github.io/claude-code/demo/` 配下に
     // 配信するためのベースパス。DEMO ビルド時のみ影響する。
