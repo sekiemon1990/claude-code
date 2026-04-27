@@ -159,6 +159,23 @@ const TESTS: Array<{ name: string; run: () => void }> = [
       getAuth(getApp());
     },
   },
+  { name: 'firebase initializeAuth(app, { persistence: inMemoryPersistence })', run: () => {
+      const { getApp, getApps, initializeApp } = require('firebase/app');
+      const { initializeAuth, inMemoryPersistence } = require('firebase/auth');
+      const Constants = require('expo-constants').default;
+      const extra = Constants.expoConfig?.extra ?? {};
+      const cfg = {
+        apiKey: extra.firebaseApiKey || 'demo',
+        authDomain: extra.firebaseAuthDomain || 'demo.firebaseapp.com',
+        projectId: extra.firebaseProjectId || 'demo',
+        storageBucket: extra.firebaseStorageBucket || 'demo.appspot.com',
+        messagingSenderId: extra.firebaseMessagingSenderId || '0',
+        appId: extra.firebaseAppId || '1:0:web:demo',
+      };
+      const app = getApps().length === 0 ? initializeApp(cfg) : getApp();
+      initializeAuth(app, { persistence: inMemoryPersistence });
+    },
+  },
   { name: 'firebase getFirestore(app)', run: () => {
       const { getApp } = require('firebase/app');
       const { getFirestore } = require('firebase/firestore');
