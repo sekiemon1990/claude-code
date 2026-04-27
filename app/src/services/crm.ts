@@ -60,9 +60,17 @@ export function emailsMatch(a: string | null | undefined, b: string | null | und
 // 実装時はこの mock ブロックを削除
 const MOCK_ENABLED = true;
 
-// デモ用のログインユーザー email（DEMO_USER と一致させる）
-const ME = 'demo@makxas.co.jp';
+/**
+ * モックの「自分」「他人」email。
+ * 自分の email はログインユーザーで動的に上書きされる（mockMe 関数経由）。
+ * これにより誰がログインしてもダッシュボードで動作確認できる。
+ */
+const FALLBACK_ME = 'demo@makxas.co.jp';
 const SOMEONE_ELSE = 'other.staff@makxas.co.jp';
+
+function mockMe(context: CrmContext): string {
+  return context.userEmail || FALLBACK_ME;
+}
 
 /**
  * 過去の完了済み案件のモック。
@@ -73,7 +81,8 @@ const SOMEONE_ELSE = 'other.staff@makxas.co.jp';
  * 過去7日内に完了した案件を返す前提。本物のデータでは、
  * このうちアプリ内に対応する recording.dealId が無いものが「録音漏れ」。
  */
-export function mockPastCompletedDeals(): Deal[] {
+export function mockPastCompletedDeals(context: CrmContext): Deal[] {
+  const ME = mockMe(context);
   const now = Date.now();
   const days = (d: number) => new Date(now - d * 24 * 60 * 60 * 1000).toISOString();
   // 90 日に分散させて、3ヶ月期間・1ヶ月期間・1週間期間それぞれで意味のある集計が出るように
@@ -99,7 +108,8 @@ export function mockPastCompletedDeals(): Deal[] {
   ];
 }
 
-function mockDeals(): Deal[] {
+function mockDeals(context: CrmContext): Deal[] {
+  const ME = mockMe(context);
   const now = Date.now();
   const minutes = (m: number) => new Date(now + m * 60 * 1000).toISOString();
   const hours = (h: number) => new Date(now + h * 60 * 60 * 1000).toISOString();
@@ -217,7 +227,7 @@ export async function fetchAssignedScheduledDeals(
   try {
     let raw: Deal[];
     if (MOCK_ENABLED) {
-      raw = mockDeals();
+      raw = mockDeals(context);
     } else {
       raw = await httpGet<Deal[]>(
         context,
@@ -246,7 +256,7 @@ export async function fetchAssignedScheduledDeals(
  */
 export async function fetchDeal(context: CrmContext, dealId: string): Promise<Deal | null> {
   if (MOCK_ENABLED) {
-    const all = mockDeals();
+    const all = mockDeals(context);
     return all.find((d) => d.id === dealId) ?? null;
   }
   return httpGet<Deal | null>(context, `/api/deals/${encodeURIComponent(dealId)}`);
@@ -262,7 +272,7 @@ export async function fetchRecentCompletedDeals(
   days = 7,
 ): Promise<Deal[]> {
   if (MOCK_ENABLED) {
-    return mockPastCompletedDeals().filter((d) => emailsMatch(d.assessorEmail, context.userEmail));
+    return mockPastCompletedDeals(context).filter((d) => emailsMatch(d.assessorEmail, context.userEmail));
   }
   return httpGet<Deal[]>(
     context,
