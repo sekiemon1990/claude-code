@@ -1,9 +1,8 @@
 import Constants from 'expo-constants';
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { initializeAuth, getReactNativePersistence, getAuth } from 'firebase/auth';
+import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const extra = Constants.expoConfig?.extra ?? {};
 
@@ -20,14 +19,13 @@ const firebaseConfig = {
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
-let auth;
-try {
-  auth = initializeAuth(app, {
-    persistence: getReactNativePersistence(AsyncStorage),
-  });
-} catch {
-  auth = getAuth(app);
-}
+// 注意: 以前は initializeAuth(app, { persistence: getReactNativePersistence(AsyncStorage) })
+// を使っていたが、iOS 実機ビルドで AsyncStorage のネイティブブリッジ越しに
+// Obj-C 例外が出てアプリが起動直後にクラッシュする事象を確認したため、
+// 永続化なしの getAuth(app) に切り替えた。
+// → 副作用としてアプリ再起動時にログインが必要になる（セッションが揮発する）。
+//   これは安定後に initializeAuth + 公式の RN 永続化に戻す。
+const auth = getAuth(app);
 
 export const firebaseApp = app;
 export const firebaseAuth = auth;

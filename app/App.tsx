@@ -85,14 +85,10 @@ function AppContent() {
 }
 
 // === 起動切り分け用ミニマムモード ===
-// クラッシュログが取れずに原因特定が進まない状況のため、
-// 一旦 AppNavigator / firebase / react-native-screens などを
-// 全てバイパスして「React Native だけは動く」かを確認する画面。
-// 起動できたら原因はこれらの依存にある。逆にこれでも落ちるなら
-// もっと根本（RN 0.79 のネイティブモジュール / プロビジョニング等）。
-const SAFE_MODE = true;
-// 自己診断モード: 各依存モジュールを順に require してどれが落ちるか特定する
-const SELF_TEST = true;
+// firebase の getReactNativePersistence が原因のクラッシュは修正済み。
+// 通常モードに戻すため SAFE_MODE / SELF_TEST を false に。
+const SAFE_MODE = false;
+const SELF_TEST = false;
 
 type TestResult = { name: string; ok: boolean; error?: string };
 
