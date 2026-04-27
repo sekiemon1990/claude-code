@@ -85,9 +85,10 @@ function AppContent() {
 }
 
 // === 起動切り分け用ミニマムモード ===
-// firebase 初期化のクラッシュを更に細分化して特定するため再度 SELF_TEST を ON。
-const SAFE_MODE = true;
-const SELF_TEST = true;
+// Component auth registration の問題を initializeAuth(app) で回避済み。
+// 通常モードに戻して起動を確認する。
+const SAFE_MODE = false;
+const SELF_TEST = false;
 
 type TestResult = { name: string; ok: boolean; error?: string };
 
