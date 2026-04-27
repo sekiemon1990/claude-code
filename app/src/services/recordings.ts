@@ -1,25 +1,14 @@
-import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  onSnapshot,
-  orderBy,
-  query,
-  serverTimestamp,
-  updateDoc,
-  where,
-  type Unsubscribe,
-} from 'firebase/firestore';
-import { deleteObject, getDownloadURL, ref, uploadBytesResumable } from 'firebase/storage';
+import firestore, { type FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
+import storage from '@react-native-firebase/storage';
 import * as FileSystem from 'expo-file-system';
 import NetInfo from '@react-native-community/netinfo';
 
-import { firestore, storage } from '@/config/firebase';
 import { DEMO_MODE, demoStore } from '@/demo';
 import type { DealSnapshot, Recording, RecordingStatus } from '@/types';
 
 const RECORDINGS = 'recordings';
+
+type Unsubscribe = () => void;
 
 export function subscribeToRecordings(
   ownerUid: string,
@@ -28,15 +17,20 @@ export function subscribeToRecordings(
   if (DEMO_MODE) {
     return demoStore.subscribeList(onUpdate);
   }
-  const q = query(
-    collection(firestore, RECORDINGS),
-    where('ownerUid', '==', ownerUid),
-    orderBy('createdAt', 'desc'),
-  );
-  return onSnapshot(q, (snap) => {
-    const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Recording, 'id'>) }));
-    onUpdate(items);
-  });
+  return firestore()
+    .collection(RECORDINGS)
+    .where('ownerUid', '==', ownerUid)
+    .orderBy('createdAt', 'desc')
+    .onSnapshot((snap) => {
+      if (!snap) return;
+      const items = snap.docs.map(
+        (d: FirebaseFirestoreTypes.QueryDocumentSnapshot) => ({
+          id: d.id,
+          ...(d.data() as Omit<Recording, 'id'>),
+        }),
+      );
+      onUpdate(items);
+    });
 }
 
 export function subscribeToRecording(
@@ -46,14 +40,16 @@ export function subscribeToRecording(
   if (DEMO_MODE) {
     return demoStore.subscribeDetail(recordingId, onUpdate);
   }
-  const docRef = doc(firestore, RECORDINGS, recordingId);
-  return onSnapshot(docRef, (snap) => {
-    if (!snap.exists()) {
-      onUpdate(null);
-      return;
-    }
-    onUpdate({ id: snap.id, ...(snap.data() as Omit<Recording, 'id'>) });
-  });
+  return firestore()
+    .collection(RECORDINGS)
+    .doc(recordingId)
+    .onSnapshot((snap) => {
+      if (!snap || !snap.exists) {
+        onUpdate(null);
+        return;
+      }
+      onUpdate({ id: snap.id, ...(snap.data() as Omit<Recording, 'id'>) });
+    });
 }
 
 type UploadResult = {
@@ -74,7 +70,6 @@ export async function createRecordingAndUpload(params: {
   const { ownerUid, dealId, dealSnapshot, title, localUri, durationMs, onProgress } = params;
 
   if (DEMO_MODE) {
-    // デモ: 段階的な進捗を演出しつつ、demoStore にレコード作成
     for (const p of [15, 40, 70, 100]) {
       await new Promise((r) => setTimeout(r, 250));
       onProgress?.(p);
@@ -92,35 +87,32 @@ export async function createRecordingAndUpload(params: {
     };
   }
 
-  const docRef = await addDoc(collection(firestore, RECORDINGS), {
-    ownerUid,
-    dealId,
-    dealSnapshot,
-    title,
-    durationMs,
-    status: 'uploading' satisfies RecordingStatus,
-    storagePath: '',
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
+  const docRef = await firestore()
+    .collection(RECORDINGS)
+    .add({
+      ownerUid,
+      dealId,
+      dealSnapshot,
+      title,
+      durationMs,
+      status: 'uploading' satisfies RecordingStatus,
+      storagePath: '',
+      createdAt: firestore.FieldValue.serverTimestamp(),
+      updatedAt: firestore.FieldValue.serverTimestamp(),
+    });
 
   const extension = localUri.split('.').pop() ?? 'm4a';
   const storagePath = `recordings/${ownerUid}/${docRef.id}/audio.${extension}`;
-  const storageRef = ref(storage, storagePath);
+  const storageRef = storage().ref(storagePath);
 
   const fileInfo = await FileSystem.getInfoAsync(localUri);
   if (!fileInfo.exists) {
     throw new Error('録音ファイルが見つかりません');
   }
-  const response = await fetch(localUri);
-  const blob = await response.blob();
 
-  const task = uploadBytesResumable(storageRef, blob, {
-    contentType: inferContentType(extension),
-  });
+  // @react-native-firebase/storage はローカルファイルパスを直接受け取れる
+  const task = storageRef.putFile(localUri.replace(/^file:\/\//, ''));
 
-  // ネットワーク状態を監視し、オフライン時はアップロードを一時停止、
-  // 復帰時に再開する。Wi-Fi <-> モバイル切替えでも一時的な瞬断に耐える。
   let pausedByNetwork = false;
   const netUnsub = NetInfo.addEventListener((state) => {
     const online = !!state.isConnected && state.isInternetReachable !== false;
@@ -129,7 +121,7 @@ export async function createRecordingAndUpload(params: {
         task.pause();
         pausedByNetwork = true;
       } catch {
-        // pause は冪等なはず。失敗しても致命ではない
+        // pause は冪等なはず
       }
     } else if (online && pausedByNetwork) {
       try {
@@ -146,13 +138,10 @@ export async function createRecordingAndUpload(params: {
       task.on(
         'state_changed',
         (snap) => {
-          if (onProgress) {
+          if (onProgress && snap) {
             onProgress(Math.round((snap.bytesTransferred / snap.totalBytes) * 100));
           }
         },
-        // 一時的なエラーは外側のキューリトライで再開する。
-        // 基本的にここで reject = キューが「失敗」扱いするが、
-        // 元ファイルは残っているので次回ドレイン時に再アップロードされる。
         reject,
         () => resolve(),
       );
@@ -161,13 +150,13 @@ export async function createRecordingAndUpload(params: {
     netUnsub();
   }
 
-  const downloadUrl = await getDownloadURL(storageRef);
+  const downloadUrl = await storageRef.getDownloadURL();
 
-  await updateDoc(docRef, {
+  await docRef.update({
     storagePath,
     downloadUrl,
     status: 'uploaded' satisfies RecordingStatus,
-    updatedAt: serverTimestamp(),
+    updatedAt: firestore.FieldValue.serverTimestamp(),
   });
 
   return { recordingId: docRef.id, downloadUrl, storagePath };
@@ -180,27 +169,10 @@ export async function deleteRecording(recording: Recording) {
   }
   if (recording.storagePath) {
     try {
-      await deleteObject(ref(storage, recording.storagePath));
+      await storage().ref(recording.storagePath).delete();
     } catch {
       // 既に無い場合は無視
     }
   }
-  await deleteDoc(doc(firestore, RECORDINGS, recording.id));
-}
-
-function inferContentType(extension: string): string {
-  switch (extension.toLowerCase()) {
-    case 'm4a':
-      return 'audio/m4a';
-    case 'mp4':
-      return 'audio/mp4';
-    case 'caf':
-      return 'audio/x-caf';
-    case 'aac':
-      return 'audio/aac';
-    case 'wav':
-      return 'audio/wav';
-    default:
-      return 'audio/mpeg';
-  }
+  await firestore().collection(RECORDINGS).doc(recording.id).delete();
 }

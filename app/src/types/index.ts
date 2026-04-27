@@ -1,4 +1,4 @@
-import type { Timestamp } from 'firebase/firestore';
+import type { FirestoreTimestamp as Timestamp } from '@/config/firebase';
 
 export type RecordingStatus =
   | 'uploading'

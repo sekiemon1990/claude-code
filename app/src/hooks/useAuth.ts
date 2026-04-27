@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
 
-import { firebaseAuth } from '@/config/firebase';
+import { firebaseAuth, type FirebaseUser } from '@/config/firebase';
 import { DEMO_MODE, DEMO_USER } from '@/demo';
 import type { AppUser } from '@/types';
 
-function toAppUser(user: User | null): AppUser | null {
+function toAppUser(user: FirebaseUser | null): AppUser | null {
   if (!user) return null;
   return {
     uid: user.uid,
@@ -15,9 +14,6 @@ function toAppUser(user: User | null): AppUser | null {
   };
 }
 
-// Firebase の onAuthStateChanged が一度も発火しないと、loading=true のまま
-// 真っ白なスピナー画面で固まる。実機 (Hermes/RN 0.79) では稀に初回発火が
-// 来ない事象があるため、4 秒経っても応答が無ければログイン画面に進める。
 const AUTH_BOOT_TIMEOUT_MS = 4000;
 
 export function useAuth() {
@@ -27,7 +23,7 @@ export function useAuth() {
 
   useEffect(() => {
     if (DEMO_MODE) return;
-    const unsubscribe = onAuthStateChanged(firebaseAuth, (firebaseUser) => {
+    const unsubscribe = firebaseAuth.onAuthStateChanged((firebaseUser) => {
       settledRef.current = true;
       setUser(toAppUser(firebaseUser));
       setLoading(false);
@@ -49,11 +45,8 @@ export function useAuth() {
     user,
     loading,
     signOut: async () => {
-      if (DEMO_MODE) {
-        // デモモードではログアウトせず何もしない（即ログインに戻るため）
-        return;
-      }
-      await signOut(firebaseAuth);
+      if (DEMO_MODE) return;
+      await firebaseAuth.signOut();
     },
   };
 }

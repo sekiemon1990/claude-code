@@ -26,7 +26,10 @@ export function useCrmContext(): CrmContext {
       setToken(null);
       return;
     }
-    fbUser.getIdToken().then(setToken).catch(() => setToken(null));
+    fbUser
+      .getIdToken()
+      .then((t: string) => setToken(t))
+      .catch(() => setToken(null));
   }, [user?.uid]);
 
   return useMemo(

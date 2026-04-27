@@ -41,6 +41,10 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: false,
     bundleIdentifier: 'com.makxas.salesrecording',
+    // Firebase Console から取得した GoogleService-Info.plist を
+    // app/GoogleService-Info.plist に配置する。EAS Build はこれを
+    // ネイティブ Firebase iOS SDK の初期化用に取り込む。
+    googleServicesFile: './GoogleService-Info.plist',
     infoPlist: {
       NSMicrophoneUsageDescription:
         '商談の録音に使用します。お客様の同意を得た上で録音してください。',
@@ -70,6 +74,18 @@ const config: ExpoConfig = {
       {
         microphonePermission:
           '商談の録音のためにマイクへのアクセスを許可してください。',
+      },
+    ],
+    // @react-native-firebase 用。`@react-native-firebase/app` プラグインを
+    // 入れることで iOS の AppDelegate に [FIRApp configure] が自動挿入される。
+    '@react-native-firebase/app',
+    // CocoaPods の use_frameworks! を static にする必要がある（公式手順）
+    [
+      'expo-build-properties',
+      {
+        ios: {
+          useFrameworks: 'static',
+        },
       },
     ],
   ],

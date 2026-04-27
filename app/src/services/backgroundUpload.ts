@@ -1,5 +1,4 @@
 import NetInfo from '@react-native-community/netinfo';
-import { onAuthStateChanged } from 'firebase/auth';
 
 import { firebaseAuth } from '@/config/firebase';
 import {
@@ -36,7 +35,7 @@ async function waitForAuthUid(timeoutMs = 5000): Promise<string | null> {
       unsub();
       resolve(null);
     }, timeoutMs);
-    const unsub = onAuthStateChanged(firebaseAuth, (user) => {
+    const unsub = firebaseAuth.onAuthStateChanged((user) => {
       if (settled) return;
       if (user?.uid) {
         settled = true;

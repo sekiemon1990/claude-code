@@ -1,8 +1,8 @@
 import { Platform } from 'react-native';
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import firestore from '@react-native-firebase/firestore';
 import Constants from 'expo-constants';
 
-import { firebaseAuth, firestore } from '@/config/firebase';
+import { firebaseAuth } from '@/config/firebase';
 import { DEMO_MODE } from '@/demo';
 
 export type ErrorKind =
@@ -29,7 +29,6 @@ export type ErrorLogEntry = {
 const COLLECTION = 'errorLogs';
 const APP_VERSION = (Constants.expoConfig?.version as string | undefined) ?? 'unknown';
 
-// デモ用：直近のエラーをメモリに保持し、ダッシュボードから参照できるようにする
 const inMemoryLog: ErrorLogEntry[] = [];
 const MAX_IN_MEMORY = 50;
 
@@ -37,10 +36,6 @@ export function getRecentErrors(): ErrorLogEntry[] {
   return [...inMemoryLog];
 }
 
-/**
- * クライアント側のエラーを Firestore（または DEMO ではメモリ）に記録する。
- * 実装側では try/catch の catch 内などから fire-and-forget で呼ぶ想定。
- */
 export async function logError(
   kind: ErrorKind,
   err: unknown,
@@ -62,22 +57,21 @@ export async function logError(
     appVersion: APP_VERSION,
   };
 
-  // 常にコンソールに出して開発時に拾えるように
   // eslint-disable-next-line no-console
   console.warn(`[errorLog:${kind}]`, message, context);
 
-  // メモリログに追加（ダッシュボード表示用）
   inMemoryLog.unshift(entry);
   if (inMemoryLog.length > MAX_IN_MEMORY) inMemoryLog.length = MAX_IN_MEMORY;
 
   if (DEMO_MODE) return;
 
-  // Firestore へ送信。失敗してもアプリの動作は止めない
   try {
-    await addDoc(collection(firestore, COLLECTION), {
-      ...entry,
-      createdAt: serverTimestamp(),
-    });
+    await firestore()
+      .collection(COLLECTION)
+      .add({
+        ...entry,
+        createdAt: firestore.FieldValue.serverTimestamp(),
+      });
   } catch (innerErr) {
     // eslint-disable-next-line no-console
     console.error('Failed to write errorLog to Firestore', innerErr);

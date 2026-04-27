@@ -1,9 +1,7 @@
 import Constants from 'expo-constants';
 import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
-import { GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
-
-import { firebaseAuth } from '@/config/firebase';
+import auth from '@react-native-firebase/auth';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -20,8 +18,8 @@ export function useGoogleSignIn() {
     if (response?.type !== 'success') return null;
     const idToken = response.params.id_token;
     if (!idToken) return null;
-    const credential = GoogleAuthProvider.credential(idToken);
-    return signInWithCredential(firebaseAuth, credential);
+    const credential = auth.GoogleAuthProvider.credential(idToken);
+    return auth().signInWithCredential(credential);
   }
 
   return {
