@@ -44,8 +44,11 @@ const config: ExpoConfig = {
     infoPlist: {
       NSMicrophoneUsageDescription:
         '商談の録音に使用します。お客様の同意を得た上で録音してください。',
-      UIBackgroundModes: ['audio', 'fetch', 'processing'],
-      BGTaskSchedulerPermittedIdentifiers: ['com.makxas.salesrecording.upload'],
+      // 起動安定化のため `fetch` / `processing` モードと
+      // BGTaskSchedulerPermittedIdentifiers を一旦撤去。
+      // バックグラウンドアップロードを再有効化する際に併せて戻す。
+      UIBackgroundModes: ['audio'],
+      ITSAppUsesNonExemptEncryption: false,
     },
   },
   android: {

@@ -84,29 +84,34 @@ function AppContent() {
   return <AppNavigator />;
 }
 
+// 起動安定化のため、バックグラウンドアップロードとプッシュ通知の登録を
+// 一時的に無効化している。Obj-C 例外がネイティブブリッジ越しに JS の
+// try/catch を貫通してアプリを abort させていたため、まず確実に起動して
+// ログイン → 録音までできることを優先。安定後に再有効化する。
+const ENABLE_BACKGROUND_FEATURES = false;
+
 export default function App() {
   useEffect(() => {
-    // 起動後に、副作用 import ではなく明示的に呼ぶ。
-    // ネイティブモジュール不足等で投げても try/catch で握り潰し、
-    // メイン UI には影響させない。
-    (async () => {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const { registerBackgroundUploadTask } = require('@/services/backgroundTask');
-        await registerBackgroundUploadTask();
-      } catch (err) {
-        // eslint-disable-next-line no-console
-        console.warn('[App] registerBackgroundUploadTask failed:', err);
-      }
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const { registerPushNotifications } = require('@/services/notifications');
-        await registerPushNotifications();
-      } catch (err) {
-        // eslint-disable-next-line no-console
-        console.warn('[App] registerPushNotifications failed:', err);
-      }
-    })();
+    if (ENABLE_BACKGROUND_FEATURES) {
+      (async () => {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const { registerBackgroundUploadTask } = require('@/services/backgroundTask');
+          await registerBackgroundUploadTask();
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.warn('[App] registerBackgroundUploadTask failed:', err);
+        }
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const { registerPushNotifications } = require('@/services/notifications');
+          await registerPushNotifications();
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.warn('[App] registerPushNotifications failed:', err);
+        }
+      })();
+    }
     return injectWebTouchFix();
   }, []);
 
