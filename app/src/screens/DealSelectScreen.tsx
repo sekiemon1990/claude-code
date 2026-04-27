@@ -8,6 +8,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { format, formatDistanceToNowStrict } from 'date-fns';
 import { ja } from 'date-fns/locale';
 
@@ -46,7 +47,7 @@ export function DealSelectScreen({ onSelect, onBack }: Props) {
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Pressable onPress={onBack}>
           <Text style={styles.back}>← 戻る</Text>
@@ -139,7 +140,7 @@ export function DealSelectScreen({ onSelect, onBack }: Props) {
           )}
         />
       )}
-    </View>
+    </SafeAreaView>
   );
 }
 

@@ -8,6 +8,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { useFocusEffect } from '@react-navigation/native';
@@ -191,7 +192,7 @@ export function RecordingListScreen({
   );
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -455,7 +456,7 @@ export function RecordingListScreen({
       <Pressable style={styles.fab} onPress={onNewRecording}>
         <Text style={styles.fabText}>+ 新規録音</Text>
       </Pressable>
-    </View>
+    </SafeAreaView>
   );
 }
 

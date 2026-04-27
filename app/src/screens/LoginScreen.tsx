@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useGoogleSignIn } from '@/services/googleSignIn';
 
@@ -24,7 +25,7 @@ export function LoginScreen() {
   }, [response, exchangeResponseForFirebaseUser]);
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.brand}>
         <Text style={styles.title}>出張買取 録音</Text>
         <Text style={styles.subtitle}>商談を録音して議事録を自動作成</Text>
@@ -49,7 +50,7 @@ export function LoginScreen() {
         録音は常に端末に保存され、送信完了までローカルに残ります。
         {'\n'}※ 商談を録音する際は、必ずお客様の同意を得てください。
       </Text>
-    </View>
+    </SafeAreaView>
   );
 }
 
