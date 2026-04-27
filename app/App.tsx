@@ -85,10 +85,9 @@ function AppContent() {
 }
 
 // === 起動切り分け用ミニマムモード ===
-// firebase の getReactNativePersistence が原因のクラッシュは修正済み。
-// 通常モードに戻すため SAFE_MODE / SELF_TEST を false に。
-const SAFE_MODE = false;
-const SELF_TEST = false;
+// firebase 初期化のクラッシュを更に細分化して特定するため再度 SELF_TEST を ON。
+const SAFE_MODE = true;
+const SELF_TEST = true;
 
 type TestResult = { name: string; ok: boolean; error?: string };
 
@@ -105,7 +104,51 @@ const TESTS: Array<{ name: string; run: () => void }> = [
   { name: 'firebase/auth (require)', run: () => { require('firebase/auth'); } },
   { name: 'firebase/firestore (require)', run: () => { require('firebase/firestore'); } },
   { name: 'firebase/storage (require)', run: () => { require('firebase/storage'); } },
-  { name: 'firebase config init (initializeApp + initializeAuth)', run: () => { require('@/config/firebase'); } },
+  { name: 'firebase initializeApp(config)', run: () => {
+      const { initializeApp, getApps } = require('firebase/app');
+      const Constants = require('expo-constants').default;
+      const extra = Constants.expoConfig?.extra ?? {};
+      const cfg = {
+        apiKey: extra.firebaseApiKey || 'demo',
+        authDomain: extra.firebaseAuthDomain || 'demo.firebaseapp.com',
+        projectId: extra.firebaseProjectId || 'demo',
+        storageBucket: extra.firebaseStorageBucket || 'demo.appspot.com',
+        messagingSenderId: extra.firebaseMessagingSenderId || '0',
+        appId: extra.firebaseAppId || '1:0:web:demo',
+      };
+      if (getApps().length === 0) initializeApp(cfg);
+    },
+  },
+  { name: 'firebase getAuth(app)', run: () => {
+      const { getApp, getApps, initializeApp } = require('firebase/app');
+      const { getAuth } = require('firebase/auth');
+      const Constants = require('expo-constants').default;
+      const extra = Constants.expoConfig?.extra ?? {};
+      const cfg = {
+        apiKey: extra.firebaseApiKey || 'demo',
+        authDomain: extra.firebaseAuthDomain || 'demo.firebaseapp.com',
+        projectId: extra.firebaseProjectId || 'demo',
+        storageBucket: extra.firebaseStorageBucket || 'demo.appspot.com',
+        messagingSenderId: extra.firebaseMessagingSenderId || '0',
+        appId: extra.firebaseAppId || '1:0:web:demo',
+      };
+      const app = getApps().length === 0 ? initializeApp(cfg) : getApp();
+      getAuth(app);
+    },
+  },
+  { name: 'firebase getFirestore(app)', run: () => {
+      const { getApp } = require('firebase/app');
+      const { getFirestore } = require('firebase/firestore');
+      getFirestore(getApp());
+    },
+  },
+  { name: 'firebase getStorage(app)', run: () => {
+      const { getApp } = require('firebase/app');
+      const { getStorage } = require('firebase/storage');
+      getStorage(getApp());
+    },
+  },
+  { name: '@/config/firebase (lazy)', run: () => { require('@/config/firebase'); } },
   { name: 'expo-auth-session/providers/google', run: () => { require('expo-auth-session/providers/google'); } },
   { name: 'expo-web-browser', run: () => { require('expo-web-browser'); } },
   { name: 'expo-constants', run: () => { require('expo-constants'); } },
