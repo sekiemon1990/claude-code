@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Linking,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -31,11 +32,11 @@ import type { Recording } from '@/types';
 
 type Props = { recordingId: string; onBack: () => void };
 
+const SUPPORTS_NATIVE_PLAYBACK = !DEMO_MODE && Platform.OS !== 'web';
+
 export function RecordingDetailScreen({ recordingId, onBack }: Props) {
   const [recording, setRecording] = useState<Recording | null>(null);
   const [loading, setLoading] = useState(true);
-  const [sound, setSound] = useState<any>(null);
-  const [playing, setPlaying] = useState(false);
   const [postingToCrm, setPostingToCrm] = useState(false);
   const crm = useCrmContext();
 
@@ -46,45 +47,9 @@ export function RecordingDetailScreen({ recordingId, onBack }: Props) {
     });
     return () => {
       unsub();
-      sound?.unloadAsync();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recordingId]);
-
-  async function handlePlayPause() {
-    if (!recording?.downloadUrl) return;
-    if (DEMO_MODE) {
-      Alert.alert(
-        'デモモード',
-        'デモ用の録音のため再生はできません。実機ビルドでは録音を再生できます。',
-      );
-      return;
-    }
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { Audio } = require('expo-av');
-    if (sound) {
-      if (playing) {
-        await sound.pauseAsync();
-        setPlaying(false);
-      } else {
-        await sound.playAsync();
-        setPlaying(true);
-      }
-      return;
-    }
-    const { sound: s } = await Audio.Sound.createAsync(
-      { uri: recording.downloadUrl },
-      { shouldPlay: true },
-    );
-    s.setOnPlaybackStatusUpdate((status: any) => {
-      if (!status.isLoaded) return;
-      if (status.didJustFinish) {
-        setPlaying(false);
-      }
-    });
-    setSound(s);
-    setPlaying(true);
-  }
 
   async function handleCopyMinutes() {
     if (!recording) return;
@@ -141,7 +106,6 @@ export function RecordingDetailScreen({ recordingId, onBack }: Props) {
         text: '削除',
         style: 'destructive',
         onPress: async () => {
-          await sound?.unloadAsync();
           await deleteRecording(recording);
           onBack();
         },
@@ -227,11 +191,21 @@ export function RecordingDetailScreen({ recordingId, onBack }: Props) {
       ) : null}
 
       {recording.downloadUrl ? (
-        <Pressable style={styles.playButton} onPress={handlePlayPause}>
-          <Text style={styles.playButtonText}>
-            {playing ? '⏸ 一時停止' : '▶ 再生'}
-          </Text>
-        </Pressable>
+        SUPPORTS_NATIVE_PLAYBACK ? (
+          <NativePlaybackButton url={recording.downloadUrl} />
+        ) : (
+          <Pressable
+            style={styles.playButton}
+            onPress={() =>
+              Alert.alert(
+                'デモモード',
+                'デモ用の録音のため再生はできません。実機ビルドでは録音を再生できます。',
+              )
+            }
+          >
+            <Text style={styles.playButtonText}>▶ 再生</Text>
+          </Pressable>
+        )
       ) : null}
 
       {isProcessing ? (
@@ -327,6 +301,45 @@ export function RecordingDetailScreen({ recordingId, onBack }: Props) {
         <Text style={styles.deleteButtonText}>削除</Text>
       </Pressable>
     </ScrollView>
+  );
+}
+
+/**
+ * expo-audio の useAudioPlayer は React フックなので必ず最上位で呼ぶ。
+ * URL がある時だけこのコンポーネントを描画する形で使うため、別コンポーネントに分離。
+ * web/DEMO 環境では SUPPORTS_NATIVE_PLAYBACK が false なので呼ばれない。
+ */
+function NativePlaybackButton({ url }: { url: string }) {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { useAudioPlayer, useAudioPlayerStatus } = require('expo-audio');
+  const player = useAudioPlayer({ uri: url });
+  const status = useAudioPlayerStatus(player);
+
+  function handle() {
+    if (!player) return;
+    if (status?.playing) {
+      player.pause();
+    } else {
+      // 再生終了後にもう一度押した時のため、頭出ししてから再生
+      if (status && status.currentTime != null && status.duration != null) {
+        if (status.currentTime >= status.duration - 0.1) {
+          try {
+            player.seekTo(0);
+          } catch {
+            // ignore
+          }
+        }
+      }
+      player.play();
+    }
+  }
+
+  return (
+    <Pressable style={styles.playButton} onPress={handle}>
+      <Text style={styles.playButtonText}>
+        {status?.playing ? '⏸ 一時停止' : '▶ 再生'}
+      </Text>
+    </Pressable>
   );
 }
 

@@ -59,7 +59,7 @@ const config: ExpoConfig = {
   },
   plugins: [
     [
-      'expo-av',
+      'expo-audio',
       {
         microphonePermission:
           '商談の録音のためにマイクへのアクセスを許可してください。',

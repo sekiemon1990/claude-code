@@ -18,7 +18,16 @@ export type PauseReason = 'user' | 'interruption' | null;
 // タイマーのみで状態遷移を模擬する。
 const USE_FAKE_RECORDER = DEMO_MODE || Platform.OS === 'web';
 
+/**
+ * expo-audio を使った録音フック（SDK 55+）。
+ * 旧 expo-av からの移行版：API が変わっているがフックが返すインターフェースは
+ * 互換に保ち、画面側のコードは変更不要にしている。
+ */
 export function useRecorder() {
+  // expo-audio を動的 require（DEMO / web ではモジュール評価を避ける）
+  // useAudioRecorder はフックなので、必ず最上位で呼ぶ必要がある
+  const audioRecorder = useNativeAudioRecorder();
+
   const [state, setState] = useState<RecorderState>('idle');
   const [durationMs, setDurationMs] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +39,6 @@ export function useRecorder() {
   const meterTickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimestampRef = useRef<number | null>(null);
   const elapsedBeforePauseRef = useRef(0);
-  const realRecordingRef = useRef<any>(null);
   const stateRef = useRef<RecorderState>('idle');
   const pauseReasonRef = useRef<PauseReason>(null);
 
@@ -46,9 +54,6 @@ export function useRecorder() {
     return () => {
       if (tickRef.current) clearInterval(tickRef.current);
       if (meterTickRef.current) clearInterval(meterTickRef.current);
-      if (!USE_FAKE_RECORDER && realRecordingRef.current) {
-        realRecordingRef.current.stopAndUnloadAsync?.().catch(() => {});
-      }
     };
   }, []);
 
@@ -56,7 +61,6 @@ export function useRecorder() {
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {
       if (next === 'active' && pauseReasonRef.current === 'interruption') {
-        // 自動再開を試みる（音声セッションが解放された前提）
         void resumeFromInterruption();
       }
     });
@@ -91,6 +95,14 @@ export function useRecorder() {
     }, 100);
   }
 
+  function startNativeMeter() {
+    if (meterTickRef.current) clearInterval(meterTickRef.current);
+    meterTickRef.current = setInterval(() => {
+      const m = audioRecorder?.metering;
+      if (typeof m === 'number') setMeterDb(m);
+    }, 200);
+  }
+
   function stopMeter() {
     if (meterTickRef.current) {
       clearInterval(meterTickRef.current);
@@ -99,36 +111,18 @@ export function useRecorder() {
     setMeterDb(-160);
   }
 
-  /**
-   * iOS/Android で録音セッションを「他の音声を中断しない」「バックグラウンド継続」
-   * に設定し、電話などの割り込みが起きてもデータが残るようにする。
-   */
-  async function configureAudioMode() {
-    if (USE_FAKE_RECORDER) return;
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { Audio, InterruptionModeIOS, InterruptionModeAndroid } = require('expo-av');
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: true,
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: true, // バックグラウンド・カメラ起動中も継続
-      shouldDuckAndroid: true,
-      // 他アプリの音声と「混ざる」モード。電話や別アプリの音声で奪われない
-      interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
-      interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
-      playThroughEarpieceAndroid: false,
-    });
-  }
-
   /** 中断が解除されたら自動で再開する */
   async function resumeFromInterruption() {
     if (stateRef.current !== 'paused') return;
     if (pauseReasonRef.current !== 'interruption') return;
     try {
-      if (!USE_FAKE_RECORDER && realRecordingRef.current) {
-        await realRecordingRef.current.startAsync();
+      if (!USE_FAKE_RECORDER && audioRecorder) {
+        audioRecorder.record();
+        startNativeMeter();
+      } else if (USE_FAKE_RECORDER) {
+        startFakeMeter();
       }
       startTicker();
-      if (USE_FAKE_RECORDER) startFakeMeter();
       setPauseReason(null);
       setState('recording');
     } catch (e) {
@@ -150,44 +144,38 @@ export function useRecorder() {
         return;
       }
 
+      if (!audioRecorder) {
+        throw new Error('expo-audio recorder is not initialized');
+      }
+
       // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { Audio } = require('expo-av');
-      const perm = await Audio.requestPermissionsAsync();
+      const { AudioModule, setAudioModeAsync } = require('expo-audio');
+
+      const perm = await AudioModule.requestRecordingPermissionsAsync();
       if (!perm.granted) {
         setError('マイクへのアクセスが許可されていません');
         void logError('recording_failed', new Error('microphone permission denied'));
         return;
       }
-      await configureAudioMode();
 
-      const { recording } = await Audio.Recording.createAsync({
-        ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
-        isMeteringEnabled: true,
+      // 電話などの割込みが起きてもデータが残るように音声モードを設定
+      await setAudioModeAsync({
+        playsInSilentMode: true,
+        allowsRecording: true,
+        shouldRouteThroughEarpiece: false,
+        // バックグラウンド継続（カメラ起動中等）
+        shouldPlayInBackground: true,
       });
-      recording.setProgressUpdateInterval(200);
-      recording.setOnRecordingStatusUpdate((status: any) => {
-        if (typeof status?.metering === 'number') {
-          setMeterDb(status.metering);
-        }
-        // 録音中のはずなのに iOS 側でレコーディング停止した = システム割込み
-        if (status && status.canRecord === false && stateRef.current === 'recording') {
-          // 電話 / 別アプリの優先 等
-          stopTicker();
-          stopMeter();
-          if (startTimestampRef.current != null) {
-            elapsedBeforePauseRef.current += Date.now() - startTimestampRef.current;
-            startTimestampRef.current = null;
-          }
-          setPauseReason('interruption');
-          setState('paused');
-        }
-      });
-      realRecordingRef.current = recording;
+
+      await audioRecorder.prepareToRecordAsync();
+      audioRecorder.record();
+
       elapsedBeforePauseRef.current = 0;
       setDurationMs(0);
       setState('recording');
       setPauseReason(null);
       startTicker();
+      startNativeMeter();
     } catch (e) {
       const msg = e instanceof Error ? e.message : '録音開始に失敗しました';
       setError(msg);
@@ -197,8 +185,8 @@ export function useRecorder() {
 
   async function pause() {
     if (state !== 'recording') return;
-    if (!USE_FAKE_RECORDER && realRecordingRef.current) {
-      await realRecordingRef.current.pauseAsync();
+    if (!USE_FAKE_RECORDER && audioRecorder) {
+      audioRecorder.pause();
     }
     stopTicker();
     stopMeter();
@@ -212,8 +200,9 @@ export function useRecorder() {
 
   async function resume() {
     if (state !== 'paused') return;
-    if (!USE_FAKE_RECORDER && realRecordingRef.current) {
-      await realRecordingRef.current.startAsync();
+    if (!USE_FAKE_RECORDER && audioRecorder) {
+      audioRecorder.record();
+      startNativeMeter();
     } else if (USE_FAKE_RECORDER) {
       startFakeMeter();
     }
@@ -237,11 +226,9 @@ export function useRecorder() {
       return { uri: `demo://fake-recording-${Date.now()}.m4a`, durationMs: finalDuration };
     }
 
-    const rec = realRecordingRef.current;
-    if (!rec) return null;
-    await rec.stopAndUnloadAsync();
-    const uri = rec.getURI();
-    realRecordingRef.current = null;
+    if (!audioRecorder) return null;
+    await audioRecorder.stop();
+    const uri = audioRecorder.uri;
     setState('stopped');
     setDurationMs(finalDuration);
     setPauseReason(null);
@@ -269,4 +256,16 @@ export function useRecorder() {
     stop,
     reset,
   };
+}
+
+/**
+ * expo-audio の useAudioRecorder を、DEMO / web ではダミーで返すラッパー。
+ * フックなので必ず最上位で呼ぶが、内部で動的 require して評価コストを抑える。
+ */
+function useNativeAudioRecorder(): any {
+  if (USE_FAKE_RECORDER) return null;
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { useAudioRecorder, RecordingPresets } = require('expo-audio');
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  return useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 }
