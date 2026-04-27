@@ -1,12 +1,30 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Constants from 'expo-constants';
 
 import { useGoogleSignIn } from '@/services/googleSignIn';
+
+// 実機ビルドで env が EAS に渡っていないと OAuth クライアント ID が空文字となり、
+// `useIdTokenAuthRequest` が常に request=null を返してボタンが無反応になる。
+// その場合は画面に原因を出す。
+function detectOAuthConfigIssue(): string | null {
+  const extra = Constants.expoConfig?.extra ?? {};
+  const ios = extra.googleIosClientId as string | undefined;
+  const android = extra.googleAndroidClientId as string | undefined;
+  const web = extra.googleWebClientId as string | undefined;
+  const missing: string[] = [];
+  if (!ios) missing.push('GOOGLE_IOS_CLIENT_ID');
+  if (!android) missing.push('GOOGLE_ANDROID_CLIENT_ID');
+  if (!web) missing.push('GOOGLE_WEB_CLIENT_ID');
+  if (missing.length === 0) return null;
+  return `セットアップエラー: ${missing.join(', ')} がビルドに含まれていません`;
+}
 
 export function LoginScreen() {
   const { ready, response, signIn, exchangeResponseForFirebaseUser } = useGoogleSignIn();
   const [signingIn, setSigningIn] = useState(false);
+  const configIssue = detectOAuthConfigIssue();
 
   useEffect(() => {
     (async () => {
@@ -45,6 +63,12 @@ export function LoginScreen() {
           <Text style={styles.buttonText}>Googleでログイン</Text>
         )}
       </Pressable>
+
+      {configIssue ? (
+        <Text style={styles.configIssue}>{configIssue}</Text>
+      ) : !ready ? (
+        <Text style={styles.notReady}>認証モジュールを初期化中…</Text>
+      ) : null}
 
       <Text style={styles.notice}>
         録音は常に端末に保存され、送信完了までローカルに残ります。
@@ -95,5 +119,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: 'center',
     lineHeight: 18,
+  },
+  configIssue: {
+    marginTop: 16,
+    color: '#FCA5A5',
+    fontSize: 12,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  notReady: {
+    marginTop: 16,
+    color: '#94A3B8',
+    fontSize: 12,
+    textAlign: 'center',
   },
 });
