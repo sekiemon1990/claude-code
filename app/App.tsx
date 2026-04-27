@@ -85,10 +85,9 @@ function AppContent() {
 }
 
 // === 起動切り分け用ミニマムモード ===
-// Component auth registration の問題を initializeAuth(app) で回避済み。
-// 通常モードに戻して起動を確認する。
-const SAFE_MODE = false;
-const SELF_TEST = false;
+// initializeAuth(app) も含めてさらに細かく切り分けるため再度 SELF_TEST を ON。
+const SAFE_MODE = true;
+const SELF_TEST = true;
 
 type TestResult = { name: string; ok: boolean; error?: string };
 
@@ -135,6 +134,29 @@ const TESTS: Array<{ name: string; run: () => void }> = [
       };
       const app = getApps().length === 0 ? initializeApp(cfg) : getApp();
       getAuth(app);
+    },
+  },
+  { name: 'firebase initializeAuth(app) — no options', run: () => {
+      const { getApp, getApps, initializeApp } = require('firebase/app');
+      const { initializeAuth } = require('firebase/auth');
+      const Constants = require('expo-constants').default;
+      const extra = Constants.expoConfig?.extra ?? {};
+      const cfg = {
+        apiKey: extra.firebaseApiKey || 'demo',
+        authDomain: extra.firebaseAuthDomain || 'demo.firebaseapp.com',
+        projectId: extra.firebaseProjectId || 'demo',
+        storageBucket: extra.firebaseStorageBucket || 'demo.appspot.com',
+        messagingSenderId: extra.firebaseMessagingSenderId || '0',
+        appId: extra.firebaseAppId || '1:0:web:demo',
+      };
+      const app = getApps().length === 0 ? initializeApp(cfg) : getApp();
+      initializeAuth(app);
+    },
+  },
+  { name: 'firebase getAuth(app) AFTER initializeAuth', run: () => {
+      const { getApp } = require('firebase/app');
+      const { getAuth } = require('firebase/auth');
+      getAuth(getApp());
     },
   },
   { name: 'firebase getFirestore(app)', run: () => {
