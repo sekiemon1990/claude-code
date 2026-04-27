@@ -84,6 +84,46 @@ function AppContent() {
   return <AppNavigator />;
 }
 
+// === 起動切り分け用ミニマムモード ===
+// クラッシュログが取れずに原因特定が進まない状況のため、
+// 一旦 AppNavigator / firebase / react-native-screens などを
+// 全てバイパスして「React Native だけは動く」かを確認する画面。
+// 起動できたら原因はこれらの依存にある。逆にこれでも落ちるなら
+// もっと根本（RN 0.79 のネイティブモジュール / プロビジョニング等）。
+const SAFE_MODE = true;
+
+function SafeModeScreen() {
+  const [tapped, setTapped] = React.useState(0);
+  return (
+    <View style={{ flex: 1, backgroundColor: '#0a2540', padding: 24, justifyContent: 'center' }}>
+      <Text style={{ color: '#fff', fontSize: 22, fontWeight: '700', marginBottom: 12 }}>
+        起動成功 (Safe Mode)
+      </Text>
+      <Text style={{ color: '#94A3B8', marginBottom: 24 }}>
+        React Native は正常に動いています。タップすると数字が増えます: {tapped}
+      </Text>
+      <Text
+        onPress={() => setTapped((t) => t + 1)}
+        style={{
+          color: '#fff',
+          backgroundColor: '#2563EB',
+          padding: 14,
+          borderRadius: 12,
+          textAlign: 'center',
+          fontWeight: '600',
+          overflow: 'hidden',
+        }}
+      >
+        ここをタップ
+      </Text>
+      <Text style={{ color: '#64748B', fontSize: 11, marginTop: 24, textAlign: 'center' }}>
+        この画面が出れば、React Native とビルドは健全です。
+        次に AppNavigator / firebase の方を調査します。
+      </Text>
+    </View>
+  );
+}
+
 // 起動安定化のため、バックグラウンドアップロードとプッシュ通知の登録を
 // 一時的に無効化している。Obj-C 例外がネイティブブリッジ越しに JS の
 // try/catch を貫通してアプリを abort させていたため、まず確実に起動して
@@ -114,6 +154,14 @@ export default function App() {
     }
     return injectWebTouchFix();
   }, []);
+
+  if (SAFE_MODE) {
+    return (
+      <AppErrorBoundary>
+        <SafeModeScreen />
+      </AppErrorBoundary>
+    );
+  }
 
   return (
     <AppErrorBoundary>
