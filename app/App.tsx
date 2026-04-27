@@ -96,96 +96,61 @@ const SELF_TEST = true;
 
 type TestResult = { name: string; ok: boolean; error?: string };
 
-function runSelfTests(): TestResult[] {
-  const results: TestResult[] = [];
-  function probe(name: string, fn: () => void) {
-    try {
-      fn();
-      results.push({ name, ok: true });
-    } catch (e) {
-      results.push({
-        name,
-        ok: false,
-        error: e instanceof Error ? e.message : String(e),
-      });
-    }
-  }
-
-  // 1. ナビゲーション系
-  probe('react-native-safe-area-context', () => {
-    require('react-native-safe-area-context');
-  });
-  probe('react-native-screens', () => {
-    require('react-native-screens');
-  });
-  probe('@react-navigation/native', () => {
-    require('@react-navigation/native');
-  });
-  probe('@react-navigation/native-stack', () => {
-    require('@react-navigation/native-stack');
-  });
-
-  // 2. ストレージ
-  probe('@react-native-async-storage/async-storage', () => {
-    require('@react-native-async-storage/async-storage');
-  });
-
-  // 3. Firebase
-  probe('firebase/app require', () => {
-    require('firebase/app');
-  });
-  probe('firebase/auth require', () => {
-    require('firebase/auth');
-  });
-  probe('firebase/firestore require', () => {
-    require('firebase/firestore');
-  });
-  probe('firebase/storage require', () => {
-    require('firebase/storage');
-  });
-
-  // 4. Firebase 初期化（最も怪しい）
-  probe('firebase config init (initializeApp + initializeAuth)', () => {
-    require('@/config/firebase');
-  });
-
-  // 5. Google Sign-in
-  probe('expo-auth-session/providers/google', () => {
-    require('expo-auth-session/providers/google');
-  });
-  probe('expo-web-browser', () => {
-    require('expo-web-browser');
-  });
-
-  // 6. その他
-  probe('expo-constants', () => {
-    require('expo-constants');
-  });
-  probe('expo-linking', () => {
-    require('expo-linking');
-  });
-  probe('expo-file-system', () => {
-    require('expo-file-system');
-  });
-  probe('expo-clipboard', () => {
-    require('expo-clipboard');
-  });
-  probe('@react-native-community/netinfo', () => {
-    require('@react-native-community/netinfo');
-  });
-
-  return results;
-}
+// 各テスト項目。画面に「次に試すモジュール」を表示してから 800ms 待ち、
+// その後実際に require する。クラッシュした場合、画面には**直前に表示した
+// モジュール名**が残るので、それが原因モジュール。
+const TESTS: Array<{ name: string; run: () => void }> = [
+  { name: 'react-native-safe-area-context', run: () => { require('react-native-safe-area-context'); } },
+  { name: 'react-native-screens', run: () => { require('react-native-screens'); } },
+  { name: '@react-navigation/native', run: () => { require('@react-navigation/native'); } },
+  { name: '@react-navigation/native-stack', run: () => { require('@react-navigation/native-stack'); } },
+  { name: '@react-native-async-storage/async-storage', run: () => { require('@react-native-async-storage/async-storage'); } },
+  { name: 'firebase/app (require)', run: () => { require('firebase/app'); } },
+  { name: 'firebase/auth (require)', run: () => { require('firebase/auth'); } },
+  { name: 'firebase/firestore (require)', run: () => { require('firebase/firestore'); } },
+  { name: 'firebase/storage (require)', run: () => { require('firebase/storage'); } },
+  { name: 'firebase config init (initializeApp + initializeAuth)', run: () => { require('@/config/firebase'); } },
+  { name: 'expo-auth-session/providers/google', run: () => { require('expo-auth-session/providers/google'); } },
+  { name: 'expo-web-browser', run: () => { require('expo-web-browser'); } },
+  { name: 'expo-constants', run: () => { require('expo-constants'); } },
+  { name: 'expo-linking', run: () => { require('expo-linking'); } },
+  { name: 'expo-file-system', run: () => { require('expo-file-system'); } },
+  { name: 'expo-clipboard', run: () => { require('expo-clipboard'); } },
+  { name: '@react-native-community/netinfo', run: () => { require('@react-native-community/netinfo'); } },
+];
 
 function SelfTestScreen() {
-  const [results, setResults] = React.useState<TestResult[] | null>(null);
-  const [phase, setPhase] = React.useState('starting');
+  const [results, setResults] = React.useState<TestResult[]>([]);
+  const [running, setRunning] = React.useState<string | null>('preparing…');
+  const [done, setDone] = React.useState(false);
 
   React.useEffect(() => {
-    setPhase('running tests');
-    const r = runSelfTests();
-    setResults(r);
-    setPhase('done');
+    let cancelled = false;
+    (async () => {
+      const sleep = (ms: number) => new Promise<void>((res) => setTimeout(res, ms));
+      const out: TestResult[] = [];
+      for (const t of TESTS) {
+        if (cancelled) return;
+        // ① まず「これからこのモジュールを試す」を画面に出す
+        setRunning(t.name);
+        // ② 800ms 待つ → React が再描画する時間を確保
+        await sleep(800);
+        if (cancelled) return;
+        // ③ 実行。Obj-C 例外でクラッシュしたら画面は ① のまま残る
+        try {
+          t.run();
+          out.push({ name: t.name, ok: true });
+        } catch (e) {
+          out.push({ name: t.name, ok: false, error: e instanceof Error ? e.message : String(e) });
+        }
+        setResults([...out]);
+      }
+      setRunning(null);
+      setDone(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (
@@ -194,43 +159,51 @@ function SelfTestScreen() {
       contentContainerStyle={{ padding: 20, paddingTop: 60, paddingBottom: 40 }}
     >
       <Text style={{ color: '#fff', fontSize: 20, fontWeight: '700', marginBottom: 4 }}>
-        自己診断 ({phase})
+        自己診断
       </Text>
       <Text style={{ color: '#94A3B8', fontSize: 12, marginBottom: 16 }}>
-        ✗ が付いているモジュールがクラッシュ原因の候補です。
+        途中でクラッシュした場合は、「実行中」に表示されているモジュールが原因です。
+        その状態でスクショを送ってください。
       </Text>
-      {results == null ? (
-        <Text style={{ color: '#fff' }}>診断中…</Text>
-      ) : (
-        results.map((r, i) => (
-          <View
-            key={i}
-            style={{
-              flexDirection: 'row',
-              alignItems: 'flex-start',
-              marginBottom: 6,
-              backgroundColor: r.ok ? '#0f3052' : '#7f1d1d',
-              padding: 8,
-              borderRadius: 6,
-            }}
-          >
-            <Text style={{ color: r.ok ? '#10b981' : '#fca5a5', fontWeight: '700', marginRight: 8 }}>
-              {r.ok ? '✓' : '✗'}
-            </Text>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: '#fff', fontSize: 12 }}>{r.name}</Text>
-              {r.error ? (
-                <Text style={{ color: '#fca5a5', fontSize: 10, marginTop: 2 }}>
-                  {r.error}
-                </Text>
-              ) : null}
-            </View>
+
+      {running ? (
+        <View style={{ backgroundColor: '#1e3a5f', padding: 12, borderRadius: 8, marginBottom: 16 }}>
+          <Text style={{ color: '#fbbf24', fontSize: 12, fontWeight: '700' }}>
+            ▶ 実行中
+          </Text>
+          <Text style={{ color: '#fff', fontSize: 14, marginTop: 4 }}>{running}</Text>
+        </View>
+      ) : null}
+
+      {done ? (
+        <View style={{ backgroundColor: '#065f46', padding: 12, borderRadius: 8, marginBottom: 16 }}>
+          <Text style={{ color: '#fff', fontWeight: '700' }}>全テスト完了 — クラッシュ無し</Text>
+        </View>
+      ) : null}
+
+      {results.map((r, i) => (
+        <View
+          key={i}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'flex-start',
+            marginBottom: 6,
+            backgroundColor: r.ok ? '#0f3052' : '#7f1d1d',
+            padding: 8,
+            borderRadius: 6,
+          }}
+        >
+          <Text style={{ color: r.ok ? '#10b981' : '#fca5a5', fontWeight: '700', marginRight: 8 }}>
+            {r.ok ? '✓' : '✗'}
+          </Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: '#fff', fontSize: 12 }}>{r.name}</Text>
+            {r.error ? (
+              <Text style={{ color: '#fca5a5', fontSize: 10, marginTop: 2 }}>{r.error}</Text>
+            ) : null}
           </View>
-        ))
-      )}
-      <Text style={{ color: '#64748B', fontSize: 11, marginTop: 24, textAlign: 'center' }}>
-        この画面のスクショを送ってください
-      </Text>
+        </View>
+      ))}
     </ScrollView>
   );
 }
