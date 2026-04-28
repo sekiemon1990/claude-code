@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { Platform, ScrollView, Text } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Platform, ScrollView, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -47,10 +47,6 @@ class AppErrorBoundary extends React.Component<
   }
 }
 
-/**
- * iOS Safari / Android Chrome の Web ビルド向けに、単指スクロールが
- * Pressable に吸われずに動くよう touch-action を強制する。
- */
 function injectWebTouchFix() {
   if (Platform.OS !== 'web') return () => {};
   if (typeof document === 'undefined') return () => {};
@@ -72,18 +68,162 @@ function injectWebTouchFix() {
   };
 }
 
-// AppNavigator は遅延ロードする。AppNavigator の中で読み込まれるモジュールが
-// 万一例外を投げても、その瞬間の AppErrorBoundary で捕まえて画面に出せるよう。
 function AppContent() {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { AppNavigator } = require('@/navigation/AppNavigator');
   return <AppNavigator />;
 }
 
-// バックグラウンドアップロードとプッシュ通知の登録は安定後に再有効化する。
+// === 切り分け用: @react-native-firebase の各モジュールが正常にロード/初期化
+// できるかを画面で確認する。
+type Step = { name: string; ok?: boolean; error?: string };
+
+function FirebaseDiagnostic({ onAllOk }: { onAllOk: () => void }) {
+  const [steps, setSteps] = useState<Step[]>([]);
+  const [running, setRunning] = useState<string | null>('starting…');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+      const out: Step[] = [];
+      const tests: Array<{ name: string; run: () => any }> = [
+        {
+          name: '@react-native-firebase/app require',
+          run: () => require('@react-native-firebase/app'),
+        },
+        {
+          name: '@react-native-firebase/auth require',
+          run: () => require('@react-native-firebase/auth'),
+        },
+        {
+          name: '@react-native-firebase/firestore require',
+          run: () => require('@react-native-firebase/firestore'),
+        },
+        {
+          name: '@react-native-firebase/storage require',
+          run: () => require('@react-native-firebase/storage'),
+        },
+        {
+          name: 'firebase.app() default',
+          run: () => {
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const firebase = require('@react-native-firebase/app').default;
+            return firebase.app();
+          },
+        },
+        {
+          name: 'firebase.app().options (plist が読まれているか)',
+          run: () => {
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const firebase = require('@react-native-firebase/app').default;
+            const opts = firebase.app().options;
+            // bundle ID, projectId 等が入っているはず
+            return JSON.stringify({
+              projectId: opts.projectId,
+              appId: opts.appId,
+              apiKey: opts.apiKey ? '***' : 'MISSING',
+            });
+          },
+        },
+        {
+          name: 'auth() instance 取得',
+          run: () => {
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const auth = require('@react-native-firebase/auth').default;
+            return typeof auth();
+          },
+        },
+        {
+          name: 'firestore() instance 取得',
+          run: () => {
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const firestore = require('@react-native-firebase/firestore').default;
+            return typeof firestore();
+          },
+        },
+        {
+          name: 'storage() instance 取得',
+          run: () => {
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const storage = require('@react-native-firebase/storage').default;
+            return typeof storage();
+          },
+        },
+      ];
+      for (const t of tests) {
+        if (cancelled) return;
+        setRunning(t.name);
+        await sleep(800);
+        if (cancelled) return;
+        try {
+          const result = t.run();
+          out.push({ name: t.name, ok: true, error: result ? `=> ${String(result).slice(0, 200)}` : undefined });
+        } catch (e) {
+          out.push({ name: t.name, ok: false, error: e instanceof Error ? e.message : String(e) });
+        }
+        setSteps([...out]);
+      }
+      setRunning(null);
+      if (out.every((s) => s.ok)) onAllOk();
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [onAllOk]);
+
+  return (
+    <ScrollView
+      style={{ flex: 1, backgroundColor: '#0a2540' }}
+      contentContainerStyle={{ padding: 20, paddingTop: 60, paddingBottom: 40 }}
+    >
+      <Text style={{ color: '#fff', fontSize: 20, fontWeight: '700', marginBottom: 12 }}>
+        Firebase 診断
+      </Text>
+      <Text style={{ color: '#94A3B8', fontSize: 12, marginBottom: 16 }}>
+        ✗ が出ているステップが原因。クラッシュしたらその直前の「実行中」が原因。
+      </Text>
+      {running ? (
+        <View style={{ backgroundColor: '#1e3a5f', padding: 12, borderRadius: 8, marginBottom: 12 }}>
+          <Text style={{ color: '#fbbf24', fontWeight: '700', fontSize: 12 }}>▶ 実行中</Text>
+          <Text style={{ color: '#fff', marginTop: 4 }}>{running}</Text>
+        </View>
+      ) : null}
+      {steps.map((s, i) => (
+        <View
+          key={i}
+          style={{
+            backgroundColor: s.ok ? '#0f3052' : '#7f1d1d',
+            padding: 8,
+            borderRadius: 6,
+            marginBottom: 6,
+            flexDirection: 'row',
+          }}
+        >
+          <Text style={{ color: s.ok ? '#10b981' : '#fca5a5', fontWeight: '700', marginRight: 8 }}>
+            {s.ok ? '✓' : '✗'}
+          </Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: '#fff', fontSize: 12 }}>{s.name}</Text>
+            {s.error ? (
+              <Text style={{ color: s.ok ? '#94a3b8' : '#fca5a5', fontSize: 10, marginTop: 2 }}>
+                {s.error}
+              </Text>
+            ) : null}
+          </View>
+        </View>
+      ))}
+    </ScrollView>
+  );
+}
+
 const ENABLE_BACKGROUND_FEATURES = false;
+// Firebase 診断モード。全部 ✓ が出るなら通常モードへ自動移行する。
+const FIREBASE_DIAGNOSTIC = true;
 
 export default function App() {
+  const [diagnosticPassed, setDiagnosticPassed] = useState(false);
+
   useEffect(() => {
     if (ENABLE_BACKGROUND_FEATURES) {
       (async () => {
@@ -95,18 +235,18 @@ export default function App() {
           // eslint-disable-next-line no-console
           console.warn('[App] registerBackgroundUploadTask failed:', err);
         }
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-var-requires
-          const { registerPushNotifications } = require('@/services/notifications');
-          await registerPushNotifications();
-        } catch (err) {
-          // eslint-disable-next-line no-console
-          console.warn('[App] registerPushNotifications failed:', err);
-        }
       })();
     }
     return injectWebTouchFix();
   }, []);
+
+  if (FIREBASE_DIAGNOSTIC && !diagnosticPassed) {
+    return (
+      <AppErrorBoundary>
+        <FirebaseDiagnostic onAllOk={() => setDiagnosticPassed(true)} />
+      </AppErrorBoundary>
+    );
+  }
 
   return (
     <AppErrorBoundary>
