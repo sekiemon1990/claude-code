@@ -218,8 +218,9 @@ function FirebaseDiagnostic({ onAllOk }: { onAllOk: () => void }) {
 }
 
 const ENABLE_BACKGROUND_FEATURES = false;
-// Firebase 診断モード。全部 ✓ が出るなら通常モードへ自動移行する。
-const FIREBASE_DIAGNOSTIC = true;
+// Firebase 診断は build 27 で全て動作確認済み（storage の require 警告は実害なし）。
+// 通常モードへ戻す。
+const FIREBASE_DIAGNOSTIC = false;
 
 export default function App() {
   const [diagnosticPassed, setDiagnosticPassed] = useState(false);
