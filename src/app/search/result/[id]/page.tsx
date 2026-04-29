@@ -6,7 +6,6 @@ import { Suspense, use, useMemo, useState } from "react";
 import {
   BarChart3,
   Sparkles,
-  RefreshCw,
   ExternalLink,
   Gavel,
   Link2,
@@ -18,10 +17,19 @@ import {
   AlertTriangle,
   Inbox,
   X,
+  Share2,
+  SlidersHorizontal,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { SourceBadge } from "@/components/SourceBadge";
+import { PlatformLogo } from "@/components/PlatformLogo";
 import { ImageLightbox } from "@/components/ImageLightbox";
+import {
+  SearchFormFields,
+  type Period,
+} from "@/components/SearchFormFields";
 import { MOCK_RESULT } from "@/lib/mock-data";
 import {
   formatYen,
@@ -89,6 +97,7 @@ function ResultInner({ resultId }: { resultId: string }) {
   const [extraPages, setExtraPages] = useState(0);
   const [lightbox, setLightbox] = useState<{ src: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
 
   // Mock failure simulation
   const failedSources: SourceKey[] = mockMode === "error" ? ["mercari"] : [];
@@ -161,6 +170,21 @@ function ResultInner({ resultId }: { resultId: string }) {
     }
   }
 
+  async function handleShare() {
+    const url = window.location.href;
+    const title = `マクサスサーチ: ${keyword}`;
+    const text = `「${keyword}」の相場検索結果`;
+    if (typeof navigator !== "undefined" && "share" in navigator) {
+      try {
+        await navigator.share({ title, text, url });
+        return;
+      } catch {
+        // user cancelled, fall through to copy
+      }
+    }
+    await handleCopyUrl();
+  }
+
   function startMemoEdit() {
     setMemoDraft(memo);
     setMemoEditing(true);
@@ -205,7 +229,32 @@ function ResultInner({ resultId }: { resultId: string }) {
         <div className="text-xs text-muted mt-1">
           検索: {keyword} ・ 直近{period === "all" ? "全期間" : `${period}日`}
         </div>
+        <button
+          type="button"
+          onClick={() => setEditOpen(!editOpen)}
+          className="mt-3 w-full h-9 rounded-lg border border-border bg-surface-2 text-foreground text-xs font-medium hover:border-primary/40 hover:text-primary flex items-center justify-center gap-1.5"
+        >
+          <SlidersHorizontal size={14} />
+          検索条件を変更
+          {editOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        </button>
       </section>
+
+      {/* インライン検索条件編集 */}
+      {editOpen && (
+        <section className="bg-surface border border-border rounded-xl p-4">
+          <SearchFormFields
+            initial={{
+              keyword,
+              excludes: params.get("excludes") ?? "",
+              period: period as Period,
+              sources: requestedSources,
+            }}
+            submitLabel="この条件で再検索"
+            onAfterSubmit={() => setEditOpen(false)}
+          />
+        </section>
+      )}
 
       {/* サマリー */}
       {!isEmpty && (
@@ -263,11 +312,7 @@ function ResultInner({ resultId }: { resultId: string }) {
                   style={{ borderColor: `${meta.color}33` }}
                 >
                   <div className="flex items-center gap-2 min-w-0">
-                    <span
-                      aria-hidden
-                      className="w-2 h-2 rounded-full shrink-0"
-                      style={{ backgroundColor: meta.color }}
-                    />
+                    <PlatformLogo source={key} size={20} />
                     <span
                       className="text-sm font-semibold truncate"
                       style={{ color: meta.color }}
@@ -469,6 +514,7 @@ function ResultInner({ resultId }: { resultId: string }) {
                       className="flex items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-semibold hover:bg-surface-2 transition-colors"
                       style={{ color: sourceMeta.color }}
                     >
+                      <PlatformLogo source={l.source} size={14} />
                       {sourceMeta.shortName}で見る
                       <ExternalLink size={12} />
                     </a>
@@ -558,20 +604,21 @@ function ResultInner({ resultId }: { resultId: string }) {
 
       {/* アクション */}
       <section className="grid grid-cols-2 gap-2 pt-2">
-        <Link
-          href={`/search?${queryStr}`}
-          className="h-12 rounded-lg border border-border bg-surface text-foreground font-medium text-sm flex items-center justify-center gap-2 hover:border-foreground/30"
+        <button
+          type="button"
+          onClick={handleShare}
+          className="h-12 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 flex items-center justify-center gap-2"
         >
-          <RefreshCw size={16} />
-          再検索
-        </Link>
+          <Share2 size={16} />
+          共有
+        </button>
         <button
           type="button"
           onClick={handleCopyUrl}
           className={
             copied
               ? "h-12 rounded-lg bg-success text-white font-medium text-sm flex items-center justify-center gap-2"
-              : "h-12 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 flex items-center justify-center gap-2"
+              : "h-12 rounded-lg border border-border bg-surface text-foreground font-medium text-sm hover:border-foreground/30 flex items-center justify-center gap-2"
           }
         >
           {copied ? (

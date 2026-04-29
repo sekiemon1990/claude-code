@@ -11,6 +11,14 @@ export const metadata: Metadata = {
   title: "マクサスサーチ",
   description: "出張買取スタッフ向け 一括相場検索ツール",
   applicationName: "マクサスサーチ",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "マクサスサーチ",
+  },
+  formatDetection: {
+    telephone: false,
+  },
 };
 
 export const viewport: Viewport = {
