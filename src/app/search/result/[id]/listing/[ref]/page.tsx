@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { SourceBadge } from "@/components/SourceBadge";
+import { PlatformLogo } from "@/components/PlatformLogo";
 import { ImageLightbox } from "@/components/ImageLightbox";
 import { MOCK_RESULT } from "@/lib/mock-data";
 import { formatYen, formatRelativeDate } from "@/lib/utils";
@@ -183,6 +184,7 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
           color: "white",
         }}
       >
+        <PlatformLogo source={source} size={20} />
         {meta.name}で詳細を見る
         <ExternalLink size={18} />
       </a>

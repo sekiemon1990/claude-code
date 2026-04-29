@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { SOURCES, type SourceKey } from "@/lib/types";
 import { AppShell } from "@/components/AppShell";
+import { PlatformLogo } from "@/components/PlatformLogo";
 
 function LoadingInner() {
   const router = useRouter();
@@ -58,11 +59,7 @@ function LoadingInner() {
               className="flex items-center justify-between text-sm"
             >
               <div className="flex items-center gap-2">
-                <span
-                  aria-hidden
-                  className="w-2 h-2 rounded-full"
-                  style={{ backgroundColor: s.color }}
-                />
+                <PlatformLogo source={s.key} size={18} />
                 <span className="font-medium text-foreground">{s.name}</span>
               </div>
               <span className="text-xs">
