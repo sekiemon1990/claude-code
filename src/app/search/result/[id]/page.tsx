@@ -43,7 +43,16 @@ import {
   setPinned,
   useMemoValue,
   usePinnedValue,
+  setListingPinned,
+  useListingPinnedValue,
 } from "@/lib/storage";
+import {
+  CONDITION_RANKS,
+  CONDITION_META,
+  classifyCondition,
+  type ConditionRank,
+} from "@/lib/conditions";
+import { ConditionBadge } from "@/components/ConditionBadge";
 import { SOURCES, type SourceKey, type Listing } from "@/lib/types";
 
 type FlatListing = Listing & { source: SourceKey };
@@ -99,6 +108,26 @@ function ResultInner({ resultId }: { resultId: string }) {
   const [copied, setCopied] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
 
+  const conditionsParam = params.get("conditions");
+  const initialConditions = useMemo<ConditionRank[]>(
+    () =>
+      conditionsParam
+        ? (conditionsParam.split(",") as ConditionRank[]).filter((c) =>
+            CONDITION_RANKS.includes(c as Exclude<ConditionRank, "unknown">)
+          )
+        : [],
+    [conditionsParam]
+  );
+  const [conditionFilter, setConditionFilter] =
+    useState<ConditionRank[]>(initialConditions);
+
+  function toggleConditionFilter(rank: ConditionRank) {
+    setConditionFilter((prev) =>
+      prev.includes(rank) ? prev.filter((r) => r !== rank) : [...prev, rank]
+    );
+    setExtraPages(0);
+  }
+
   // Mock failure simulation
   const failedSources: SourceKey[] = mockMode === "error" ? ["mercari"] : [];
 
@@ -117,6 +146,11 @@ function ResultInner({ resultId }: { resultId: string }) {
     let list = flatListings;
     if (filter !== "all") {
       list = list.filter((l) => l.source === filter);
+    }
+    if (conditionFilter.length > 0) {
+      list = list.filter((l) =>
+        conditionFilter.includes(classifyCondition(l.condition))
+      );
     }
     if (refine.trim()) {
       const terms = refine
@@ -137,7 +171,7 @@ function ResultInner({ resultId }: { resultId: string }) {
       if (sort === "price_desc") return b.price - a.price;
       return a.price - b.price;
     });
-  }, [flatListings, filter, refine, sort]);
+  }, [flatListings, filter, conditionFilter, refine, sort]);
 
   const visibleCount =
     pageSize === "all"
@@ -249,6 +283,9 @@ function ResultInner({ resultId }: { resultId: string }) {
               excludes: params.get("excludes") ?? "",
               period: period as Period,
               sources: requestedSources,
+              conditions: conditionFilter.filter(
+                (c): c is Exclude<ConditionRank, "unknown"> => c !== "unknown"
+              ),
             }}
             submitLabel="この条件で再検索"
             onAfterSubmit={() => setEditOpen(false)}
@@ -436,92 +473,64 @@ function ResultInner({ resultId }: { resultId: string }) {
             </div>
           )}
 
-          <div className="flex flex-col gap-2">
-            {visibleListings.map((l) => {
-              const sourceMeta = SOURCES.find((s) => s.key === l.source)!;
-              const detailHref = `/search/result/${resultId}/listing/${l.source}-${l.id}?${queryStr}`;
+          <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 mb-1 scrollbar-none items-center">
+            <span className="shrink-0 text-[10px] text-muted px-1">状態:</span>
+            {CONDITION_RANKS.map((r) => {
+              const meta = CONDITION_META[r];
+              const count = flatListings.filter(
+                (l) => classifyCondition(l.condition) === r
+              ).length;
+              const active = conditionFilter.includes(r);
               return (
-                <article
-                  key={`${l.source}-${l.id}`}
-                  className="bg-surface border border-border rounded-xl overflow-hidden hover:border-primary/40 transition-colors"
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => toggleConditionFilter(r)}
+                  className={
+                    active
+                      ? "shrink-0 h-7 px-2 rounded-full text-[11px] font-bold border-2 transition-colors flex items-center gap-1"
+                      : "shrink-0 h-7 px-2 rounded-full text-[11px] font-medium border border-border bg-surface text-muted hover:border-foreground/30 flex items-center gap-1"
+                  }
+                  style={
+                    active
+                      ? {
+                          borderColor: meta.color,
+                          color: meta.color,
+                          backgroundColor: `${meta.color}10`,
+                        }
+                      : undefined
+                  }
                 >
-                  <Link href={detailHref} className="block">
-                    <div className="flex p-3 gap-3">
-                      {l.thumbnail ? (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setLightbox({ src: l.thumbnail! });
-                          }}
-                          className="w-20 h-20 rounded-lg overflow-hidden bg-surface-2 shrink-0"
-                          aria-label="画像を拡大"
-                        >
-                          <img
-                            src={l.thumbnail}
-                            alt=""
-                            loading="lazy"
-                            className="w-full h-full object-cover"
-                          />
-                        </button>
-                      ) : (
-                        <div className="w-20 h-20 rounded-lg bg-surface-2 shrink-0 flex items-center justify-center text-muted text-[10px]">
-                          画像なし
-                        </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <div className="mb-1.5">
-                          <SourceBadge source={l.source} />
-                        </div>
-                        <p className="text-sm font-medium text-foreground line-clamp-2 leading-snug">
-                          {l.title}
-                        </p>
-                        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                          <span className="text-lg font-bold text-foreground">
-                            {formatYen(l.price)}
-                          </span>
-                          {l.bidCount !== undefined && (
-                            <span className="inline-flex items-center gap-1 text-xs text-muted">
-                              <Gavel size={12} />
-                              {l.bidCount}件
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 mt-1 text-xs text-muted">
-                          {l.condition && (
-                            <span className="truncate">{l.condition}</span>
-                          )}
-                          {l.condition && <span>・</span>}
-                          <span className="shrink-0">
-                            {formatRelativeDate(l.endedAt)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </Link>
-                  <div className="grid grid-cols-2 border-t border-border">
-                    <Link
-                      href={detailHref}
-                      className="flex items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-semibold text-foreground hover:bg-surface-2 transition-colors border-r border-border"
-                    >
-                      詳細を見る
-                    </Link>
-                    <a
-                      href={l.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-semibold hover:bg-surface-2 transition-colors"
-                      style={{ color: sourceMeta.color }}
-                    >
-                      <PlatformLogo source={l.source} size={14} />
-                      {sourceMeta.shortName}で見る
-                      <ExternalLink size={12} />
-                    </a>
-                  </div>
-                </article>
+                  <span
+                    className="inline-flex items-center justify-center w-4 h-4 rounded text-white text-[9px] font-black"
+                    style={{ backgroundColor: meta.color }}
+                  >
+                    {meta.label}
+                  </span>
+                  ({count})
+                </button>
               );
             })}
+            {conditionFilter.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setConditionFilter([])}
+                className="shrink-0 h-7 px-2 rounded-full text-[11px] text-muted hover:text-foreground"
+              >
+                クリア
+              </button>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-2">
+            {visibleListings.map((l) => (
+              <ListingCard
+                key={`${l.source}-${l.id}`}
+                listing={l}
+                detailHref={`/search/result/${resultId}/listing/${l.source}-${l.id}?${queryStr}`}
+                onLightbox={(src) => setLightbox({ src })}
+              />
+            ))}
 
             {hasNoMatch && (
               <div className="bg-surface border border-border rounded-xl p-8 text-center">
@@ -707,6 +716,117 @@ function ResultInner({ resultId }: { resultId: string }) {
         />
       )}
     </div>
+  );
+}
+
+function ListingCard({
+  listing,
+  detailHref,
+  onLightbox,
+}: {
+  listing: FlatListing;
+  detailHref: string;
+  onLightbox: (src: string) => void;
+}) {
+  const ref = `${listing.source}-${listing.id}`;
+  const pinned = useListingPinnedValue(ref);
+  const sourceMeta = SOURCES.find((s) => s.key === listing.source)!;
+  const rank = classifyCondition(listing.condition);
+
+  return (
+    <article className="bg-surface border border-border rounded-xl overflow-hidden hover:border-primary/40 transition-colors">
+      <Link href={detailHref} className="block">
+        <div className="flex p-3 gap-3">
+          {listing.thumbnail ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onLightbox(listing.thumbnail!);
+              }}
+              className="w-20 h-20 rounded-lg overflow-hidden bg-surface-2 shrink-0"
+              aria-label="画像を拡大"
+            >
+              <img
+                src={listing.thumbnail}
+                alt=""
+                loading="lazy"
+                className="w-full h-full object-cover"
+              />
+            </button>
+          ) : (
+            <div className="w-20 h-20 rounded-lg bg-surface-2 shrink-0 flex items-center justify-center text-muted text-[10px]">
+              画像なし
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-2 mb-1.5">
+              <SourceBadge source={listing.source} />
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setListingPinned(ref, !pinned);
+                }}
+                aria-label={pinned ? "ピンを外す" : "ピン留め"}
+                className={
+                  pinned
+                    ? "shrink-0 -mt-1 -mr-1 w-7 h-7 rounded-md flex items-center justify-center bg-warning/10 text-warning"
+                    : "shrink-0 -mt-1 -mr-1 w-7 h-7 rounded-md flex items-center justify-center text-muted hover:bg-surface-2"
+                }
+              >
+                <Star size={14} fill={pinned ? "currentColor" : "none"} />
+              </button>
+            </div>
+            <p className="text-sm font-medium text-foreground line-clamp-2 leading-snug">
+              {listing.title}
+            </p>
+            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+              <span className="text-lg font-bold text-foreground">
+                {formatYen(listing.price)}
+              </span>
+              {listing.bidCount !== undefined && (
+                <span className="inline-flex items-center gap-1 text-xs text-muted">
+                  <Gavel size={12} />
+                  {listing.bidCount}件
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2 mt-1 text-xs text-muted">
+              <ConditionBadge rank={rank} size="sm" />
+              {listing.condition && (
+                <span className="truncate">{listing.condition}</span>
+              )}
+              <span>・</span>
+              <span className="shrink-0">
+                {formatRelativeDate(listing.endedAt)}
+              </span>
+            </div>
+          </div>
+        </div>
+      </Link>
+      <div className="grid grid-cols-2 border-t border-border">
+        <Link
+          href={detailHref}
+          className="flex items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-semibold text-foreground hover:bg-surface-2 transition-colors border-r border-border"
+        >
+          詳細を見る
+        </Link>
+        <a
+          href={listing.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-semibold hover:bg-surface-2 transition-colors"
+          style={{ color: sourceMeta.color }}
+        >
+          <PlatformLogo source={listing.source} size={14} />
+          {sourceMeta.shortName}で見る
+          <ExternalLink size={12} />
+        </a>
+      </div>
+    </article>
   );
 }
 

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { notFound, useSearchParams } from "next/navigation";
-import { Suspense, use, useState } from "react";
+import { Suspense, use, useEffect, useState } from "react";
 import {
   ExternalLink,
   Gavel,
@@ -13,14 +13,25 @@ import {
   Tag,
   Package,
   Sparkles,
+  Star,
+  StickyNote,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { SourceBadge } from "@/components/SourceBadge";
 import { PlatformLogo } from "@/components/PlatformLogo";
 import { ImageLightbox } from "@/components/ImageLightbox";
+import { ConditionBadge } from "@/components/ConditionBadge";
 import { MOCK_RESULT } from "@/lib/mock-data";
 import { formatYen, formatRelativeDate } from "@/lib/utils";
 import { detectAccessories } from "@/lib/accessories";
+import { classifyCondition } from "@/lib/conditions";
+import {
+  recordListingView,
+  setListingMemo,
+  setListingPinned,
+  useListingMemoValue,
+  useListingPinnedValue,
+} from "@/lib/storage";
 import { SOURCES, type SourceKey } from "@/lib/types";
 
 function parseRef(ref: string): { source: SourceKey; lid: string } | null {
@@ -50,6 +61,52 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
 
   const [activeImage, setActiveImage] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+
+  const listingRef = `${source}-${lid}`;
+  const pinned = useListingPinnedValue(listingRef);
+  const memo = useListingMemoValue(listingRef);
+  const [memoEditing, setMemoEditing] = useState(false);
+  const [memoDraft, setMemoDraft] = useState<string | null>(null);
+
+  const fromKeyword = params.get("keyword") ?? undefined;
+
+  useEffect(() => {
+    recordListingView({
+      ref: listingRef,
+      source,
+      title: listing.title,
+      price: listing.price,
+      thumbnail: listing.thumbnail,
+      endedAt: listing.endedAt,
+      condition: listing.condition,
+      fromKeyword,
+    });
+  }, [
+    listingRef,
+    source,
+    listing.title,
+    listing.price,
+    listing.thumbnail,
+    listing.endedAt,
+    listing.condition,
+    fromKeyword,
+  ]);
+
+  function startMemoEdit() {
+    setMemoDraft(memo);
+    setMemoEditing(true);
+  }
+
+  function saveMemo() {
+    if (memoDraft !== null) setListingMemo(listingRef, memoDraft);
+    setMemoEditing(false);
+    setMemoDraft(null);
+  }
+
+  function cancelMemoEdit() {
+    setMemoEditing(false);
+    setMemoDraft(null);
+  }
 
   const queryStr = new URLSearchParams(params.toString()).toString();
   const backHref = `/search/result/${id}${queryStr ? `?${queryStr}` : ""}`;
@@ -100,9 +157,27 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
 
       {/* タイトル / 価格 */}
       <section className="bg-surface border border-border rounded-xl p-4">
-        <div className="flex items-center gap-2 mb-2">
-          <SourceBadge source={source} />
-          <span className="text-xs text-muted">{meta.status}</span>
+        <div className="flex items-start justify-between gap-2 mb-2">
+          <div className="flex items-center gap-2 flex-wrap min-w-0">
+            <SourceBadge source={source} />
+            <ConditionBadge
+              rank={classifyCondition(listing.condition)}
+              size="sm"
+            />
+            <span className="text-xs text-muted">{meta.status}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setListingPinned(listingRef, !pinned)}
+            aria-label={pinned ? "ピンを外す" : "ピン留め"}
+            className={
+              pinned
+                ? "shrink-0 -mt-1 -mr-1 w-9 h-9 rounded-lg flex items-center justify-center bg-warning/10 text-warning"
+                : "shrink-0 -mt-1 -mr-1 w-9 h-9 rounded-lg flex items-center justify-center text-muted hover:bg-surface-2"
+            }
+          >
+            <Star size={18} fill={pinned ? "currentColor" : "none"} />
+          </button>
         </div>
         <h1 className="text-base font-bold text-foreground leading-snug">
           {listing.title}
@@ -205,6 +280,63 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
       >
         検索結果に戻る
       </Link>
+
+      {/* 査定メモ（商品単位） */}
+      <section className="bg-surface border border-border rounded-xl p-4 mt-2">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <StickyNote size={16} className="text-warning" />
+            <span className="text-sm font-semibold text-foreground">
+              査定メモ
+            </span>
+          </div>
+          {!memoEditing && (
+            <button
+              type="button"
+              onClick={startMemoEdit}
+              className="text-xs text-primary hover:underline"
+            >
+              {memo ? "編集" : "+ 追加"}
+            </button>
+          )}
+        </div>
+        {memoEditing ? (
+          <div className="flex flex-col gap-2">
+            <textarea
+              value={memoDraft ?? ""}
+              onChange={(e) => setMemoDraft(e.target.value)}
+              rows={3}
+              placeholder="例: ¥120,000で買取打診したい候補。状態Bランクを目安"
+              className="w-full p-3 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 resize-none"
+              autoFocus
+            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={cancelMemoEdit}
+                className="flex-1 h-9 rounded-lg border border-border text-foreground text-sm hover:bg-surface-2"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={saveMemo}
+                className="flex-1 h-9 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90"
+              >
+                保存
+              </button>
+            </div>
+          </div>
+        ) : memo ? (
+          <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
+            {memo}
+          </p>
+        ) : (
+          <p className="text-xs text-muted">
+            この商品にメモを残せます。閲覧履歴から一覧で確認できます。
+          </p>
+        )}
+      </section>
 
       <section className="bg-surface-2 rounded-xl p-3 mt-2">
         <p className="text-xs text-muted leading-relaxed">

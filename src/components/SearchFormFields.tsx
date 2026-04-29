@@ -5,14 +5,17 @@ import { useState } from "react";
 import { Search, Check } from "lucide-react";
 import { PlatformLogo } from "@/components/PlatformLogo";
 import { SOURCES, type SourceKey } from "@/lib/types";
+import { CONDITION_RANKS, CONDITION_META, type ConditionRank } from "@/lib/conditions";
 
 export type Period = "30" | "90" | "all";
+export type ConditionRankNonUnknown = Exclude<ConditionRank, "unknown">;
 
 export type SearchFormValues = {
   keyword: string;
   excludes: string;
   period: Period;
   sources: SourceKey[];
+  conditions: ConditionRankNonUnknown[];
 };
 
 type Props = {
@@ -36,6 +39,9 @@ export function SearchFormFields({
       ? initial.sources
       : ["yahoo_auction"]
   );
+  const [selectedConditions, setSelectedConditions] = useState<
+    ConditionRankNonUnknown[]
+  >(initial?.conditions ?? []);
 
   function toggleSource(key: SourceKey) {
     setSelectedSources((prev) =>
@@ -44,6 +50,12 @@ export function SearchFormFields({
           ? prev.filter((k) => k !== key)
           : prev
         : [...prev, key]
+    );
+  }
+
+  function toggleCondition(rank: ConditionRankNonUnknown) {
+    setSelectedConditions((prev) =>
+      prev.includes(rank) ? prev.filter((r) => r !== rank) : [...prev, rank]
     );
   }
 
@@ -56,6 +68,9 @@ export function SearchFormFields({
       ...(excludes.trim() && { excludes: excludes.trim() }),
       period,
       sources: selectedSources.join(","),
+      ...(selectedConditions.length > 0 && {
+        conditions: selectedConditions.join(","),
+      }),
     });
     router.push(`/search/loading?${params.toString()}`);
     onAfterSubmit?.();
@@ -134,6 +149,45 @@ export function SearchFormFields({
                 <PlatformLogo source={s.key} size={16} />
                 {s.shortName}
                 {selected && <Check size={12} />}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <span className="text-sm font-medium text-foreground">
+          状態で絞り込み
+          <span className="ml-1 text-xs text-muted font-normal">
+            （未選択 = 全て）
+          </span>
+        </span>
+        <div className="grid grid-cols-5 gap-2">
+          {CONDITION_RANKS.map((r) => {
+            const meta = CONDITION_META[r];
+            const selected = selectedConditions.includes(r);
+            return (
+              <button
+                key={r}
+                type="button"
+                onClick={() => toggleCondition(r)}
+                title={meta.description}
+                className={
+                  selected
+                    ? "h-11 rounded-lg border-2 text-sm font-bold flex items-center justify-center transition-colors"
+                    : "h-11 rounded-lg border border-border bg-surface text-muted text-sm font-bold hover:border-foreground/30 flex items-center justify-center"
+                }
+                style={
+                  selected
+                    ? {
+                        borderColor: meta.color,
+                        color: meta.color,
+                        backgroundColor: `${meta.color}10`,
+                      }
+                    : undefined
+                }
+              >
+                {meta.label}
               </button>
             );
           })}
