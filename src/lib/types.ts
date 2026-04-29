@@ -32,6 +32,8 @@ export const SOURCES: SourceLabel[] = [
   },
 ];
 
+export type ShippingType = "free" | "paid" | "pickup";
+
 export type Listing = {
   id: string;
   title: string;
@@ -44,6 +46,7 @@ export type Listing = {
   condition?: string;
   description?: string;
   sellerName?: string;
+  shipping?: ShippingType;
   shippingInfo?: string;
   location?: string;
   accessories?: string[];

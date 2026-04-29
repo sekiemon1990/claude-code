@@ -21,6 +21,7 @@ import { SourceBadge } from "@/components/SourceBadge";
 import { PlatformLogo } from "@/components/PlatformLogo";
 import { ImageLightbox } from "@/components/ImageLightbox";
 import { ConditionBadge } from "@/components/ConditionBadge";
+import { ShippingBadge } from "@/components/ShippingBadge";
 import { MOCK_RESULT } from "@/lib/mock-data";
 import { formatYen, formatRelativeDate } from "@/lib/utils";
 import { detectAccessories } from "@/lib/accessories";
@@ -164,6 +165,7 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
               rank={classifyCondition(listing.condition)}
               size="sm"
             />
+            <ShippingBadge shipping={listing.shipping} size="sm" />
             <span className="text-xs text-muted">{meta.status}</span>
           </div>
           <button

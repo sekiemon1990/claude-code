@@ -41,6 +41,7 @@ export const MOCK_RESULT: SearchResult = {
           description:
             "SONY α7 IV ILCE-7M4 ボディです。\n2024年購入、ショット数2,800以下。動作確認済み、目立った傷はありません。\n元箱・取扱説明書・バッテリー2個・充電器・ストラップすべて揃っています。\nノークレーム・ノーリターンでお願いします。",
           sellerName: "camera_shop_tokyo",
+          shipping: "free",
           shippingInfo: "佐川急便（送料込み）",
         },
         {
@@ -52,6 +53,8 @@ export const MOCK_RESULT: SearchResult = {
           thumbnail: "https://picsum.photos/seed/y2cam/240/240",
           bidCount: 22,
           condition: "中古",
+          shipping: "paid",
+          shippingInfo: "ヤマト運輸（送料別途）",
         },
         {
           id: "y3",
@@ -62,6 +65,7 @@ export const MOCK_RESULT: SearchResult = {
           thumbnail: "https://picsum.photos/seed/y3cam/240/240",
           bidCount: 18,
           condition: "中古",
+          shipping: "free",
         },
         {
           id: "y4",
@@ -72,6 +76,7 @@ export const MOCK_RESULT: SearchResult = {
           thumbnail: "https://picsum.photos/seed/y4cam/240/240",
           bidCount: 15,
           condition: "中古 - 訳あり",
+          shipping: "paid",
         },
         {
           id: "y5",
@@ -82,6 +87,7 @@ export const MOCK_RESULT: SearchResult = {
           thumbnail: "https://picsum.photos/seed/y5cam/240/240",
           bidCount: 12,
           condition: "中古",
+          shipping: "free",
         },
         {
           id: "y6",
@@ -92,6 +98,7 @@ export const MOCK_RESULT: SearchResult = {
           thumbnail: "https://picsum.photos/seed/y6cam/240/240",
           bidCount: 9,
           condition: "中古",
+          shipping: "paid",
         },
         {
           id: "y7",
@@ -102,6 +109,7 @@ export const MOCK_RESULT: SearchResult = {
           thumbnail: "https://picsum.photos/seed/y7cam/240/240",
           bidCount: 6,
           condition: "中古",
+          shipping: "paid",
         },
       ],
     },
@@ -128,6 +136,7 @@ export const MOCK_RESULT: SearchResult = {
           description:
             "SONY α7 IV ILCE-7M4 ボディです。\nシャッター回数500回未満の極上品。\n外装に擦れや汚れは一切なく、新品同様の状態です。\n付属品は全て揃っています（外箱、説明書、充電器、バッテリー、ストラップ）。\n即購入OKです。",
           sellerName: "Sアカウント",
+          shipping: "free",
           shippingInfo: "らくらくメルカリ便（送料込み）",
         },
         {
@@ -138,6 +147,7 @@ export const MOCK_RESULT: SearchResult = {
           url: "https://jp.mercari.com/item/m2",
           thumbnail: "https://picsum.photos/seed/m2cam/240/240",
           condition: "やや傷や汚れあり",
+          shipping: "free",
         },
         {
           id: "m3",
@@ -147,6 +157,7 @@ export const MOCK_RESULT: SearchResult = {
           url: "https://jp.mercari.com/item/m3",
           thumbnail: "https://picsum.photos/seed/m3cam/240/240",
           condition: "やや傷や汚れあり",
+          shipping: "free",
         },
         {
           id: "m4",
@@ -156,6 +167,7 @@ export const MOCK_RESULT: SearchResult = {
           url: "https://jp.mercari.com/item/m4",
           thumbnail: "https://picsum.photos/seed/m4cam/240/240",
           condition: "傷や汚れあり",
+          shipping: "free",
         },
         {
           id: "m5",
@@ -165,6 +177,7 @@ export const MOCK_RESULT: SearchResult = {
           url: "https://jp.mercari.com/item/m5",
           thumbnail: "https://picsum.photos/seed/m5cam/240/240",
           condition: "傷や汚れあり",
+          shipping: "free",
         },
         {
           id: "m6",
@@ -174,6 +187,7 @@ export const MOCK_RESULT: SearchResult = {
           url: "https://jp.mercari.com/item/m6",
           thumbnail: "https://picsum.photos/seed/m6cam/240/240",
           condition: "全体的に状態が悪い",
+          shipping: "paid",
         },
       ],
     },
@@ -201,6 +215,7 @@ export const MOCK_RESULT: SearchResult = {
           sellerName: "user_setagaya",
           location: "東京都 世田谷区",
           accessories: ["バッテリー", "充電器", "ストラップ"],
+          shipping: "pickup",
         },
         {
           id: "j2",
@@ -210,6 +225,7 @@ export const MOCK_RESULT: SearchResult = {
           url: "https://jmty.jp/item/j2",
           thumbnail: "https://picsum.photos/seed/j2cam/240/240",
           condition: "中古",
+          shipping: "pickup",
         },
         {
           id: "j3",
@@ -219,6 +235,7 @@ export const MOCK_RESULT: SearchResult = {
           url: "https://jmty.jp/item/j3",
           thumbnail: "https://picsum.photos/seed/j3cam/240/240",
           condition: "中古",
+          shipping: "pickup",
         },
         {
           id: "j4",
@@ -228,6 +245,7 @@ export const MOCK_RESULT: SearchResult = {
           url: "https://jmty.jp/item/j4",
           thumbnail: "https://picsum.photos/seed/j4cam/240/240",
           condition: "中古",
+          shipping: "pickup",
         },
         {
           id: "j5",
@@ -237,6 +255,7 @@ export const MOCK_RESULT: SearchResult = {
           url: "https://jmty.jp/item/j5",
           thumbnail: "https://picsum.photos/seed/j5cam/240/240",
           condition: "中古",
+          shipping: "pickup",
         },
       ],
     },

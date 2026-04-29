@@ -31,6 +31,7 @@ type Tab = "searches" | "views";
 export default function HistoryPage() {
   const [tab, setTab] = useState<Tab>("searches");
   const [pinnedOnly, setPinnedOnly] = useState(false);
+  const [memoOnly, setMemoOnly] = useState(false);
 
   return (
     <AppShell>
@@ -77,12 +78,15 @@ export default function HistoryPage() {
           <span className="text-sm">新しい検索を開始</span>
         </Link>
 
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <button
             type="button"
-            onClick={() => setPinnedOnly(false)}
+            onClick={() => {
+              setPinnedOnly(false);
+              setMemoOnly(false);
+            }}
             className={
-              !pinnedOnly
+              !pinnedOnly && !memoOnly
                 ? "shrink-0 h-8 px-3 rounded-full text-xs font-semibold border-2 border-primary bg-primary/5 text-primary"
                 : "shrink-0 h-8 px-3 rounded-full text-xs font-medium border border-border text-foreground bg-surface"
             }
@@ -91,7 +95,7 @@ export default function HistoryPage() {
           </button>
           <button
             type="button"
-            onClick={() => setPinnedOnly(true)}
+            onClick={() => setPinnedOnly(!pinnedOnly)}
             className={
               pinnedOnly
                 ? "shrink-0 h-8 px-3 rounded-full text-xs font-semibold border-2 border-warning bg-warning/10 text-warning flex items-center gap-1"
@@ -101,19 +105,37 @@ export default function HistoryPage() {
             <Star size={12} fill={pinnedOnly ? "currentColor" : "none"} />
             ピン留めのみ
           </button>
+          <button
+            type="button"
+            onClick={() => setMemoOnly(!memoOnly)}
+            className={
+              memoOnly
+                ? "shrink-0 h-8 px-3 rounded-full text-xs font-semibold border-2 border-primary bg-primary/5 text-primary flex items-center gap-1"
+                : "shrink-0 h-8 px-3 rounded-full text-xs font-medium border border-border text-foreground bg-surface flex items-center gap-1"
+            }
+          >
+            <StickyNote size={12} />
+            メモあり
+          </button>
         </div>
 
         {tab === "searches" ? (
-          <SearchHistoryList pinnedOnly={pinnedOnly} />
+          <SearchHistoryList pinnedOnly={pinnedOnly} memoOnly={memoOnly} />
         ) : (
-          <ViewHistoryList pinnedOnly={pinnedOnly} />
+          <ViewHistoryList pinnedOnly={pinnedOnly} memoOnly={memoOnly} />
         )}
       </div>
     </AppShell>
   );
 }
 
-function SearchHistoryList({ pinnedOnly }: { pinnedOnly: boolean }) {
+function SearchHistoryList({
+  pinnedOnly,
+  memoOnly,
+}: {
+  pinnedOnly: boolean;
+  memoOnly: boolean;
+}) {
   const items = useMemo(
     () =>
       MOCK_HISTORY.map((h) => ({
@@ -135,6 +157,7 @@ function SearchHistoryList({ pinnedOnly }: { pinnedOnly: boolean }) {
           totalCount={h.totalCount}
           searchedAt={h.searchedAt}
           pinnedOnly={pinnedOnly}
+          memoOnly={memoOnly}
         />
       ))}
     </div>
@@ -149,6 +172,7 @@ function SearchHistoryCard({
   totalCount,
   searchedAt,
   pinnedOnly,
+  memoOnly,
 }: {
   id: string;
   keyword: string;
@@ -157,11 +181,13 @@ function SearchHistoryCard({
   totalCount: number;
   searchedAt: string;
   pinnedOnly: boolean;
+  memoOnly: boolean;
 }) {
   const memo = useMemoValue(searchKey);
   const pinned = usePinnedValue(searchKey);
 
   if (pinnedOnly && !pinned) return null;
+  if (memoOnly && !memo) return null;
 
   const href = `/search/result/${id}?keyword=${encodeURIComponent(keyword)}&period=30&sources=yahoo_auction,mercari,jimoty`;
 
@@ -211,7 +237,13 @@ function SearchHistoryCard({
   );
 }
 
-function ViewHistoryList({ pinnedOnly }: { pinnedOnly: boolean }) {
+function ViewHistoryList({
+  pinnedOnly,
+  memoOnly,
+}: {
+  pinnedOnly: boolean;
+  memoOnly: boolean;
+}) {
   const views = useListingViews();
 
   if (views.length === 0) {
@@ -233,6 +265,7 @@ function ViewHistoryList({ pinnedOnly }: { pinnedOnly: boolean }) {
           key={v.ref + v.viewedAt}
           view={v}
           pinnedOnly={pinnedOnly}
+          memoOnly={memoOnly}
         />
       ))}
     </div>
@@ -242,14 +275,17 @@ function ViewHistoryList({ pinnedOnly }: { pinnedOnly: boolean }) {
 function ViewHistoryCard({
   view,
   pinnedOnly,
+  memoOnly,
 }: {
   view: ListingViewSnapshot;
   pinnedOnly: boolean;
+  memoOnly: boolean;
 }) {
   const pinned = useListingPinnedValue(view.ref);
   const memo = useListingMemoValue(view.ref);
 
   if (pinnedOnly && !pinned) return null;
+  if (memoOnly && !memo) return null;
 
   const detailHref = `/search/result/recent/listing/${view.ref}${
     view.fromKeyword
