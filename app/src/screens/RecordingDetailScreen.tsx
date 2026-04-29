@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -305,39 +305,63 @@ export function RecordingDetailScreen({ recordingId, onBack }: Props) {
 }
 
 /**
- * expo-audio の useAudioPlayer は React フックなので必ず最上位で呼ぶ。
- * URL がある時だけこのコンポーネントを描画する形で使うため、別コンポーネントに分離。
+ * expo-av の Audio.Sound を使った再生ボタン。
+ * URL がある時だけこのコンポーネントを描画する。
  * web/DEMO 環境では SUPPORTS_NATIVE_PLAYBACK が false なので呼ばれない。
  */
 function NativePlaybackButton({ url }: { url: string }) {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { useAudioPlayer, useAudioPlayerStatus } = require('expo-audio');
-  const player = useAudioPlayer({ uri: url });
-  const status = useAudioPlayerStatus(player);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const soundRef = useRef<any>(null);
 
-  function handle() {
-    if (!player) return;
-    if (status?.playing) {
-      player.pause();
-    } else {
-      // 再生終了後にもう一度押した時のため、頭出ししてから再生
-      if (status && status.currentTime != null && status.duration != null) {
-        if (status.currentTime >= status.duration - 0.1) {
-          try {
-            player.seekTo(0);
-          } catch {
-            // ignore
-          }
+  useEffect(() => {
+    return () => {
+      if (soundRef.current) {
+        try {
+          soundRef.current.unloadAsync();
+        } catch {
+          // ignore
         }
+        soundRef.current = null;
       }
-      player.play();
+    };
+  }, []);
+
+  async function handle() {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { Audio } = require('expo-av');
+      if (!soundRef.current) {
+        const { sound } = await Audio.Sound.createAsync({ uri: url });
+        soundRef.current = sound;
+        sound.setOnPlaybackStatusUpdate((status: any) => {
+          if (status?.didJustFinish) {
+            setIsPlaying(false);
+          } else if (status?.isLoaded) {
+            setIsPlaying(!!status.isPlaying);
+          }
+        });
+        await sound.playAsync();
+        return;
+      }
+      const status = await soundRef.current.getStatusAsync();
+      if (status.isPlaying) {
+        await soundRef.current.pauseAsync();
+      } else {
+        if (status.positionMillis != null && status.durationMillis != null
+            && status.positionMillis >= status.durationMillis - 100) {
+          await soundRef.current.setPositionAsync(0);
+        }
+        await soundRef.current.playAsync();
+      }
+    } catch (e) {
+      Alert.alert('再生エラー', e instanceof Error ? e.message : '不明なエラー');
     }
   }
 
   return (
     <Pressable style={styles.playButton} onPress={handle}>
       <Text style={styles.playButtonText}>
-        {status?.playing ? '⏸ 一時停止' : '▶ 再生'}
+        {isPlaying ? '⏸ 一時停止' : '▶ 再生'}
       </Text>
     </Pressable>
   );
