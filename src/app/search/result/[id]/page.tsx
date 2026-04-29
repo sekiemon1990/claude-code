@@ -54,6 +54,7 @@ import {
   classifyCondition,
   type ConditionRank,
 } from "@/lib/conditions";
+import { generateSuggestions } from "@/lib/suggestions";
 import { ConditionBadge } from "@/components/ConditionBadge";
 import {
   SOURCES,
@@ -409,6 +410,26 @@ function ResultInner({ resultId }: { resultId: string }) {
             ）からデータが取得できませんでした。表示は他の媒体のみの結果です。
           </p>
         </section>
+      )}
+
+      {/* キーワード提案 */}
+      {!isEmpty && (
+        <SuggestionsSection
+          listings={flatListings}
+          keyword={keyword}
+          onAdd={(term) => {
+            const next = new URLSearchParams(params.toString());
+            next.set("keyword", `${keyword} ${term}`.trim());
+            router.push(`/search/loading?${next.toString()}`);
+          }}
+          onExclude={(term) => {
+            setRefine((prev) =>
+              prev.trim() ? `${prev} ${term}` : term
+            );
+            setRefineOpen(true);
+            setExtraPages(0);
+          }}
+        />
       )}
 
       {/* 一覧コントロール */}
@@ -805,6 +826,92 @@ function ResultInner({ resultId }: { resultId: string }) {
         />
       )}
     </div>
+  );
+}
+
+function SuggestionsSection({
+  listings,
+  keyword,
+  onAdd,
+  onExclude,
+}: {
+  listings: { title: string }[];
+  keyword: string;
+  onAdd: (term: string) => void;
+  onExclude: (term: string) => void;
+}) {
+  const [hidden, setHidden] = useState(false);
+  const suggestions = useMemo(
+    () => generateSuggestions(listings, keyword),
+    [listings, keyword]
+  );
+
+  if (listings.length < 10) return null;
+  if (suggestions.additions.length === 0 && suggestions.excludes.length === 0) {
+    return null;
+  }
+  if (hidden) return null;
+
+  return (
+    <section className="bg-surface border border-border rounded-xl p-4">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Sparkles size={14} className="text-primary" />
+          <span className="text-sm font-semibold text-foreground">
+            こんな絞り込みは？
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={() => setHidden(true)}
+          className="text-xs text-muted hover:text-foreground"
+        >
+          非表示
+        </button>
+      </div>
+
+      {suggestions.additions.length > 0 && (
+        <div className="mb-3">
+          <div className="text-[11px] text-muted mb-1.5">
+            追加（タップで再検索）
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {suggestions.additions.map((s) => (
+              <button
+                key={s.term}
+                type="button"
+                onClick={() => onAdd(s.term)}
+                className="inline-flex items-center gap-1 h-7 px-2.5 rounded-full text-xs font-medium border border-primary/30 bg-primary/5 text-primary hover:bg-primary/10"
+              >
+                + {s.term}
+                <span className="text-[10px] opacity-60">{s.count}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {suggestions.excludes.length > 0 && (
+        <div>
+          <div className="text-[11px] text-muted mb-1.5">
+            除外（タップで一覧から除外）
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {suggestions.excludes.map((s) => (
+              <button
+                key={s.term}
+                type="button"
+                onClick={() => onExclude(s.term)}
+                className="inline-flex items-center gap-1 h-7 px-2.5 rounded-full text-xs font-medium border border-danger/30 bg-danger/5 text-danger hover:bg-danger/10"
+              >
+                − {s.term}
+                <span className="text-[10px] opacity-60">{s.count}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 

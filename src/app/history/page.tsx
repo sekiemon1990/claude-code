@@ -32,6 +32,7 @@ export default function HistoryPage() {
   const [tab, setTab] = useState<Tab>("searches");
   const [pinnedOnly, setPinnedOnly] = useState(false);
   const [memoOnly, setMemoOnly] = useState(false);
+  const [query, setQuery] = useState("");
 
   return (
     <AppShell>
@@ -70,13 +71,29 @@ export default function HistoryPage() {
           </button>
         </div>
 
-        <Link
-          href="/search"
-          className="flex items-center gap-2 h-12 rounded-lg bg-surface border border-border hover:border-primary/40 px-4 text-foreground"
-        >
-          <SearchIcon size={18} className="text-muted" />
-          <span className="text-sm">新しい検索を開始</span>
-        </Link>
+        <div className="relative">
+          <SearchIcon
+            size={16}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none"
+          />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="履歴を検索"
+            className="w-full h-11 pl-9 pr-9 rounded-lg bg-surface border border-border text-foreground placeholder:text-muted text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label="クリア"
+              className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full text-muted hover:bg-surface-2 flex items-center justify-center"
+            >
+              ✕
+            </button>
+          )}
+        </div>
 
         <div className="flex gap-2 flex-wrap">
           <button
@@ -120,9 +137,17 @@ export default function HistoryPage() {
         </div>
 
         {tab === "searches" ? (
-          <SearchHistoryList pinnedOnly={pinnedOnly} memoOnly={memoOnly} />
+          <SearchHistoryList
+            pinnedOnly={pinnedOnly}
+            memoOnly={memoOnly}
+            query={query}
+          />
         ) : (
-          <ViewHistoryList pinnedOnly={pinnedOnly} memoOnly={memoOnly} />
+          <ViewHistoryList
+            pinnedOnly={pinnedOnly}
+            memoOnly={memoOnly}
+            query={query}
+          />
         )}
       </div>
     </AppShell>
@@ -132,18 +157,28 @@ export default function HistoryPage() {
 function SearchHistoryList({
   pinnedOnly,
   memoOnly,
+  query,
 }: {
   pinnedOnly: boolean;
   memoOnly: boolean;
+  query: string;
 }) {
-  const items = useMemo(
-    () =>
-      MOCK_HISTORY.map((h) => ({
-        ...h,
-        searchKey: searchKeyFromKeyword(h.keyword),
-      })),
-    []
-  );
+  const items = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return MOCK_HISTORY.map((h) => ({
+      ...h,
+      searchKey: searchKeyFromKeyword(h.keyword),
+    })).filter((h) => !q || h.keyword.toLowerCase().includes(q));
+  }, [query]);
+
+  if (items.length === 0) {
+    return (
+      <div className="bg-surface border border-border rounded-xl p-8 text-center">
+        <SearchIcon className="text-muted mx-auto mb-2" size={28} />
+        <p className="text-sm text-muted">該当する検索履歴がありません</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-2">
@@ -240,13 +275,25 @@ function SearchHistoryCard({
 function ViewHistoryList({
   pinnedOnly,
   memoOnly,
+  query,
 }: {
   pinnedOnly: boolean;
   memoOnly: boolean;
+  query: string;
 }) {
-  const views = useListingViews();
+  const allViews = useListingViews();
 
-  if (views.length === 0) {
+  const views = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return allViews;
+    return allViews.filter(
+      (v) =>
+        v.title.toLowerCase().includes(q) ||
+        (v.fromKeyword?.toLowerCase().includes(q) ?? false)
+    );
+  }, [allViews, query]);
+
+  if (allViews.length === 0) {
     return (
       <div className="bg-surface border border-border rounded-xl p-8 text-center">
         <Eye className="text-muted mx-auto mb-2" size={28} />
@@ -254,6 +301,15 @@ function ViewHistoryList({
         <p className="text-xs text-muted mt-1 leading-relaxed">
           検索結果から商品の詳細を開くと、ここに記録されます
         </p>
+      </div>
+    );
+  }
+
+  if (views.length === 0) {
+    return (
+      <div className="bg-surface border border-border rounded-xl p-8 text-center">
+        <SearchIcon className="text-muted mx-auto mb-2" size={28} />
+        <p className="text-sm text-muted">該当する閲覧履歴がありません</p>
       </div>
     );
   }
