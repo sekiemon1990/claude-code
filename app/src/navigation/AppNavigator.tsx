@@ -4,7 +4,7 @@ import {
   type NavigationContainerRef,
   type LinkingOptions,
 } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createStackNavigator } from '@react-navigation/stack';
 import { ActivityIndicator, Alert, Platform, View } from 'react-native';
 import * as Linking from 'expo-linking';
 
@@ -25,7 +25,9 @@ export type RootStackParamList = {
   Detail: { recordingId: string };
 };
 
-const Stack = createNativeStackNavigator<RootStackParamList>();
+// JS ベースの Stack。native-stack は iOS 26 で react-native-screens 経由の
+// StatusBar 操作がクラッシュするため、JS Stack に切り替え。
+const Stack = createStackNavigator<RootStackParamList>();
 
 // 実機（ネイティブ）でだけ React Navigation の linking 機能を有効化する。
 // Web/DEMO 環境で linking を有効にすると、baseUrl と React Navigation の
