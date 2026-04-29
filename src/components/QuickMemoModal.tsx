@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { X, StickyNote } from "lucide-react";
 import {
-  getListingMemo,
   setListingMemo,
+  useListingMemoValue,
   haptic,
 } from "@/lib/storage";
 import { toast } from "@/lib/toast";
@@ -24,7 +24,14 @@ export function QuickMemoModal({
   price,
   onClose,
 }: Props) {
-  const [memo, setMemo] = useState(() => getListingMemo(listingRef));
+  const initialMemo = useListingMemoValue(listingRef);
+  const [memo, setMemo] = useState(initialMemo);
+
+  // Supabase からメモが取得されたら textarea の内容を初期化
+  useEffect(() => {
+    setMemo(initialMemo);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listingRef]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
