@@ -33,7 +33,7 @@ import {
   type SavedAdvice,
 } from "@/lib/storage";
 import { classifyCondition } from "@/lib/conditions";
-import { useAllLists, switchToList, getCurrentList } from "@/lib/list";
+import { useAllLists, useCurrentList, switchToList } from "@/lib/list";
 import { useRouter } from "next/navigation";
 import { toast } from "@/lib/toast";
 
@@ -651,7 +651,7 @@ function TabBtn({
 function SavedListsHistory({ query }: { query: string }) {
   const lists = useAllLists();
   const router = useRouter();
-  const current = getCurrentList();
+  const current = useCurrentList();
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
