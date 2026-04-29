@@ -18,7 +18,8 @@ import { AppShell } from "@/components/AppShell";
 import { SourceBadge } from "@/components/SourceBadge";
 import { ConditionBadge } from "@/components/ConditionBadge";
 import { MOCK_HISTORY } from "@/lib/mock-data";
-import { formatYen, formatCount, formatRelativeDate } from "@/lib/utils";
+import { formatYen, formatCount } from "@/lib/utils";
+import { RelativeDate } from "@/components/RelativeDate";
 import {
   searchKeyFromKeyword,
   useMemoValue,
@@ -336,7 +337,7 @@ function SearchHistoryCard({
           <span className="text-xs text-muted">{formatCount(totalCount)}</span>
         </div>
         <div className="text-xs text-muted mt-1">
-          {formatRelativeDate(searchedAt)}
+          <RelativeDate iso={searchedAt} />
         </div>
       </div>
       <ChevronRight size={18} className="text-muted shrink-0 mt-1" />
@@ -480,7 +481,7 @@ function ViewHistoryCard({
             </span>
           </div>
           <div className="text-xs text-muted mt-1">
-            閲覧: {formatRelativeDate(view.viewedAt)}
+            閲覧: <RelativeDate iso={view.viewedAt} />
             {view.fromKeyword && (
               <span className="ml-2">・ 検索: {view.fromKeyword}</span>
             )}
@@ -608,7 +609,7 @@ function AdviceCard({ advice }: { advice: SavedAdvice }) {
       </div>
 
       <div className="flex items-center justify-between text-[10px] text-muted">
-        <span>保存: {formatRelativeDate(advice.savedAt)}</span>
+        <span>保存: <RelativeDate iso={advice.savedAt} /></span>
         <Link
           href={href}
           className="text-primary hover:underline"
@@ -724,7 +725,7 @@ function SavedListsHistory({ query }: { query: string }) {
                 )}
               </div>
               <span className="text-[10px] text-muted shrink-0">
-                {formatRelativeDate(l.updatedAt)}
+                <RelativeDate iso={l.updatedAt} />
               </span>
             </div>
             {l.items.length > 0 && (

@@ -23,7 +23,8 @@ import { ImageLightbox } from "@/components/ImageLightbox";
 import { ConditionBadge } from "@/components/ConditionBadge";
 import { ShippingBadge } from "@/components/ShippingBadge";
 import { MOCK_RESULT } from "@/lib/mock-data";
-import { formatYen, formatRelativeDate } from "@/lib/utils";
+import { formatYen, formatJSTDateTime } from "@/lib/utils";
+import { RelativeDate } from "@/components/RelativeDate";
 import { detectAccessories } from "@/lib/accessories";
 import { classifyCondition } from "@/lib/conditions";
 import { calculateNetValue } from "@/lib/net-value";
@@ -209,14 +210,8 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
         <DetailRow
           icon={<CalendarDays size={16} />}
           label={meta.status}
-          value={formatRelativeDate(listing.endedAt)}
-          sub={new Date(listing.endedAt).toLocaleString("ja-JP", {
-            year: "numeric",
-            month: "2-digit",
-            day: "2-digit",
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
+          value={<RelativeDate iso={listing.endedAt} />}
+          sub={formatJSTDateTime(listing.endedAt)}
         />
         {listing.sellerName && (
           <DetailRow
@@ -617,7 +612,7 @@ function DetailRow({
 }: {
   icon: React.ReactNode;
   label: string;
-  value: string;
+  value: React.ReactNode;
   sub?: string;
 }) {
   return (
