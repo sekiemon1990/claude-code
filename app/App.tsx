@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { Platform, ScrollView, Text, View } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+
+// 注意: <StatusBar /> (expo-status-bar / RN StatusBar) は iOS 26+ で
+// RCTStatusBarManager.setStyle が Scene API と非互換でクラッシュするため、
+// 一切使わない。ステータスバーのスタイルは OS デフォルトに任せる。
 
 // === グローバル JS エラーキャプチャ ===
 // クラッシュ瞬間の JS エラーメッセージを画面に出すため、ErrorUtils と
@@ -339,7 +342,6 @@ export default function App() {
   return (
     <AppErrorBoundary>
       <SafeAreaProvider>
-        <StatusBar style="auto" />
         <AppContent />
         <GlobalErrorBanner />
       </SafeAreaProvider>

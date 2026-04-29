@@ -31,28 +31,8 @@ type Props = {
   onChangeDeal: () => void;
 };
 
-export function RecordScreen({ deal, onDone, onChangeDeal }: Props) {
-  // === 究極の単純化テスト ===
-  // RecordScreen 関数本体が実行される前にクラッシュしているか確認するため、
-  // 一切のフックを呼ばず、ただ Text を返すだけにする。
-  // これでもクラッシュするなら原因はこの関数より外（react-native-screens の
-  // 画面プッシュ、ヘッダー描画、ナビゲーションパラメータの直列化など）。
-  return (
-    <View style={{ flex: 1, padding: 24, paddingTop: 60, backgroundColor: '#0a2540' }}>
-      <Text style={{ color: '#fff', fontSize: 22, fontWeight: '700' }}>
-        ✓ RecordScreen マウント成功
-      </Text>
-      <Text style={{ color: '#94A3B8', marginTop: 12 }}>
-        案件: {deal.customerName}
-      </Text>
-      <Pressable
-        onPress={onDone}
-        style={{ backgroundColor: '#2563EB', padding: 14, borderRadius: 8, marginTop: 24 }}
-      >
-        <Text style={{ color: '#fff' }}>戻る</Text>
-      </Pressable>
-    </View>
-  );
+export function RecordScreen(props: Props) {
+  return <RecordScreenInner {...props} />;
 }
 
 function _UnusedDiagnosticStages({
