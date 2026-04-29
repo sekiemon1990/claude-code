@@ -1,16 +1,52 @@
 "use client";
 
-import { Type, Vibrate, Sparkles, Calculator } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Type, Vibrate, Sparkles, Calculator, LogOut, User, Loader2 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { useSettings, useTheme } from "@/lib/storage";
+import { createClient } from "@/lib/supabase/client";
+import { signOut } from "@/app/auth/actions";
 
 export default function SettingsPage() {
   const [settings, update] = useSettings();
   const [theme, toggleTheme] = useTheme();
+  const [email, setEmail] = useState<string | null>(null);
+  const [signingOut, setSigningOut] = useState(false);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data }) => {
+      setEmail(data.user?.email ?? null);
+    });
+  }, []);
+
+  async function handleSignOut() {
+    if (signingOut) return;
+    setSigningOut(true);
+    await signOut();
+  }
 
   return (
     <AppShell back={{ href: "/search", label: "戻る" }} title="設定">
       <div className="flex flex-col gap-4">
+        {email && (
+          <section className="bg-surface border border-border rounded-xl p-4">
+            <div className="flex items-center gap-3">
+              <div
+                aria-hidden
+                className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0"
+              >
+                <User size={18} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] text-muted">ログイン中</p>
+                <p className="text-sm font-semibold text-foreground truncate">
+                  {email}
+                </p>
+              </div>
+            </div>
+          </section>
+        )}
         <section className="bg-surface border border-border rounded-xl p-4">
           <div className="flex items-center gap-2 mb-3">
             <Type size={16} className="text-primary" />
@@ -123,9 +159,27 @@ export default function SettingsPage() {
 
         <section className="bg-surface-2 rounded-xl p-3">
           <p className="text-xs text-muted leading-relaxed">
-            設定は端末のブラウザに保存されます。端末を変えると引き継がれません。
+            一部の設定（テーマ・文字サイズ等）は端末のブラウザに保存されます。
           </p>
         </section>
+
+        {email && (
+          <section className="mt-2">
+            <button
+              type="button"
+              onClick={handleSignOut}
+              disabled={signingOut}
+              className="tap-scale w-full h-12 rounded-lg border border-danger/40 text-danger text-sm font-semibold hover:bg-danger/5 disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {signingOut ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <LogOut size={16} />
+              )}
+              ログアウト
+            </button>
+          </section>
+        )}
       </div>
     </AppShell>
   );
