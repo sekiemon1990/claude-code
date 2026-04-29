@@ -10,6 +10,8 @@ import {
   Eye,
   History as HistoryIcon,
   X as XIcon,
+  Sparkles,
+  Trash2,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { SourceBadge } from "@/components/SourceBadge";
@@ -23,11 +25,14 @@ import {
   useListingMemoValue,
   useListingPinnedValue,
   useListingViews,
+  useSavedAdvices,
+  removeSavedAdvice,
   type ListingViewSnapshot,
+  type SavedAdvice,
 } from "@/lib/storage";
 import { classifyCondition } from "@/lib/conditions";
 
-type Tab = "searches" | "views";
+type Tab = "searches" | "views" | "advices";
 
 const DATE_GROUP_ORDER = [
   "今日",
@@ -88,30 +93,42 @@ export default function HistoryPage() {
           </p>
         </section>
 
-        <div className="grid grid-cols-2 bg-surface-2 rounded-lg p-1 gap-1">
+        <div className="grid grid-cols-3 bg-surface-2 rounded-lg p-1 gap-1">
           <button
             type="button"
             onClick={() => setTab("searches")}
             className={
               tab === "searches"
-                ? "h-9 rounded-md text-sm font-semibold bg-surface text-foreground shadow-sm flex items-center justify-center gap-1.5"
-                : "h-9 rounded-md text-sm font-medium text-muted hover:text-foreground flex items-center justify-center gap-1.5"
+                ? "h-9 rounded-md text-xs font-semibold bg-surface text-foreground shadow-sm flex items-center justify-center gap-1"
+                : "h-9 rounded-md text-xs font-medium text-muted hover:text-foreground flex items-center justify-center gap-1"
             }
           >
-            <HistoryIcon size={14} />
-            検索履歴
+            <HistoryIcon size={12} />
+            検索
           </button>
           <button
             type="button"
             onClick={() => setTab("views")}
             className={
               tab === "views"
-                ? "h-9 rounded-md text-sm font-semibold bg-surface text-foreground shadow-sm flex items-center justify-center gap-1.5"
-                : "h-9 rounded-md text-sm font-medium text-muted hover:text-foreground flex items-center justify-center gap-1.5"
+                ? "h-9 rounded-md text-xs font-semibold bg-surface text-foreground shadow-sm flex items-center justify-center gap-1"
+                : "h-9 rounded-md text-xs font-medium text-muted hover:text-foreground flex items-center justify-center gap-1"
             }
           >
-            <Eye size={14} />
-            閲覧履歴
+            <Eye size={12} />
+            閲覧
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("advices")}
+            className={
+              tab === "advices"
+                ? "h-9 rounded-md text-xs font-semibold bg-surface text-foreground shadow-sm flex items-center justify-center gap-1"
+                : "h-9 rounded-md text-xs font-medium text-muted hover:text-foreground flex items-center justify-center gap-1"
+            }
+          >
+            <Sparkles size={12} />
+            AI査定
           </button>
         </div>
 
@@ -180,19 +197,21 @@ export default function HistoryPage() {
           </button>
         </div>
 
-        {tab === "searches" ? (
+        {tab === "searches" && (
           <SearchHistoryList
             pinnedOnly={pinnedOnly}
             memoOnly={memoOnly}
             query={query}
           />
-        ) : (
+        )}
+        {tab === "views" && (
           <ViewHistoryList
             pinnedOnly={pinnedOnly}
             memoOnly={memoOnly}
             query={query}
           />
         )}
+        {tab === "advices" && <AdviceHistoryList query={query} />}
       </div>
     </AppShell>
   );
@@ -489,5 +508,121 @@ function ViewHistoryCard({
         </div>
       )}
     </Link>
+  );
+}
+
+function AdviceHistoryList({ query }: { query: string }) {
+  const all = useSavedAdvices();
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return all;
+    return all.filter(
+      (a) =>
+        a.keyword.toLowerCase().includes(q) ||
+        a.summary.toLowerCase().includes(q)
+    );
+  }, [all, query]);
+
+  const groups = useMemo(
+    () => groupByDate(filtered, (a) => a.savedAt),
+    [filtered]
+  );
+
+  if (all.length === 0) {
+    return (
+      <div className="bg-surface border border-border rounded-xl p-8 text-center">
+        <Sparkles className="text-muted mx-auto mb-2" size={28} />
+        <p className="text-sm text-muted">保存されたAI査定がありません</p>
+        <p className="text-xs text-muted mt-1 leading-relaxed">
+          結果画面の「査定ツール」→ AI査定で「保存」を押すと、ここに記録されます
+        </p>
+      </div>
+    );
+  }
+
+  if (filtered.length === 0) {
+    return (
+      <div className="bg-surface border border-border rounded-xl p-8 text-center">
+        <SearchIcon className="text-muted mx-auto mb-2" size={28} />
+        <p className="text-sm text-muted">該当するAI査定がありません</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      {DATE_GROUP_ORDER.map((g) => {
+        const list = groups[g];
+        if (list.length === 0) return null;
+        return (
+          <div key={g} className="flex flex-col gap-2">
+            <div className="text-[11px] font-semibold text-muted px-1">{g}</div>
+            {list.map((a) => (
+              <AdviceCard key={a.searchKey + a.savedAt} advice={a} />
+            ))}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function AdviceCard({ advice }: { advice: SavedAdvice }) {
+  const href = `/search/result/recent?keyword=${encodeURIComponent(advice.keyword)}&period=30&sources=yahoo_auction,mercari,jimoty`;
+
+  return (
+    <div className="bg-gradient-to-br from-primary/5 to-accent/5 border border-primary/20 rounded-xl p-3">
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <Link href={href} className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 mb-1">
+            <Sparkles size={12} className="text-primary shrink-0" />
+            <p className="text-xs font-semibold text-primary truncate">
+              {advice.keyword}
+            </p>
+          </div>
+          {advice.productGuess && (
+            <p className="text-sm font-bold text-foreground line-clamp-1">
+              {advice.productGuess}
+            </p>
+          )}
+        </Link>
+        <button
+          type="button"
+          onClick={() => removeSavedAdvice(advice.searchKey)}
+          aria-label="削除"
+          className="shrink-0 w-7 h-7 rounded-md text-muted hover:bg-surface-2 hover:text-danger flex items-center justify-center"
+        >
+          <Trash2 size={14} />
+        </button>
+      </div>
+
+      <p className="text-xs text-foreground line-clamp-3 leading-relaxed mb-2.5">
+        {advice.summary}
+      </p>
+
+      <div className="grid grid-cols-2 gap-1.5 mb-2">
+        {advice.recommendations.slice(0, 4).map((r) => (
+          <div
+            key={r.rank}
+            className="bg-surface border border-border rounded p-1.5"
+          >
+            <div className="text-[10px] text-muted">{r.rank}</div>
+            <div className="text-xs font-bold text-foreground">
+              ¥{r.price.toLocaleString("ja-JP")}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex items-center justify-between text-[10px] text-muted">
+        <span>保存: {formatRelativeDate(advice.savedAt)}</span>
+        <Link
+          href={href}
+          className="text-primary hover:underline"
+        >
+          検索を開く →
+        </Link>
+      </div>
+    </div>
   );
 }

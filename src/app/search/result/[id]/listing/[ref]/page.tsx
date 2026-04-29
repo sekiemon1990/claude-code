@@ -26,7 +26,7 @@ import { MOCK_RESULT } from "@/lib/mock-data";
 import { formatYen, formatRelativeDate } from "@/lib/utils";
 import { detectAccessories } from "@/lib/accessories";
 import { classifyCondition } from "@/lib/conditions";
-import { estimateShipping } from "@/lib/shipping-estimate";
+import { calculateNetValue } from "@/lib/net-value";
 import {
   recordListingView,
   setListingMemo,
@@ -242,10 +242,11 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
       </section>
 
       {/* 送料の想定 */}
-      <ShippingEstimateSection
+      <NetValueSection
         title={listing.title}
         price={listing.price}
         shipping={listing.shipping}
+        source={source}
       />
 
       {/* 付属品 */}
@@ -471,56 +472,86 @@ function ImageGallery({
   );
 }
 
-function ShippingEstimateSection({
+function NetValueSection({
   title,
   price,
   shipping,
+  source,
 }: {
   title: string;
   price: number;
   shipping?: "free" | "paid" | "pickup";
+  source: SourceKey;
 }) {
-  if (shipping !== "free") return null;
+  if (!shipping) return null;
 
-  const est = estimateShipping(title);
-  const netValue = price - est.amount;
+  const breakdown = calculateNetValue({
+    source,
+    shipping,
+    listedPrice: price,
+    title,
+  });
+
+  const meta = SOURCES.find((s) => s.key === source)!;
 
   return (
     <section className="bg-warning/10 border border-warning/30 rounded-xl p-4">
       <div className="flex items-center gap-2 mb-2">
         <Truck size={16} className="text-warning" />
         <h2 className="text-sm font-semibold text-foreground">
-          送料の想定（送料無料の内訳）
+          実質商品価値の内訳
         </h2>
       </div>
       <p className="text-xs text-muted leading-relaxed mb-3">
-        表示価格は送料込みです。利益計算では送料分を控除した
-        「実質商品価値」を基準にしてください。
+        表示価格から手数料・送料・販売コストを差し引いた、
+        実際に手元に残る「商品としての価値」です。買取額の判断基準に。
       </p>
       <div className="space-y-1.5 text-sm">
         <div className="flex items-center justify-between">
           <span className="text-muted">表示価格</span>
           <span className="font-semibold text-foreground">
-            ¥{price.toLocaleString("ja-JP")}
+            ¥{breakdown.listedPrice.toLocaleString("ja-JP")}
           </span>
         </div>
-        <div className="flex items-center justify-between">
-          <span className="text-muted">
-            想定送料（{est.size}）
-            {est.isDefault && (
-              <span className="ml-1 text-[10px] text-muted">概算</span>
-            )}
-          </span>
-          <span className="font-semibold text-warning">
-            − ¥{est.amount.toLocaleString("ja-JP")}
-          </span>
-        </div>
+        {breakdown.platformFee > 0 && (
+          <div className="flex items-center justify-between">
+            <span className="text-muted">
+              {meta.name}手数料
+              <span className="ml-1 text-[10px]">
+                ({Math.round(breakdown.platformFeeRate * 1000) / 10}%)
+              </span>
+            </span>
+            <span className="font-semibold text-warning">
+              − ¥{breakdown.platformFee.toLocaleString("ja-JP")}
+            </span>
+          </div>
+        )}
+        {breakdown.shippingCost > 0 && (
+          <div className="flex items-center justify-between">
+            <span className="text-muted">
+              想定送料
+              <span className="ml-1 text-[10px]">({breakdown.shippingSize})</span>
+            </span>
+            <span className="font-semibold text-warning">
+              − ¥{breakdown.shippingCost.toLocaleString("ja-JP")}
+            </span>
+          </div>
+        )}
+        {breakdown.salesCost > 0 && (
+          <div className="flex items-center justify-between">
+            <span className="text-muted">
+              販売コスト
+              <span className="ml-1 text-[10px]">(梱包・出品作業)</span>
+            </span>
+            <span className="font-semibold text-warning">
+              − ¥{breakdown.salesCost.toLocaleString("ja-JP")}
+            </span>
+          </div>
+        )}
         <div className="border-t border-border pt-1.5 flex items-center justify-between">
-          <span className="text-foreground font-semibold">
-            実質商品価値
-          </span>
+          <span className="text-foreground font-semibold">実質商品価値</span>
           <span className="text-base font-bold text-success">
-            ¥{netValue.toLocaleString("ja-JP")}
+            ¥{breakdown.netValue.toLocaleString("ja-JP")}
           </span>
         </div>
       </div>
