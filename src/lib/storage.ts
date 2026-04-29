@@ -155,6 +155,18 @@ export function useListingViews(): ListingViewSnapshot[] {
   return useStorageValue(reader);
 }
 
+// ---------- オンボーディング ----------
+
+const ONBOARDING_KEY = "onboarding_seen";
+
+export function hasSeenOnboarding(): boolean {
+  return read(ONBOARDING_KEY) === "1";
+}
+
+export function markOnboardingSeen(): void {
+  write(ONBOARDING_KEY, "1");
+}
+
 // ---------- AI査定アドバイスの保存 ----------
 
 export type SavedAdvice = {

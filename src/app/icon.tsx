@@ -15,13 +15,41 @@ export default function Icon() {
           justifyContent: "center",
           background: "linear-gradient(135deg, #1f6feb 0%, #0ea5e9 100%)",
           color: "white",
-          fontSize: 320,
+          fontSize: 280,
           fontWeight: 900,
-          letterSpacing: "-0.05em",
+          letterSpacing: "-0.08em",
           fontFamily: "-apple-system, BlinkMacSystemFont, sans-serif",
+          position: "relative",
         }}
       >
-        M
+        <span
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            transform: "translateY(-12px)",
+          }}
+        >
+          M
+        </span>
+        <span
+          style={{
+            position: "absolute",
+            bottom: 70,
+            right: 70,
+            width: 80,
+            height: 80,
+            borderRadius: "50%",
+            background: "rgba(255, 255, 255, 0.25)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 60,
+            fontWeight: 900,
+          }}
+        >
+          ¥
+        </span>
       </div>
     ),
     { ...size }

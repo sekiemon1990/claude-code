@@ -24,7 +24,7 @@ export function ImageLightbox({ src, alt, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 bg-black/85 anim-fade-in flex items-center justify-center p-4"
       onClick={onClose}
       role="dialog"
       aria-modal="true"

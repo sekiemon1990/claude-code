@@ -6,12 +6,15 @@
   --surface: #ffffff;
   --surface-2: #f1f3f6;
   --border: #e3e6ec;
-  --muted: #6b7280;
+  --muted: #5b6370;
   --primary: #1f6feb;
   --primary-foreground: #ffffff;
   --accent: #0ea5e9;
   --success: #16a34a;
-  --warning: #f59e0b;
+  --warning: #dc2626;
+  --info: #0ea5e9;
+  --pin: #f59e0b;
+  --memo: #d97706;
   --danger: #dc2626;
 }
 
@@ -21,12 +24,15 @@
   --surface: #14171f;
   --surface-2: #1c2029;
   --border: #2a2f3a;
-  --muted: #8a93a3;
+  --muted: #9aa3b3;
   --primary: #4f8dff;
   --primary-foreground: #ffffff;
   --accent: #38bdf8;
   --success: #22c55e;
-  --warning: #fbbf24;
+  --warning: #f87171;
+  --info: #38bdf8;
+  --pin: #fbbf24;
+  --memo: #f59e0b;
   --danger: #f87171;
 }
 
@@ -37,12 +43,15 @@
     --surface: #14171f;
     --surface-2: #1c2029;
     --border: #2a2f3a;
-    --muted: #8a93a3;
+    --muted: #9aa3b3;
     --primary: #4f8dff;
     --primary-foreground: #ffffff;
     --accent: #38bdf8;
     --success: #22c55e;
-    --warning: #fbbf24;
+    --warning: #f87171;
+    --info: #38bdf8;
+    --pin: #fbbf24;
+    --memo: #f59e0b;
     --danger: #f87171;
   }
 }
@@ -59,6 +68,9 @@
   --color-accent: var(--accent);
   --color-success: var(--success);
   --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-pin: var(--pin);
+  --color-memo: var(--memo);
   --color-danger: var(--danger);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
@@ -120,9 +132,104 @@ button {
   cursor: pointer;
 }
 
+/* キーボードフォーカスを明確に */
+*:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
 .scrollbar-none::-webkit-scrollbar {
   display: none;
 }
 .scrollbar-none {
   scrollbar-width: none;
+}
+
+/* タップ時のスケール感 */
+.tap-scale {
+  transition: transform 80ms ease-out;
+}
+.tap-scale:active {
+  transform: scale(0.97);
+}
+
+/* ピン留めのアニメーション */
+@keyframes pin-pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.4); }
+  100% { transform: scale(1); }
+}
+.pin-anim {
+  animation: pin-pop 280ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* モーダル: スライドアップ */
+@keyframes slide-up {
+  from {
+    transform: translateY(100%);
+    opacity: 0.6;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+.anim-slide-up {
+  animation: slide-up 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* モーダル: フェードイン */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.anim-fade-in {
+  animation: fade-in 160ms ease-out;
+}
+
+/* Toast: スライドアップ + フェード */
+@keyframes toast-in {
+  from {
+    transform: translate(-50%, 24px);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+}
+@keyframes toast-out {
+  from {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+  to {
+    transform: translate(-50%, 24px);
+    opacity: 0;
+  }
+}
+.anim-toast-in {
+  animation: toast-in 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.anim-toast-out {
+  animation: toast-out 200ms ease-in;
+}
+
+/* 結果更新時のフェード */
+@keyframes content-fade {
+  from { opacity: 0.4; }
+  to { opacity: 1; }
+}
+.anim-content-fade {
+  animation: content-fade 200ms ease-out;
 }

@@ -10,6 +10,7 @@ import {
   useAdviceSaved,
   haptic,
 } from "@/lib/storage";
+import { toast } from "@/lib/toast";
 import type { Listing, SourceKey } from "@/lib/types";
 
 type FlatListing = Listing & { source: SourceKey };
@@ -109,6 +110,7 @@ export function AiAdvisor({ keyword, productGuess, listings }: Props) {
     if (!advice) return;
     if (saved) {
       removeSavedAdvice(searchKey);
+      toast({ message: "保存を解除しました" });
     } else {
       saveAdvice({
         searchKey,
@@ -117,6 +119,11 @@ export function AiAdvisor({ keyword, productGuess, listings }: Props) {
         summary: advice.summary,
         recommendations: advice.recommendations,
         warnings: advice.warnings,
+      });
+      toast({
+        message: "AI査定を保存しました",
+        actionLabel: "履歴で見る",
+        actionHref: "/history",
       });
     }
     haptic(8);

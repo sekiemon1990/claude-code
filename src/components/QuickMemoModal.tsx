@@ -5,7 +5,9 @@ import { X, StickyNote } from "lucide-react";
 import {
   getListingMemo,
   setListingMemo,
+  haptic,
 } from "@/lib/storage";
+import { toast } from "@/lib/toast";
 
 type Props = {
   ref: string;
@@ -38,18 +40,24 @@ export function QuickMemoModal({
 
   function save() {
     setListingMemo(listingRef, memo);
+    haptic(8);
+    toast({
+      message: memo.trim() ? "メモを保存しました" : "メモを削除しました",
+      actionLabel: "履歴で見る",
+      actionHref: "/history",
+    });
     onClose();
   }
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4"
+      className="fixed inset-0 z-50 bg-black/40 anim-fade-in flex items-end sm:items-center justify-center p-0 sm:p-4"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
     >
       <div
-        className="w-full sm:max-w-md bg-surface rounded-t-2xl sm:rounded-2xl shadow-xl border border-border flex flex-col max-h-[90vh] overflow-hidden"
+        className="anim-slide-up w-full sm:max-w-md bg-surface rounded-t-2xl sm:rounded-2xl shadow-xl border border-border flex flex-col max-h-[90vh] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between p-4 border-b border-border">
