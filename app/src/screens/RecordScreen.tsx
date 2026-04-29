@@ -32,6 +32,128 @@ type Props = {
 };
 
 export function RecordScreen({ deal, onDone, onChangeDeal }: Props) {
+  // === 録音画面遷移時クラッシュの切り分け用 ===
+  // 段階的にフックを有効化して、どこで落ちるかを画面で特定する。
+  // クラッシュしたら、その直前に表示されていた stage が原因。
+  const [stage, setStage] = useState(0);
+
+  if (stage < 4) {
+    return <DiagnosticStages stage={stage} setStage={setStage} dealName={deal.customerName} />;
+  }
+
+  return <RecordScreenInner deal={deal} onDone={onDone} onChangeDeal={onChangeDeal} />;
+}
+
+function DiagnosticStages({
+  stage,
+  setStage,
+  dealName,
+}: {
+  stage: number;
+  setStage: (n: number) => void;
+  dealName: string;
+}) {
+  const stages = [
+    { num: 0, label: '0: 何もしない（タップで次へ）' },
+    { num: 1, label: '1: useAuth() を呼ぶ' },
+    { num: 2, label: '2: useStorageStatus() を呼ぶ（FileSystem.getFreeDiskStorageAsync）' },
+    { num: 3, label: '3: useRecorder() を呼ぶ' },
+    { num: 4, label: '4: 通常の RecordScreen 全体を描画' },
+  ];
+
+  // 段階的にフックを呼ぶサブコンポーネント
+  if (stage === 1) return <Stage1 onNext={() => setStage(2)} />;
+  if (stage === 2) return <Stage2 onNext={() => setStage(3)} />;
+  if (stage === 3) return <Stage3 onNext={() => setStage(4)} />;
+
+  return (
+    <View style={{ flex: 1, padding: 24, paddingTop: 60, backgroundColor: '#0a2540' }}>
+      <Text style={{ color: '#fff', fontSize: 22, fontWeight: '700', marginBottom: 16 }}>
+        録音画面 診断
+      </Text>
+      <Text style={{ color: '#94A3B8', marginBottom: 24, fontSize: 13 }}>
+        案件: {dealName}{'\n'}
+        各ボタンをタップして次のステージへ進んでください。クラッシュしたら、そのボタンの内容が原因です。
+      </Text>
+      {stages.slice(0, stage + 2).map((s) => (
+        <Pressable
+          key={s.num}
+          onPress={() => setStage(s.num)}
+          style={{
+            backgroundColor: stage === s.num ? '#2563EB' : '#1e3a5f',
+            padding: 14,
+            borderRadius: 8,
+            marginBottom: 8,
+          }}
+        >
+          <Text style={{ color: '#fff', fontSize: 13 }}>{s.label}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
+function Stage1({ onNext }: { onNext: () => void }) {
+  useAuth();
+  return (
+    <View style={{ flex: 1, padding: 24, paddingTop: 60, backgroundColor: '#0a2540' }}>
+      <Text style={{ color: '#10b981', fontSize: 18, fontWeight: '700' }}>
+        ✓ Stage 1: useAuth() OK
+      </Text>
+      <Pressable
+        onPress={onNext}
+        style={{ backgroundColor: '#2563EB', padding: 14, borderRadius: 8, marginTop: 16 }}
+      >
+        <Text style={{ color: '#fff' }}>次のステージへ (Stage 2: useStorageStatus)</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function Stage2({ onNext }: { onNext: () => void }) {
+  useAuth();
+  const storage = useStorageStatus();
+  return (
+    <View style={{ flex: 1, padding: 24, paddingTop: 60, backgroundColor: '#0a2540' }}>
+      <Text style={{ color: '#10b981', fontSize: 18, fontWeight: '700' }}>
+        ✓ Stage 2: useStorageStatus() OK
+      </Text>
+      <Text style={{ color: '#94A3B8', marginTop: 8 }}>
+        free: {formatBytes(storage.freeBytes)} / level: {storage.level}
+      </Text>
+      <Pressable
+        onPress={onNext}
+        style={{ backgroundColor: '#2563EB', padding: 14, borderRadius: 8, marginTop: 16 }}
+      >
+        <Text style={{ color: '#fff' }}>次のステージへ (Stage 3: useRecorder)</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function Stage3({ onNext }: { onNext: () => void }) {
+  useAuth();
+  useStorageStatus();
+  const recorder = useRecorder();
+  return (
+    <View style={{ flex: 1, padding: 24, paddingTop: 60, backgroundColor: '#0a2540' }}>
+      <Text style={{ color: '#10b981', fontSize: 18, fontWeight: '700' }}>
+        ✓ Stage 3: useRecorder() OK
+      </Text>
+      <Text style={{ color: '#94A3B8', marginTop: 8 }}>
+        state: {recorder.state}
+      </Text>
+      <Pressable
+        onPress={onNext}
+        style={{ backgroundColor: '#2563EB', padding: 14, borderRadius: 8, marginTop: 16 }}
+      >
+        <Text style={{ color: '#fff' }}>次のステージへ (Stage 4: 本番画面)</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function RecordScreenInner({ deal, onDone, onChangeDeal }: Props) {
   const { user } = useAuth();
   const recorder = useRecorder();
   const storage = useStorageStatus();
