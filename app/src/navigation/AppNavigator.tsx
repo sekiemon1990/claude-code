@@ -127,7 +127,10 @@ export function AppNavigator() {
             <RecordingListScreen
               onSelect={(id) => navigation.navigate('Detail', { recordingId: id })}
               onNewRecording={() => navigation.navigate('DealSelect')}
-              onSelectDeal={(deal) => navigation.navigate('Record', { deal })}
+              onSelectDeal={(deal) => {
+                const safeDeal = JSON.parse(JSON.stringify(deal));
+                navigation.navigate('Record', { deal: safeDeal });
+              }}
               onSignOut={signOut}
             />
           )}
@@ -135,7 +138,14 @@ export function AppNavigator() {
         <Stack.Screen name="DealSelect">
           {({ navigation }) => (
             <DealSelectScreen
-              onSelect={(deal) => navigation.replace('Record', { deal })}
+              onSelect={(deal) => {
+                // navigation.replace は iOS 26 / native-stack でクラッシュする
+                // 事象があったため navigate 経由に統一。また、deal オブジェクトの
+                // 参照が循環していると serialize で死ぬ可能性があるので
+                // JSON 経由でディープコピーしてプリミティブのみに正規化する。
+                const safeDeal = JSON.parse(JSON.stringify(deal));
+                navigation.navigate('Record', { deal: safeDeal });
+              }}
               onBack={() => navigation.goBack()}
             />
           )}
