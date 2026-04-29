@@ -15,6 +15,38 @@
   --danger: #dc2626;
 }
 
+:root[data-theme="dark"] {
+  --background: #0b0d12;
+  --foreground: #e7eaf0;
+  --surface: #14171f;
+  --surface-2: #1c2029;
+  --border: #2a2f3a;
+  --muted: #8a93a3;
+  --primary: #4f8dff;
+  --primary-foreground: #ffffff;
+  --accent: #38bdf8;
+  --success: #22c55e;
+  --warning: #fbbf24;
+  --danger: #f87171;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --background: #0b0d12;
+    --foreground: #e7eaf0;
+    --surface: #14171f;
+    --surface-2: #1c2029;
+    --border: #2a2f3a;
+    --muted: #8a93a3;
+    --primary: #4f8dff;
+    --primary-foreground: #ffffff;
+    --accent: #38bdf8;
+    --success: #22c55e;
+    --warning: #fbbf24;
+    --danger: #f87171;
+  }
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -55,8 +87,16 @@ button,
 textarea,
 select {
   font: inherit;
+  color: inherit;
 }
 
 button {
   cursor: pointer;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  scrollbar-width: none;
 }

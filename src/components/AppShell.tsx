@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Search, History, LogOut } from "lucide-react";
+import { ThemeToggle } from "./ThemeToggle";
 
 type AppShellProps = {
   title?: string;
@@ -45,7 +46,10 @@ export function AppShell({
               {title}
             </span>
           )}
-          <div className="flex items-center">{rightSlot}</div>
+          <div className="flex items-center gap-1">
+            {rightSlot}
+            <ThemeToggle />
+          </div>
         </div>
       </header>
 
