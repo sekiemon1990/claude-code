@@ -155,6 +155,104 @@ export function useListingViews(): ListingViewSnapshot[] {
   return useStorageValue(reader);
 }
 
+// ---------- 設定 ----------
+
+export type AppSettings = {
+  fontScale: number; // 1.0 = 標準, 1.1, 1.2, 1.3
+  hapticEnabled: boolean;
+  reducedMotion: boolean;
+  defaultBuyRate: number; // %
+};
+
+const DEFAULT_SETTINGS: AppSettings = {
+  fontScale: 1.0,
+  hapticEnabled: true,
+  reducedMotion: false,
+  defaultBuyRate: 70,
+};
+
+export function getSettings(): AppSettings {
+  const raw = read("settings");
+  if (!raw) return DEFAULT_SETTINGS;
+  try {
+    return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+  } catch {
+    return DEFAULT_SETTINGS;
+  }
+}
+
+export function setSettings(settings: AppSettings): void {
+  write("settings", JSON.stringify(settings));
+  if (typeof document !== "undefined") {
+    document.documentElement.style.setProperty(
+      "--font-scale",
+      String(settings.fontScale)
+    );
+    document.documentElement.dataset.reducedMotion = settings.reducedMotion
+      ? "1"
+      : "0";
+  }
+}
+
+export function useSettings(): [AppSettings, (s: Partial<AppSettings>) => void] {
+  const [settings, setLocal] = useState<AppSettings>(DEFAULT_SETTINGS);
+
+  useEffect(() => {
+    setLocal(getSettings());
+    const onChange = () => setLocal(getSettings());
+    window.addEventListener("maxus_search:storage", onChange);
+    window.addEventListener("storage", onChange);
+    return () => {
+      window.removeEventListener("maxus_search:storage", onChange);
+      window.removeEventListener("storage", onChange);
+    };
+  }, []);
+
+  const update = (partial: Partial<AppSettings>) => {
+    const next = { ...settings, ...partial };
+    setSettings(next);
+    setLocal(next);
+  };
+
+  return [settings, update];
+}
+
+export function haptic(ms = 8): void {
+  if (typeof window === "undefined") return;
+  if (!getSettings().hapticEnabled) return;
+  try {
+    navigator.vibrate?.(ms);
+  } catch {
+    // noop
+  }
+}
+
+// ---------- スクロール位置の保存 ----------
+
+export function saveScrollPosition(key: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.setItem(`scroll:${key}`, String(window.scrollY));
+  } catch {
+    // noop
+  }
+}
+
+export function restoreScrollPosition(key: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const saved = sessionStorage.getItem(`scroll:${key}`);
+    if (saved) {
+      const y = Number(saved);
+      requestAnimationFrame(() => {
+        window.scrollTo(0, y);
+      });
+    }
+  } catch {
+    // noop
+  }
+}
+
 // ---------- テーマ ----------
 
 const THEME_KEY = "theme";

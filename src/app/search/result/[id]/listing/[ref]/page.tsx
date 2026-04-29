@@ -33,7 +33,9 @@ import {
   setListingPinned,
   useListingMemoValue,
   useListingPinnedValue,
+  haptic,
 } from "@/lib/storage";
+import { MOCK_RESULT as MOCK } from "@/lib/mock-data";
 import { SOURCES, type SourceKey } from "@/lib/types";
 
 function parseRef(ref: string): { source: SourceKey; lid: string } | null {
@@ -101,6 +103,7 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
 
   function saveMemo() {
     if (memoDraft !== null) setListingMemo(listingRef, memoDraft);
+    haptic(8);
     setMemoEditing(false);
     setMemoDraft(null);
   }
@@ -113,43 +116,36 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
   const queryStr = new URLSearchParams(params.toString()).toString();
   const backHref = `/search/result/${id}${queryStr ? `?${queryStr}` : ""}`;
 
+  // 前後ナビ用：全媒体のリスティングをフラット化
+  const flatListings = MOCK.sources.flatMap((s) =>
+    s.listings.map((l) => ({ ...l, source: s.source }))
+  );
+  const currentIdx = flatListings.findIndex(
+    (l) => l.source === source && l.id === lid
+  );
+  const prev = currentIdx > 0 ? flatListings[currentIdx - 1] : null;
+  const next =
+    currentIdx >= 0 && currentIdx < flatListings.length - 1
+      ? flatListings[currentIdx + 1]
+      : null;
+
+  function goToListing(target: { source: SourceKey; id: string }) {
+    const targetRef = `${target.source}-${target.id}`;
+    const url = `/search/result/${id}/listing/${targetRef}${queryStr ? `?${queryStr}` : ""}`;
+    window.location.href = url;
+  }
+
   return (
     <div className="flex flex-col gap-4">
       {/* 画像エリア */}
       <section>
         {images.length > 0 ? (
-          <>
-            <button
-              type="button"
-              onClick={() => setLightboxOpen(true)}
-              className="block w-full aspect-square rounded-xl overflow-hidden bg-surface-2 border border-border"
-              aria-label="画像を拡大"
-            >
-              <img
-                src={images[activeImage]}
-                alt=""
-                className="w-full h-full object-cover"
-              />
-            </button>
-            {images.length > 1 && (
-              <div className="flex gap-2 mt-2 overflow-x-auto scrollbar-none -mx-1 px-1 pb-1">
-                {images.map((src, i) => (
-                  <button
-                    key={src}
-                    type="button"
-                    onClick={() => setActiveImage(i)}
-                    className={
-                      i === activeImage
-                        ? "shrink-0 w-16 h-16 rounded-md overflow-hidden border-2 border-primary"
-                        : "shrink-0 w-16 h-16 rounded-md overflow-hidden border border-border opacity-70"
-                    }
-                  >
-                    <img src={src} alt="" className="w-full h-full object-cover" />
-                  </button>
-                ))}
-              </div>
-            )}
-          </>
+          <ImageGallery
+            images={images}
+            activeIndex={activeImage}
+            onChange={setActiveImage}
+            onZoom={() => setLightboxOpen(true)}
+          />
         ) : (
           <div className="w-full aspect-square rounded-xl bg-surface-2 border border-border flex items-center justify-center text-muted text-sm">
             画像なし
@@ -171,7 +167,10 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
           </div>
           <button
             type="button"
-            onClick={() => setListingPinned(listingRef, !pinned)}
+            onClick={() => {
+              setListingPinned(listingRef, !pinned);
+              haptic(8);
+            }}
             aria-label={pinned ? "ピンを外す" : "ピン留め"}
             className={
               pinned
@@ -284,6 +283,34 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
         <ExternalLink size={18} />
       </a>
 
+      {/* 前後ナビ */}
+      {(prev || next) && (
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            disabled={!prev}
+            onClick={() => prev && goToListing(prev)}
+            className="h-11 rounded-lg border border-border bg-surface text-foreground text-xs font-medium hover:bg-surface-2 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-1"
+          >
+            <span>‹</span>
+            <span className="truncate max-w-[160px]">
+              {prev ? `前: ${prev.title}` : "なし"}
+            </span>
+          </button>
+          <button
+            type="button"
+            disabled={!next}
+            onClick={() => next && goToListing(next)}
+            className="h-11 rounded-lg border border-border bg-surface text-foreground text-xs font-medium hover:bg-surface-2 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-1"
+          >
+            <span className="truncate max-w-[160px]">
+              {next ? `次: ${next.title}` : "なし"}
+            </span>
+            <span>›</span>
+          </button>
+        </div>
+      )}
+
       <Link
         href={backHref}
         className="h-12 rounded-lg border border-border bg-surface text-foreground text-sm font-medium hover:bg-surface-2 flex items-center justify-center"
@@ -362,6 +389,85 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
         />
       )}
     </div>
+  );
+}
+
+function ImageGallery({
+  images,
+  activeIndex,
+  onChange,
+  onZoom,
+}: {
+  images: string[];
+  activeIndex: number;
+  onChange: (i: number) => void;
+  onZoom: () => void;
+}) {
+  const touchStartX = useState({ x: 0 })[0];
+  const touchEndX = useState({ x: 0 })[0];
+
+  function onTouchStart(e: React.TouchEvent) {
+    touchStartX.x = e.touches[0].clientX;
+    touchEndX.x = e.touches[0].clientX;
+  }
+  function onTouchMove(e: React.TouchEvent) {
+    touchEndX.x = e.touches[0].clientX;
+  }
+  function onTouchEnd() {
+    const dx = touchEndX.x - touchStartX.x;
+    if (Math.abs(dx) < 50) return;
+    if (dx < 0 && activeIndex < images.length - 1) {
+      onChange(activeIndex + 1);
+    } else if (dx > 0 && activeIndex > 0) {
+      onChange(activeIndex - 1);
+    }
+  }
+
+  return (
+    <>
+      <div
+        className="relative w-full aspect-square rounded-xl overflow-hidden bg-surface-2 border border-border"
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+      >
+        <button
+          type="button"
+          onClick={onZoom}
+          className="block w-full h-full"
+          aria-label="画像を拡大"
+        >
+          <img
+            src={images[activeIndex]}
+            alt=""
+            className="w-full h-full object-cover"
+          />
+        </button>
+        {images.length > 1 && (
+          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 px-2 py-1 rounded-full bg-black/50 text-white text-[11px] font-medium">
+            {activeIndex + 1} / {images.length}
+          </div>
+        )}
+      </div>
+      {images.length > 1 && (
+        <div className="flex gap-2 mt-2 overflow-x-auto scrollbar-none -mx-1 px-1 pb-1">
+          {images.map((src, i) => (
+            <button
+              key={src}
+              type="button"
+              onClick={() => onChange(i)}
+              className={
+                i === activeIndex
+                  ? "shrink-0 w-16 h-16 rounded-md overflow-hidden border-2 border-primary"
+                  : "shrink-0 w-16 h-16 rounded-md overflow-hidden border border-border opacity-70"
+              }
+            >
+              <img src={src} alt="" className="w-full h-full object-cover" />
+            </button>
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 

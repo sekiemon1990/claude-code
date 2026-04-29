@@ -35,6 +35,16 @@ const themeInitScript = `
     if (t === 'dark' || t === 'light') {
       document.documentElement.dataset.theme = t;
     }
+    var s = localStorage.getItem('maxus_search:settings');
+    if (s) {
+      var parsed = JSON.parse(s);
+      if (parsed.fontScale) {
+        document.documentElement.style.setProperty('--font-scale', String(parsed.fontScale));
+      }
+      if (parsed.reducedMotion) {
+        document.documentElement.dataset.reducedMotion = '1';
+      }
+    }
   } catch (e) {}
 })();
 `;
