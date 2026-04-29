@@ -59,7 +59,6 @@ import {
   type ConditionRank,
 } from "@/lib/conditions";
 import { generateSuggestions } from "@/lib/suggestions";
-import { estimateShipping } from "@/lib/shipping-estimate";
 import { ConditionBadge } from "@/components/ConditionBadge";
 import { ToolsPanel } from "@/components/ToolsPanel";
 import { QuickMemoModal } from "@/components/QuickMemoModal";
@@ -114,6 +113,7 @@ function ResultInner({ resultId }: { resultId: string }) {
   const [memoDraft, setMemoDraft] = useState<string | null>(null);
   const [memoEditing, setMemoEditing] = useState(false);
 
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [filter, setFilter] = useState<"all" | SourceKey>("all");
   const [sort, setSort] = useState<SortMode>("date_desc");
   const [refine, setRefine] = useState("");
@@ -578,119 +578,167 @@ function ResultInner({ resultId }: { resultId: string }) {
             </div>
           )}
 
-          <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 mb-1 scrollbar-none items-center">
-            <span className="shrink-0 text-[10px] text-muted px-1">期間:</span>
-            {(
-              [
-                { v: "30", label: "30日" },
-                { v: "90", label: "90日" },
-                { v: "all", label: "全期間" },
-              ] as { v: Period; label: string }[]
-            ).map((opt) => {
-              const active = period === opt.v;
-              return (
-                <button
-                  key={opt.v}
-                  type="button"
-                  onClick={() => {
-                    if (opt.v === period) return;
-                    const next = new URLSearchParams(params.toString());
-                    next.set("period", opt.v);
-                    router.push(`/search/loading?${next.toString()}`);
-                  }}
-                  className={
-                    active
-                      ? "shrink-0 h-7 px-2.5 rounded-full text-[11px] font-bold border-2 border-primary bg-primary/5 text-primary"
-                      : "shrink-0 h-7 px-2.5 rounded-full text-[11px] font-medium border border-border bg-surface text-muted hover:border-foreground/30"
-                  }
-                >
-                  {opt.label}
-                </button>
-              );
-            })}
-          </div>
+          <div className="bg-surface-2 rounded-lg overflow-hidden mb-2">
+            <button
+              type="button"
+              onClick={() => setFiltersOpen(!filtersOpen)}
+              className="w-full flex items-center justify-between px-3 py-2 text-[11px] hover:bg-surface-2/60"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <Filter size={12} className="text-muted shrink-0" />
+                <span className="text-muted">期間</span>
+                <span className="font-semibold text-foreground">
+                  {period === "all" ? "全期間" : `${period}日`}
+                </span>
+                <span className="text-muted">/ 送料</span>
+                <span className="font-semibold text-foreground">
+                  {shippingFilter === "any"
+                    ? "全て"
+                    : shippingFilter === "free"
+                      ? "無料"
+                      : "別"}
+                </span>
+                <span className="text-muted">/ 状態</span>
+                <span className="font-semibold text-foreground truncate">
+                  {conditionFilter.length === 0
+                    ? "全て"
+                    : conditionFilter.join(",")}
+                </span>
+              </div>
+              {filtersOpen ? (
+                <ChevronUp size={14} className="text-muted shrink-0" />
+              ) : (
+                <ChevronDown size={14} className="text-muted shrink-0" />
+              )}
+            </button>
 
-          <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 mb-1 scrollbar-none items-center">
-            <span className="shrink-0 text-[10px] text-muted px-1">送料:</span>
-            {(
-              [
-                { v: "any", label: "全て" },
-                { v: "free", label: "送料無料・引取" },
-                { v: "paid", label: "送料別" },
-              ] as { v: ShippingFilter; label: string }[]
-            ).map((opt) => {
-              const active = shippingFilter === opt.v;
-              return (
-                <button
-                  key={opt.v}
-                  type="button"
-                  onClick={() => {
-                    setShippingFilter(opt.v);
-                    setExtraPages(0);
-                  }}
-                  className={
-                    active
-                      ? "shrink-0 h-7 px-2.5 rounded-full text-[11px] font-bold border-2 border-success bg-success/5 text-success"
-                      : "shrink-0 h-7 px-2.5 rounded-full text-[11px] font-medium border border-border bg-surface text-muted hover:border-foreground/30"
-                  }
-                  style={
-                    active
-                      ? { borderColor: "var(--success)", color: "var(--success)" }
-                      : undefined
-                  }
-                >
-                  {opt.label}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 mb-1 scrollbar-none items-center">
-            <span className="shrink-0 text-[10px] text-muted px-1">状態:</span>
-            {CONDITION_RANKS.map((r) => {
-              const meta = CONDITION_META[r];
-              const count = flatListings.filter(
-                (l) => classifyCondition(l.condition) === r
-              ).length;
-              const active = conditionFilter.includes(r);
-              return (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => toggleConditionFilter(r)}
-                  className={
-                    active
-                      ? "shrink-0 h-7 px-2 rounded-full text-[11px] font-bold border-2 transition-colors flex items-center gap-1"
-                      : "shrink-0 h-7 px-2 rounded-full text-[11px] font-medium border border-border bg-surface text-muted hover:border-foreground/30 flex items-center gap-1"
-                  }
-                  style={
-                    active
-                      ? {
-                          borderColor: meta.color,
-                          color: meta.color,
-                          backgroundColor: `${meta.color}10`,
-                        }
-                      : undefined
-                  }
-                >
-                  <span
-                    className="inline-flex items-center justify-center w-4 h-4 rounded text-white text-[9px] font-black"
-                    style={{ backgroundColor: meta.color }}
-                  >
-                    {meta.label}
+            {filtersOpen && (
+              <div className="border-t border-border p-2">
+                <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 mb-1 scrollbar-none items-center">
+                  <span className="shrink-0 text-[10px] text-muted px-1">
+                    期間:
                   </span>
-                  ({count})
-                </button>
-              );
-            })}
-            {conditionFilter.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setConditionFilter([])}
-                className="shrink-0 h-7 px-2 rounded-full text-[11px] text-muted hover:text-foreground"
-              >
-                クリア
-              </button>
+                  {(
+                    [
+                      { v: "30", label: "30日" },
+                      { v: "90", label: "90日" },
+                      { v: "all", label: "全期間" },
+                    ] as { v: Period; label: string }[]
+                  ).map((opt) => {
+                    const active = period === opt.v;
+                    return (
+                      <button
+                        key={opt.v}
+                        type="button"
+                        onClick={() => {
+                          if (opt.v === period) return;
+                          const next = new URLSearchParams(params.toString());
+                          next.set("period", opt.v);
+                          router.push(`/search/loading?${next.toString()}`);
+                        }}
+                        className={
+                          active
+                            ? "shrink-0 h-7 px-2.5 rounded-full text-[11px] font-bold border-2 border-primary bg-primary/5 text-primary"
+                            : "shrink-0 h-7 px-2.5 rounded-full text-[11px] font-medium border border-border bg-surface text-muted hover:border-foreground/30"
+                        }
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 mb-1 scrollbar-none items-center">
+                  <span className="shrink-0 text-[10px] text-muted px-1">
+                    送料:
+                  </span>
+                  {(
+                    [
+                      { v: "any", label: "全て" },
+                      { v: "free", label: "送料無料・引取" },
+                      { v: "paid", label: "送料別" },
+                    ] as { v: ShippingFilter; label: string }[]
+                  ).map((opt) => {
+                    const active = shippingFilter === opt.v;
+                    return (
+                      <button
+                        key={opt.v}
+                        type="button"
+                        onClick={() => {
+                          setShippingFilter(opt.v);
+                          setExtraPages(0);
+                        }}
+                        className={
+                          active
+                            ? "shrink-0 h-7 px-2.5 rounded-full text-[11px] font-bold border-2 border-success bg-success/5 text-success"
+                            : "shrink-0 h-7 px-2.5 rounded-full text-[11px] font-medium border border-border bg-surface text-muted hover:border-foreground/30"
+                        }
+                        style={
+                          active
+                            ? {
+                                borderColor: "var(--success)",
+                                color: "var(--success)",
+                              }
+                            : undefined
+                        }
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="flex gap-2 overflow-x-auto -mx-1 px-1 scrollbar-none items-center">
+                  <span className="shrink-0 text-[10px] text-muted px-1">
+                    状態:
+                  </span>
+                  {CONDITION_RANKS.map((r) => {
+                    const meta = CONDITION_META[r];
+                    const count = flatListings.filter(
+                      (l) => classifyCondition(l.condition) === r
+                    ).length;
+                    const active = conditionFilter.includes(r);
+                    return (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => toggleConditionFilter(r)}
+                        className={
+                          active
+                            ? "shrink-0 h-7 px-2 rounded-full text-[11px] font-bold border-2 transition-colors flex items-center gap-1"
+                            : "shrink-0 h-7 px-2 rounded-full text-[11px] font-medium border border-border bg-surface text-muted hover:border-foreground/30 flex items-center gap-1"
+                        }
+                        style={
+                          active
+                            ? {
+                                borderColor: meta.color,
+                                color: meta.color,
+                                backgroundColor: `${meta.color}10`,
+                              }
+                            : undefined
+                        }
+                      >
+                        <span
+                          className="inline-flex items-center justify-center w-4 h-4 rounded text-white text-[9px] font-black"
+                          style={{ backgroundColor: meta.color }}
+                        >
+                          {meta.label}
+                        </span>
+                        ({count})
+                      </button>
+                    );
+                  })}
+                  {conditionFilter.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setConditionFilter([])}
+                      className="shrink-0 h-7 px-2 rounded-full text-[11px] text-muted hover:text-foreground"
+                    >
+                      クリア
+                    </button>
+                  )}
+                </div>
+              </div>
             )}
           </div>
 
@@ -1004,9 +1052,6 @@ function ListingCard({
   const pinned = useListingPinnedValue(ref);
   const sourceMeta = SOURCES.find((s) => s.key === listing.source)!;
   const rank = classifyCondition(listing.condition);
-  const shippingEst =
-    listing.shipping === "free" ? estimateShipping(listing.title) : null;
-  const netValue = shippingEst ? listing.price - shippingEst.amount : null;
 
   const [menuOpen, setMenuOpen] = useState(false);
   const tapCountRef = useRef(0);
@@ -1168,22 +1213,9 @@ function ListingCard({
                 </span>
               )}
             </div>
-            {netValue !== null && (
-              <div className="flex items-center gap-1 mt-0.5 text-[11px] text-muted">
-                <span>送料を引いた実質</span>
-                <span className="font-semibold text-foreground">
-                  {formatYen(netValue)}
-                </span>
-              </div>
-            )}
             <div className="flex items-center gap-1.5 mt-1 text-xs flex-wrap">
               <ConditionBadge rank={rank} size="sm" />
               <ShippingBadge shipping={listing.shipping} size="sm" />
-              {shippingEst && (
-                <span className="text-[10px] text-muted">
-                  想定 {formatYen(shippingEst.amount)}
-                </span>
-              )}
             </div>
             <div className="flex items-center gap-1.5 mt-1 text-xs text-muted">
               {listing.condition && (

@@ -1,8 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { Sparkles, Loader2 } from "lucide-react";
+import { Sparkles, Loader2, Star } from "lucide-react";
 import { classifyCondition } from "@/lib/conditions";
+import {
+  saveAdvice,
+  removeSavedAdvice,
+  searchKeyFromKeyword,
+  useAdviceSaved,
+  haptic,
+} from "@/lib/storage";
 import type { Listing, SourceKey } from "@/lib/types";
 
 type FlatListing = Listing & { source: SourceKey };
@@ -88,13 +95,31 @@ function generateAdvice(
 export function AiAdvisor({ keyword, productGuess, listings }: Props) {
   const [advice, setAdvice] = useState<Advice | null>(null);
   const [loading, setLoading] = useState(false);
+  const searchKey = searchKeyFromKeyword(keyword);
+  const saved = useAdviceSaved(searchKey);
 
   async function run() {
     setLoading(true);
-    // 実装時はここで LLM API を叩く。プロトタイプは演出のため遅延
     await new Promise((r) => setTimeout(r, 800));
     setAdvice(generateAdvice(keyword, productGuess, listings));
     setLoading(false);
+  }
+
+  function toggleSave() {
+    if (!advice) return;
+    if (saved) {
+      removeSavedAdvice(searchKey);
+    } else {
+      saveAdvice({
+        searchKey,
+        keyword,
+        productGuess,
+        summary: advice.summary,
+        recommendations: advice.recommendations,
+        warnings: advice.warnings,
+      });
+    }
+    haptic(8);
   }
 
   if (listings.length === 0) return null;
@@ -111,6 +136,21 @@ export function AiAdvisor({ keyword, productGuess, listings }: Props) {
             β
           </span>
         </div>
+        {advice && (
+          <button
+            type="button"
+            onClick={toggleSave}
+            aria-label={saved ? "保存を解除" : "アドバイスを保存"}
+            className={
+              saved
+                ? "inline-flex items-center gap-1 h-7 px-2.5 rounded-full text-[11px] font-semibold border-2 border-warning bg-warning/10 text-warning"
+                : "inline-flex items-center gap-1 h-7 px-2.5 rounded-full text-[11px] font-medium border border-border text-muted hover:text-foreground"
+            }
+          >
+            <Star size={12} fill={saved ? "currentColor" : "none"} />
+            {saved ? "保存済み" : "保存"}
+          </button>
+        )}
       </div>
 
       {!advice && !loading && (

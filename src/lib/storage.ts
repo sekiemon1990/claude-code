@@ -155,6 +155,58 @@ export function useListingViews(): ListingViewSnapshot[] {
   return useStorageValue(reader);
 }
 
+// ---------- AI査定アドバイスの保存 ----------
+
+export type SavedAdvice = {
+  searchKey: string;
+  keyword: string;
+  productGuess?: string;
+  summary: string;
+  recommendations: { rank: string; price: number; rate: number }[];
+  warnings: string[];
+  savedAt: string;
+};
+
+const ADVICE_LIST_KEY = "ai_advice_list";
+
+export function getSavedAdvices(): SavedAdvice[] {
+  const raw = read(ADVICE_LIST_KEY);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed as SavedAdvice[];
+  } catch {
+    return [];
+  }
+}
+
+export function saveAdvice(advice: Omit<SavedAdvice, "savedAt">): void {
+  if (typeof window === "undefined") return;
+  const list = getSavedAdvices().filter((a) => a.searchKey !== advice.searchKey);
+  list.unshift({ ...advice, savedAt: new Date().toISOString() });
+  write(ADVICE_LIST_KEY, JSON.stringify(list.slice(0, 100)));
+}
+
+export function removeSavedAdvice(searchKey: string): void {
+  const list = getSavedAdvices().filter((a) => a.searchKey !== searchKey);
+  write(ADVICE_LIST_KEY, JSON.stringify(list));
+}
+
+export function isAdviceSaved(searchKey: string): boolean {
+  return getSavedAdvices().some((a) => a.searchKey === searchKey);
+}
+
+export function useAdviceSaved(searchKey: string): boolean {
+  const reader = () => isAdviceSaved(searchKey);
+  return useStorageValue(reader);
+}
+
+export function useSavedAdvices(): SavedAdvice[] {
+  const reader = () => getSavedAdvices();
+  return useStorageValue(reader);
+}
+
 // ---------- 設定 ----------
 
 export type AppSettings = {
