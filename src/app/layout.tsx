@@ -20,6 +20,17 @@ export const viewport: Viewport = {
   themeColor: "#1f6feb",
 };
 
+const themeInitScript = `
+(function(){
+  try {
+    var t = localStorage.getItem('maxus_search:theme');
+    if (t === 'dark' || t === 'light') {
+      document.documentElement.dataset.theme = t;
+    }
+  } catch (e) {}
+})();
+`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -27,6 +38,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ja" className={`${geistSans.variable} h-full antialiased`}>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );
