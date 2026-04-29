@@ -19,17 +19,22 @@ export async function recordListingView(
   snapshot: Omit<ListingViewSnapshot, "viewedAt">
 ): Promise<void> {
   const supabase = createClient();
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) return;
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError) console.error("[views] auth error:", userError);
+  if (!userData.user) {
+    console.error("[views] No authenticated user");
+    return;
+  }
 
-  // 既存の同じrefの履歴があれば削除（最新の閲覧時刻に更新する目的）
-  await supabase
+  // 既存の同じ ref を削除して新しく記録
+  const { error: deleteError } = await supabase
     .from("listing_views")
     .delete()
     .eq("user_id", userData.user.id)
     .eq("listing_ref", snapshot.ref);
+  if (deleteError) console.error("[views] delete error:", deleteError);
 
-  await supabase.from("listing_views").insert({
+  const { error: insertError } = await supabase.from("listing_views").insert({
     user_id: userData.user.id,
     listing_ref: snapshot.ref,
     source: snapshot.source,
@@ -40,15 +45,17 @@ export async function recordListingView(
     condition: snapshot.condition ?? null,
     from_keyword: snapshot.fromKeyword ?? null,
   });
+  if (insertError) console.error("[views] insert error:", insertError);
 }
 
 export async function fetchListingViews(): Promise<ListingViewSnapshot[]> {
   const supabase = createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("listing_views")
     .select("*")
     .order("viewed_at", { ascending: false })
     .limit(100);
+  if (error) console.error("[views] fetch error:", error);
   return (data ?? []).map((row) => ({
     ref: row.listing_ref,
     source: row.source as SourceKey,

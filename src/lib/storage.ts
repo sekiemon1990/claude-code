@@ -294,6 +294,37 @@ export function useSavedAdvices(): SavedAdvice[] {
 }
 
 // ============================================================================
+// 直近の検索結果 URL（端末ローカル）
+// ============================================================================
+
+const LAST_RESULT_KEY = "last_result_url";
+
+export function setLastResultUrl(url: string): void {
+  write(LAST_RESULT_KEY, url);
+}
+
+export function getLastResultUrl(): string | null {
+  return read(LAST_RESULT_KEY);
+}
+
+export function useLastResultUrl(): string | null {
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    setUrl(getLastResultUrl());
+    const onChange = () => setUrl(getLastResultUrl());
+    window.addEventListener("maxus_search:storage", onChange);
+    window.addEventListener("storage", onChange);
+    return () => {
+      window.removeEventListener("maxus_search:storage", onChange);
+      window.removeEventListener("storage", onChange);
+    };
+  }, []);
+
+  return url;
+}
+
+// ============================================================================
 // オンボーディング (端末ローカル)
 // ============================================================================
 
