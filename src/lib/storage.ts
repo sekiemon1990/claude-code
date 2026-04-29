@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { getQueryClient } from "@/components/QueryProvider";
 import {
   fetchSearchMemo,
   fetchListingMemo,
@@ -94,13 +95,29 @@ function useCacheInvalidation(
 // ============================================================================
 
 export function setMemo(searchKey: string, memo: string): void {
-  upsertSearchMemo(searchKey, memo).catch(() => {});
-  notifyCache("search_memo", searchKey);
+  const trimmed = memo.trim();
+  // 楽観的更新: キャッシュを即座に新しい値に
+  const qc = getQueryClient();
+  if (qc) {
+    qc.setQueryData(["search_memo", searchKey], trimmed);
+  }
+  // バックグラウンドで Supabase に書き込み
+  upsertSearchMemo(searchKey, memo)
+    .catch(() => {
+      // エラー時はキャッシュを無効化して再取得
+      if (qc) qc.invalidateQueries({ queryKey: ["search_memo", searchKey] });
+    });
 }
 
 export function setPinned(searchKey: string, pinned: boolean): void {
-  apiSetSearchPin(searchKey, pinned).catch(() => {});
-  notifyCache("search_pin", searchKey);
+  const qc = getQueryClient();
+  if (qc) {
+    qc.setQueryData(["search_pin", searchKey], pinned);
+  }
+  apiSetSearchPin(searchKey, pinned)
+    .catch(() => {
+      if (qc) qc.invalidateQueries({ queryKey: ["search_pin", searchKey] });
+    });
 }
 
 export function useMemoValue(searchKey: string): string {
@@ -132,13 +149,26 @@ export function usePinnedValue(searchKey: string): boolean {
 // ============================================================================
 
 export function setListingMemo(ref: string, memo: string): void {
-  upsertListingMemo(ref, memo).catch(() => {});
-  notifyCache("listing_memo", ref);
+  const trimmed = memo.trim();
+  const qc = getQueryClient();
+  if (qc) {
+    qc.setQueryData(["listing_memo", ref], trimmed);
+  }
+  upsertListingMemo(ref, memo)
+    .catch(() => {
+      if (qc) qc.invalidateQueries({ queryKey: ["listing_memo", ref] });
+    });
 }
 
 export function setListingPinned(ref: string, pinned: boolean): void {
-  apiSetListingPin(ref, pinned).catch(() => {});
-  notifyCache("listing_pin", ref);
+  const qc = getQueryClient();
+  if (qc) {
+    qc.setQueryData(["listing_pin", ref], pinned);
+  }
+  apiSetListingPin(ref, pinned)
+    .catch(() => {
+      if (qc) qc.invalidateQueries({ queryKey: ["listing_pin", ref] });
+    });
 }
 
 export function useListingMemoValue(ref: string): string {
@@ -172,9 +202,25 @@ export function useListingPinnedValue(ref: string): boolean {
 export function recordListingView(
   snapshot: Omit<ListingViewSnapshot, "viewedAt">
 ): void {
+  const qc = getQueryClient();
+  // 楽観的更新: 即座にキャッシュへ追加
+  if (qc) {
+    const optimistic: ListingViewSnapshot = {
+      ...snapshot,
+      viewedAt: new Date().toISOString(),
+    };
+    qc.setQueryData<ListingViewSnapshot[]>(["listing_views"], (prev) => {
+      const filtered = (prev ?? []).filter((v) => v.ref !== snapshot.ref);
+      return [optimistic, ...filtered];
+    });
+  }
   apiRecordListingView(snapshot)
-    .then(() => notifyCache("listing_views", "all"))
-    .catch(() => {});
+    .then(() => {
+      if (qc) qc.invalidateQueries({ queryKey: ["listing_views"] });
+    })
+    .catch(() => {
+      if (qc) qc.invalidateQueries({ queryKey: ["listing_views"] });
+    });
 }
 
 export function useListingViews(): ListingViewSnapshot[] {
@@ -193,15 +239,42 @@ export function useListingViews(): ListingViewSnapshot[] {
 // ============================================================================
 
 export function saveAdvice(advice: Omit<SavedAdvice, "savedAt">): void {
+  const qc = getQueryClient();
+  if (qc) {
+    const optimistic: SavedAdvice = {
+      ...advice,
+      savedAt: new Date().toISOString(),
+    };
+    qc.setQueryData<SavedAdvice[]>(["saved_advices"], (prev) => {
+      const filtered = (prev ?? []).filter(
+        (a) => a.searchKey !== advice.searchKey
+      );
+      return [optimistic, ...filtered];
+    });
+  }
   apiSaveAdvice(advice)
-    .then(() => notifyCache("saved_advices", "all"))
-    .catch(() => {});
+    .then(() => {
+      if (qc) qc.invalidateQueries({ queryKey: ["saved_advices"] });
+    })
+    .catch(() => {
+      if (qc) qc.invalidateQueries({ queryKey: ["saved_advices"] });
+    });
 }
 
 export function removeSavedAdvice(searchKey: string): void {
+  const qc = getQueryClient();
+  if (qc) {
+    qc.setQueryData<SavedAdvice[]>(["saved_advices"], (prev) =>
+      (prev ?? []).filter((a) => a.searchKey !== searchKey)
+    );
+  }
   apiRemoveSavedAdvice(searchKey)
-    .then(() => notifyCache("saved_advices", "all"))
-    .catch(() => {});
+    .then(() => {
+      if (qc) qc.invalidateQueries({ queryKey: ["saved_advices"] });
+    })
+    .catch(() => {
+      if (qc) qc.invalidateQueries({ queryKey: ["saved_advices"] });
+    });
 }
 
 export function useAdviceSaved(searchKey: string): boolean {

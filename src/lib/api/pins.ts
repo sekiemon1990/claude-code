@@ -10,7 +10,6 @@ export type PinRow = {
   pinned_at: string;
 };
 
-// 検索のピン取得
 export async function fetchSearchPin(searchKeyword: string): Promise<boolean> {
   const supabase = createClient();
   const { data } = await supabase
@@ -22,7 +21,6 @@ export async function fetchSearchPin(searchKeyword: string): Promise<boolean> {
   return !!data;
 }
 
-// 商品のピン取得
 export async function fetchListingPin(listingRef: string): Promise<boolean> {
   const supabase = createClient();
   const { data } = await supabase
@@ -43,14 +41,19 @@ export async function setSearchPin(
   if (!userData.user) return;
 
   if (pinned) {
-    await supabase.from("pins").upsert(
-      {
+    const { data: existing } = await supabase
+      .from("pins")
+      .select("id")
+      .eq("search_keyword", searchKeyword)
+      .is("listing_ref", null)
+      .maybeSingle();
+    if (!existing) {
+      await supabase.from("pins").insert({
         user_id: userData.user.id,
         search_keyword: searchKeyword,
         listing_ref: null,
-      },
-      { onConflict: "user_id,search_keyword", ignoreDuplicates: true }
-    );
+      });
+    }
   } else {
     await supabase
       .from("pins")
@@ -69,14 +72,19 @@ export async function setListingPin(
   if (!userData.user) return;
 
   if (pinned) {
-    await supabase.from("pins").upsert(
-      {
+    const { data: existing } = await supabase
+      .from("pins")
+      .select("id")
+      .eq("listing_ref", listingRef)
+      .is("search_keyword", null)
+      .maybeSingle();
+    if (!existing) {
+      await supabase.from("pins").insert({
         user_id: userData.user.id,
         search_keyword: null,
         listing_ref: listingRef,
-      },
-      { onConflict: "user_id,listing_ref", ignoreDuplicates: true }
-    );
+      });
+    }
   } else {
     await supabase
       .from("pins")
@@ -86,7 +94,6 @@ export async function setListingPin(
   }
 }
 
-// 全ピン情報を取得
 export async function fetchAllPins(): Promise<{
   searchPins: Set<string>;
   listingPins: Set<string>;
