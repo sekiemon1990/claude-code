@@ -1,19 +1,23 @@
 "use client";
 
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
+import { ChartBar, ChevronRight } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import {
   SearchFormFields,
   type Period,
 } from "@/components/SearchFormFields";
 import { SOURCES, type SourceKey } from "@/lib/types";
+import { useLastResultUrl } from "@/lib/storage";
 
 const VALID_PERIODS: Period[] = ["30", "90", "all"];
 const VALID_SOURCES: SourceKey[] = SOURCES.map((s) => s.key);
 
 function SearchContent() {
   const params = useSearchParams();
+  const lastResultUrl = useLastResultUrl();
 
   const periodParam = params.get("period");
   const sourcesParam = params.get("sources");
@@ -41,6 +45,19 @@ function SearchContent() {
             選択した媒体から一括で落札相場を取得します
           </p>
         </section>
+
+        {lastResultUrl && (
+          <Link
+            href={lastResultUrl}
+            className="tap-scale flex items-center gap-3 px-4 h-12 rounded-lg bg-primary/5 border-2 border-primary/30 text-primary hover:border-primary/50"
+          >
+            <ChartBar size={16} className="shrink-0" />
+            <span className="text-sm font-semibold flex-1">
+              前回の検索結果に戻る
+            </span>
+            <ChevronRight size={16} className="shrink-0" />
+          </Link>
+        )}
 
         <SearchFormFields initial={initial} />
 

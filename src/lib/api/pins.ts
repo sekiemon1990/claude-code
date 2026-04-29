@@ -12,23 +12,25 @@ export type PinRow = {
 
 export async function fetchSearchPin(searchKeyword: string): Promise<boolean> {
   const supabase = createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("pins")
     .select("id")
     .eq("search_keyword", searchKeyword)
     .is("listing_ref", null)
     .maybeSingle();
+  if (error) console.error("[pins] fetchSearchPin error:", error);
   return !!data;
 }
 
 export async function fetchListingPin(listingRef: string): Promise<boolean> {
   const supabase = createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("pins")
     .select("id")
     .eq("listing_ref", listingRef)
     .is("search_keyword", null)
     .maybeSingle();
+  if (error) console.error("[pins] fetchListingPin error:", error);
   return !!data;
 }
 
@@ -37,29 +39,37 @@ export async function setSearchPin(
   pinned: boolean
 ): Promise<void> {
   const supabase = createClient();
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) return;
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError) console.error("[pins] auth error:", userError);
+  if (!userData.user) {
+    console.error("[pins] No authenticated user");
+    return;
+  }
 
   if (pinned) {
     const { data: existing } = await supabase
       .from("pins")
       .select("id")
+      .eq("user_id", userData.user.id)
       .eq("search_keyword", searchKeyword)
       .is("listing_ref", null)
       .maybeSingle();
     if (!existing) {
-      await supabase.from("pins").insert({
+      const { error } = await supabase.from("pins").insert({
         user_id: userData.user.id,
         search_keyword: searchKeyword,
         listing_ref: null,
       });
+      if (error) console.error("[pins] insert search pin error:", error);
     }
   } else {
-    await supabase
+    const { error } = await supabase
       .from("pins")
       .delete()
+      .eq("user_id", userData.user.id)
       .eq("search_keyword", searchKeyword)
       .is("listing_ref", null);
+    if (error) console.error("[pins] delete search pin error:", error);
   }
 }
 
@@ -68,29 +78,37 @@ export async function setListingPin(
   pinned: boolean
 ): Promise<void> {
   const supabase = createClient();
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) return;
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError) console.error("[pins] auth error:", userError);
+  if (!userData.user) {
+    console.error("[pins] No authenticated user");
+    return;
+  }
 
   if (pinned) {
     const { data: existing } = await supabase
       .from("pins")
       .select("id")
+      .eq("user_id", userData.user.id)
       .eq("listing_ref", listingRef)
       .is("search_keyword", null)
       .maybeSingle();
     if (!existing) {
-      await supabase.from("pins").insert({
+      const { error } = await supabase.from("pins").insert({
         user_id: userData.user.id,
         search_keyword: null,
         listing_ref: listingRef,
       });
+      if (error) console.error("[pins] insert listing pin error:", error);
     }
   } else {
-    await supabase
+    const { error } = await supabase
       .from("pins")
       .delete()
+      .eq("user_id", userData.user.id)
       .eq("listing_ref", listingRef)
       .is("search_keyword", null);
+    if (error) console.error("[pins] delete listing pin error:", error);
   }
 }
 
@@ -99,7 +117,8 @@ export async function fetchAllPins(): Promise<{
   listingPins: Set<string>;
 }> {
   const supabase = createClient();
-  const { data } = await supabase.from("pins").select("*");
+  const { data, error } = await supabase.from("pins").select("*");
+  if (error) console.error("[pins] fetchAll error:", error);
   const searchPins = new Set<string>();
   const listingPins = new Set<string>();
   for (const row of (data ?? []) as PinRow[]) {

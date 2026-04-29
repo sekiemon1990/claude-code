@@ -51,6 +51,7 @@ import {
   haptic,
   saveScrollPosition,
   restoreScrollPosition,
+  setLastResultUrl,
 } from "@/lib/storage";
 import { toast } from "@/lib/toast";
 import {
@@ -138,6 +139,11 @@ function ResultInner({ resultId }: { resultId: string }) {
     restoreScrollPosition(scrollKey);
     const onSave = () => saveScrollPosition(scrollKey);
     window.addEventListener("beforeunload", onSave);
+    // 直近の検索結果 URL を記録
+    if (typeof window !== "undefined") {
+      const url = window.location.pathname + window.location.search;
+      setLastResultUrl(url);
+    }
     return () => {
       saveScrollPosition(scrollKey);
       window.removeEventListener("beforeunload", onSave);
