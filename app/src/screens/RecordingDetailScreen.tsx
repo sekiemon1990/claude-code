@@ -140,7 +140,10 @@ export function RecordingDetailScreen({ recordingId, onBack }: Props) {
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={[styles.content, { paddingTop: insets.top + 12 }]}
+      contentContainerStyle={[
+        styles.content,
+        { paddingTop: Math.max(insets.top, Platform.OS === 'ios' ? 60 : 20) },
+      ]}
     >
       <Pressable onPress={onBack}>
         <Text style={styles.link}>← 一覧へ</Text>

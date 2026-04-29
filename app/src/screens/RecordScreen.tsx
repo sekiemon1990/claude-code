@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Alert, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
 
@@ -212,7 +212,7 @@ function RecordScreenInner({ deal, onDone, onChangeDeal }: Props) {
   const isPaused = recorder.state === 'paused';
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
+    <View style={[styles.container, { paddingTop: Math.max(insets.top, Platform.OS === 'ios' ? 60 : 20) }]}>
       <View style={styles.dealCard}>
         <View style={styles.dealHeader}>
           <Text style={styles.dealLabel}>選択中の案件</Text>
