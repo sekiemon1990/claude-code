@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
 
@@ -150,6 +150,7 @@ function RecordScreenInner({ deal, onDone, onChangeDeal }: Props) {
   const recorder = useRecorder();
   const storage = useStorageStatus();
   const [saving, setSaving] = useState(false);
+  const insets = useSafeAreaInsets();
 
   async function handleStart() {
     if (storage.level === 'critical') {
@@ -211,7 +212,7 @@ function RecordScreenInner({ deal, onDone, onChangeDeal }: Props) {
   const isPaused = recorder.state === 'paused';
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
       <View style={styles.dealCard}>
         <View style={styles.dealHeader}>
           <Text style={styles.dealLabel}>選択中の案件</Text>
@@ -330,7 +331,7 @@ function RecordScreenInner({ deal, onDone, onChangeDeal }: Props) {
         クラウドへのアップロードはバックグラウンドで行われ、
         送信完了するまでローカルのファイルは消えません。
       </Text>
-    </SafeAreaView>
+    </View>
   );
 }
 

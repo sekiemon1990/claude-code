@@ -10,7 +10,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
@@ -40,6 +40,7 @@ export function RecordingDetailScreen({ recordingId, onBack }: Props) {
   const [loading, setLoading] = useState(true);
   const [postingToCrm, setPostingToCrm] = useState(false);
   const crm = useCrmContext();
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     const unsub = subscribeToRecording(recordingId, (rec) => {
@@ -137,8 +138,10 @@ export function RecordingDetailScreen({ recordingId, onBack }: Props) {
   const percent = pipelinePercent(recording.status);
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={[styles.content, { paddingTop: insets.top + 12 }]}
+    >
       <Pressable onPress={onBack}>
         <Text style={styles.link}>← 一覧へ</Text>
       </Pressable>
@@ -302,8 +305,7 @@ export function RecordingDetailScreen({ recordingId, onBack }: Props) {
       <Pressable style={styles.deleteButton} onPress={handleDelete}>
         <Text style={styles.deleteButtonText}>削除</Text>
       </Pressable>
-      </ScrollView>
-    </SafeAreaView>
+    </ScrollView>
   );
 }
 
