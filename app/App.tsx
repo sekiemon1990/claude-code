@@ -3,6 +3,93 @@ import { Platform, ScrollView, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+// === グローバル JS エラーキャプチャ ===
+// クラッシュ瞬間の JS エラーメッセージを画面に出すため、ErrorUtils と
+// Promise rejection の両方をフックする。
+let _globalLastError: { message: string; stack?: string; isFatal: boolean } | null = null;
+const _onErrorCallbacks: Array<() => void> = [];
+
+(function installGlobalErrorHandler() {
+  // @ts-ignore
+  const ErrorUtils = global.ErrorUtils;
+  if (!ErrorUtils) return;
+  const previousHandler = ErrorUtils.getGlobalHandler?.();
+  ErrorUtils.setGlobalHandler((error: any, isFatal: boolean) => {
+    _globalLastError = {
+      message: error?.message || String(error),
+      stack: error?.stack,
+      isFatal: !!isFatal,
+    };
+    _onErrorCallbacks.forEach((cb) => {
+      try {
+        cb();
+      } catch {}
+    });
+    if (previousHandler) {
+      try {
+        previousHandler(error, isFatal);
+      } catch {}
+    }
+  });
+})();
+
+function GlobalErrorBanner() {
+  const [, force] = useState(0);
+  useEffect(() => {
+    const cb = () => force((x) => x + 1);
+    _onErrorCallbacks.push(cb);
+    return () => {
+      const i = _onErrorCallbacks.indexOf(cb);
+      if (i >= 0) _onErrorCallbacks.splice(i, 1);
+    };
+  }, []);
+  if (!_globalLastError) return null;
+  return (
+    <ScrollView
+      style={{
+        position: 'absolute',
+        left: 8,
+        right: 8,
+        top: 60,
+        bottom: 60,
+        backgroundColor: '#7f1d1d',
+        borderRadius: 8,
+        padding: 12,
+        zIndex: 9999,
+      }}
+    >
+      <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14, marginBottom: 6 }}>
+        ⚠ JS Error{_globalLastError.isFatal ? ' (FATAL)' : ''}
+      </Text>
+      <Text style={{ color: '#fee2e2', fontSize: 12, marginBottom: 8 }}>
+        {_globalLastError.message}
+      </Text>
+      {_globalLastError.stack ? (
+        <Text style={{ color: '#fecaca', fontSize: 10, fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace' }) }}>
+          {_globalLastError.stack}
+        </Text>
+      ) : null}
+      <Text
+        onPress={() => {
+          _globalLastError = null;
+          force((x) => x + 1);
+        }}
+        style={{
+          color: '#fff',
+          marginTop: 12,
+          fontSize: 12,
+          textAlign: 'center',
+          padding: 8,
+          backgroundColor: '#991b1b',
+          borderRadius: 6,
+        }}
+      >
+        閉じる
+      </Text>
+    </ScrollView>
+  );
+}
+
 /**
  * トップレベルのエラーバウンダリ。React のレンダリング中に例外が出た場合、
  * 真っ黒な画面で止まる代わりに何が起きたかを表示する。
@@ -254,6 +341,7 @@ export default function App() {
       <SafeAreaProvider>
         <StatusBar style="auto" />
         <AppContent />
+        <GlobalErrorBanner />
       </SafeAreaProvider>
     </AppErrorBoundary>
   );
