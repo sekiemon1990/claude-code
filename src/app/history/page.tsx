@@ -34,11 +34,6 @@ export default function HistoryPage() {
                 <p className="text-sm font-semibold text-foreground line-clamp-1">
                   {h.keyword}
                 </p>
-                {h.model && (
-                  <p className="text-xs text-muted line-clamp-1 mt-0.5">
-                    {h.model}
-                  </p>
-                )}
                 <div className="flex items-center gap-2 mt-2 flex-wrap">
                   <span className="text-base font-bold text-foreground">
                     {formatYen(h.median)}

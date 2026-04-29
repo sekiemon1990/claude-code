@@ -3,8 +3,7 @@ import type { SearchResult } from "./types";
 export const MOCK_RESULT: SearchResult = {
   id: "search_001",
   query: {
-    keyword: "SONY α7 IV",
-    model: "ILCE-7M4",
+    keyword: "SONY α7 IV ILCE-7M4",
     excludes: "ジャンク 部品",
     period: "30",
   },
@@ -219,7 +218,6 @@ export const MOCK_RESULT: SearchResult = {
 export type HistoryItem = {
   id: string;
   keyword: string;
-  model?: string;
   median: number;
   totalCount: number;
   searchedAt: string;
@@ -228,8 +226,7 @@ export type HistoryItem = {
 export const MOCK_HISTORY: HistoryItem[] = [
   {
     id: "search_001",
-    keyword: "SONY α7 IV",
-    model: "ILCE-7M4",
+    keyword: "SONY α7 IV ILCE-7M4",
     median: 125000,
     totalCount: 75,
     searchedAt: "2026-04-29T08:30:00+09:00",
@@ -243,8 +240,7 @@ export const MOCK_HISTORY: HistoryItem[] = [
   },
   {
     id: "search_003",
-    keyword: "ロレックス サブマリーナ",
-    model: "126610LN",
+    keyword: "ロレックス サブマリーナ 126610LN",
     median: 1890000,
     totalCount: 28,
     searchedAt: "2026-04-28T16:42:00+09:00",
