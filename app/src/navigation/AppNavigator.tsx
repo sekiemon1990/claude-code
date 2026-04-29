@@ -140,7 +140,7 @@ export function AppNavigator() {
             />
           )}
         </Stack.Screen>
-        <Stack.Screen name="Record" options={{ headerShown: true, title: '新規録音' }}>
+        <Stack.Screen name="Record">
           {({ route, navigation }) => (
             <RecordScreen
               deal={route.params.deal}
@@ -153,7 +153,7 @@ export function AppNavigator() {
             />
           )}
         </Stack.Screen>
-        <Stack.Screen name="Detail" options={{ headerShown: true, title: '詳細' }}>
+        <Stack.Screen name="Detail">
           {({ route, navigation }) => (
             <RecordingDetailScreen
               recordingId={route.params.recordingId}
