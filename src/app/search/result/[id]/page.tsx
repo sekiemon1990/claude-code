@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, use, useMemo, useState } from "react";
 import {
   BarChart3,
@@ -26,9 +26,11 @@ import { AppShell } from "@/components/AppShell";
 import { SourceBadge } from "@/components/SourceBadge";
 import { PlatformLogo } from "@/components/PlatformLogo";
 import { ImageLightbox } from "@/components/ImageLightbox";
+import { ShippingBadge } from "@/components/ShippingBadge";
 import {
   SearchFormFields,
   type Period,
+  type ShippingFilter,
 } from "@/components/SearchFormFields";
 import { MOCK_RESULT } from "@/lib/mock-data";
 import {
@@ -53,7 +55,12 @@ import {
   type ConditionRank,
 } from "@/lib/conditions";
 import { ConditionBadge } from "@/components/ConditionBadge";
-import { SOURCES, type SourceKey, type Listing } from "@/lib/types";
+import {
+  SOURCES,
+  type SourceKey,
+  type Listing,
+  type ShippingType,
+} from "@/lib/types";
 
 type FlatListing = Listing & { source: SourceKey };
 type SortMode = "date_desc" | "date_asc" | "price_desc" | "price_asc";
@@ -77,6 +84,7 @@ function median(nums: number[]): number {
 
 function ResultInner({ resultId }: { resultId: string }) {
   const params = useSearchParams();
+  const router = useRouter();
   const result = MOCK_RESULT;
 
   const sourcesParam = params.get("sources");
@@ -107,6 +115,12 @@ function ResultInner({ resultId }: { resultId: string }) {
   const [lightbox, setLightbox] = useState<{ src: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+
+  const shippingParam = params.get("shipping") as ShippingFilter | null;
+  const initialShipping: ShippingFilter =
+    shippingParam === "free" || shippingParam === "paid" ? shippingParam : "any";
+  const [shippingFilter, setShippingFilter] =
+    useState<ShippingFilter>(initialShipping);
 
   const conditionsParam = params.get("conditions");
   const initialConditions = useMemo<ConditionRank[]>(
@@ -152,6 +166,13 @@ function ResultInner({ resultId }: { resultId: string }) {
         conditionFilter.includes(classifyCondition(l.condition))
       );
     }
+    if (shippingFilter === "free") {
+      list = list.filter(
+        (l) => l.shipping === "free" || l.shipping === "pickup"
+      );
+    } else if (shippingFilter === "paid") {
+      list = list.filter((l) => l.shipping === "paid");
+    }
     if (refine.trim()) {
       const terms = refine
         .trim()
@@ -171,7 +192,7 @@ function ResultInner({ resultId }: { resultId: string }) {
       if (sort === "price_desc") return b.price - a.price;
       return a.price - b.price;
     });
-  }, [flatListings, filter, conditionFilter, refine, sort]);
+  }, [flatListings, filter, conditionFilter, shippingFilter, refine, sort]);
 
   const visibleCount =
     pageSize === "all"
@@ -286,6 +307,7 @@ function ResultInner({ resultId }: { resultId: string }) {
               conditions: conditionFilter.filter(
                 (c): c is Exclude<ConditionRank, "unknown"> => c !== "unknown"
               ),
+              shipping: shippingFilter,
             }}
             submitLabel="この条件で再検索"
             onAfterSubmit={() => setEditOpen(false)}
@@ -472,6 +494,73 @@ function ResultInner({ resultId }: { resultId: string }) {
                 })}
             </div>
           )}
+
+          <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 mb-1 scrollbar-none items-center">
+            <span className="shrink-0 text-[10px] text-muted px-1">期間:</span>
+            {(
+              [
+                { v: "30", label: "30日" },
+                { v: "90", label: "90日" },
+                { v: "all", label: "全期間" },
+              ] as { v: Period; label: string }[]
+            ).map((opt) => {
+              const active = period === opt.v;
+              return (
+                <button
+                  key={opt.v}
+                  type="button"
+                  onClick={() => {
+                    if (opt.v === period) return;
+                    const next = new URLSearchParams(params.toString());
+                    next.set("period", opt.v);
+                    router.push(`/search/loading?${next.toString()}`);
+                  }}
+                  className={
+                    active
+                      ? "shrink-0 h-7 px-2.5 rounded-full text-[11px] font-bold border-2 border-primary bg-primary/5 text-primary"
+                      : "shrink-0 h-7 px-2.5 rounded-full text-[11px] font-medium border border-border bg-surface text-muted hover:border-foreground/30"
+                  }
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 mb-1 scrollbar-none items-center">
+            <span className="shrink-0 text-[10px] text-muted px-1">送料:</span>
+            {(
+              [
+                { v: "any", label: "全て" },
+                { v: "free", label: "送料無料・引取" },
+                { v: "paid", label: "送料別" },
+              ] as { v: ShippingFilter; label: string }[]
+            ).map((opt) => {
+              const active = shippingFilter === opt.v;
+              return (
+                <button
+                  key={opt.v}
+                  type="button"
+                  onClick={() => {
+                    setShippingFilter(opt.v);
+                    setExtraPages(0);
+                  }}
+                  className={
+                    active
+                      ? "shrink-0 h-7 px-2.5 rounded-full text-[11px] font-bold border-2 border-success bg-success/5 text-success"
+                      : "shrink-0 h-7 px-2.5 rounded-full text-[11px] font-medium border border-border bg-surface text-muted hover:border-foreground/30"
+                  }
+                  style={
+                    active
+                      ? { borderColor: "var(--success)", color: "var(--success)" }
+                      : undefined
+                  }
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
 
           <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 mb-1 scrollbar-none items-center">
             <span className="shrink-0 text-[10px] text-muted px-1">状態:</span>
@@ -796,6 +885,7 @@ function ListingCard({
             </div>
             <div className="flex items-center gap-2 mt-1 text-xs text-muted">
               <ConditionBadge rank={rank} size="sm" />
+              <ShippingBadge shipping={listing.shipping} size="sm" />
               {listing.condition && (
                 <span className="truncate">{listing.condition}</span>
               )}

@@ -8,6 +8,7 @@ import { SOURCES, type SourceKey } from "@/lib/types";
 import { CONDITION_RANKS, CONDITION_META, type ConditionRank } from "@/lib/conditions";
 
 export type Period = "30" | "90" | "all";
+export type ShippingFilter = "any" | "free" | "paid";
 export type ConditionRankNonUnknown = Exclude<ConditionRank, "unknown">;
 
 export type SearchFormValues = {
@@ -16,6 +17,7 @@ export type SearchFormValues = {
   period: Period;
   sources: SourceKey[];
   conditions: ConditionRankNonUnknown[];
+  shipping: ShippingFilter;
 };
 
 type Props = {
@@ -42,6 +44,9 @@ export function SearchFormFields({
   const [selectedConditions, setSelectedConditions] = useState<
     ConditionRankNonUnknown[]
   >(initial?.conditions ?? []);
+  const [shipping, setShipping] = useState<ShippingFilter>(
+    initial?.shipping ?? "any"
+  );
 
   function toggleSource(key: SourceKey) {
     setSelectedSources((prev) =>
@@ -71,6 +76,7 @@ export function SearchFormFields({
       ...(selectedConditions.length > 0 && {
         conditions: selectedConditions.join(","),
       }),
+      ...(shipping !== "any" && { shipping }),
     });
     router.push(`/search/loading?${params.toString()}`);
     onAfterSubmit?.();
@@ -191,6 +197,32 @@ export function SearchFormFields({
               </button>
             );
           })}
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <span className="text-sm font-medium text-foreground">送料</span>
+        <div className="grid grid-cols-3 gap-2">
+          {(
+            [
+              { v: "any", label: "指定なし" },
+              { v: "free", label: "送料無料のみ" },
+              { v: "paid", label: "送料別のみ" },
+            ] as { v: ShippingFilter; label: string }[]
+          ).map((opt) => (
+            <button
+              key={opt.v}
+              type="button"
+              onClick={() => setShipping(opt.v)}
+              className={
+                shipping === opt.v
+                  ? "h-11 rounded-lg border-2 border-primary bg-primary/5 text-primary font-semibold text-sm"
+                  : "h-11 rounded-lg border border-border bg-surface text-foreground text-sm hover:border-foreground/30"
+              }
+            >
+              {opt.label}
+            </button>
+          ))}
         </div>
       </div>
 
