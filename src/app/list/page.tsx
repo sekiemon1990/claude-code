@@ -12,6 +12,7 @@ import {
   AlertCircle,
   Inbox,
   ChevronDown,
+  Pencil,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { PlatformLogo } from "@/components/PlatformLogo";
@@ -27,12 +28,14 @@ import {
   type ListItem,
 } from "@/lib/list";
 import { ListPicker } from "@/components/ListPicker";
+import { RenameListModal } from "@/components/RenameListModal";
 import { toast } from "@/lib/toast";
 
 export default function ListPage() {
   const list = useCurrentList();
   const [confirmClear, setConfirmClear] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
 
   const running = list.items.filter((i) => i.status === "running");
   const queued = list.items.filter((i) => i.status === "queued");
@@ -63,23 +66,34 @@ export default function ListPage() {
     <AppShell title="査定リスト">
       <div className="flex flex-col gap-4">
         <section>
-          <button
-            type="button"
-            onClick={() => setPickerOpen(true)}
-            className="tap-scale w-full bg-surface border border-border rounded-xl p-3 flex items-center gap-3 hover:border-primary/40"
-          >
-            <ListChecks size={20} className="text-primary shrink-0" />
-            <div className="flex-1 min-w-0 text-left">
-              <p className="text-sm font-bold text-foreground truncate">
-                {list.name ?? "査定リスト"}
-              </p>
-              <p className="text-[11px] text-muted">
-                {list.items.length}件
-                {list.items.length > 0 && " ・ タップで切替"}
-              </p>
-            </div>
-            <ChevronDown size={16} className="text-muted shrink-0" />
-          </button>
+          <div className="bg-surface border border-border rounded-xl flex items-stretch overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setPickerOpen(true)}
+              aria-label="リストを切替"
+              className="tap-scale flex items-center gap-3 flex-1 min-w-0 p-3 hover:bg-surface-2 text-left"
+            >
+              <ListChecks size={20} className="text-primary shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-foreground truncate">
+                  {list.name ?? "査定リスト"}
+                </p>
+                <p className="text-[11px] text-muted">
+                  {list.items.length}件
+                  {list.items.length > 0 && " ・ タップで切替"}
+                </p>
+              </div>
+              <ChevronDown size={16} className="text-muted shrink-0" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setRenameOpen(true)}
+              aria-label="リスト名を変更"
+              className="tap-scale shrink-0 px-3 border-l border-border text-muted hover:text-primary hover:bg-surface-2 flex items-center justify-center"
+            >
+              <Pencil size={16} />
+            </button>
+          </div>
         </section>
 
         <QuickAddBar />
@@ -189,6 +203,10 @@ export default function ListPage() {
       </div>
 
       {pickerOpen && <ListPicker onClose={() => setPickerOpen(false)} />}
+
+      {renameOpen && (
+        <RenameListModal list={list} onClose={() => setRenameOpen(false)} />
+      )}
 
       {confirmClear && (
         <ConfirmDialog
