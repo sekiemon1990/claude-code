@@ -1,21 +1,40 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 import { Search, Check } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { SOURCES, type SourceKey } from "@/lib/types";
 
 type Period = "30" | "90" | "all";
 
-export default function SearchPage() {
+const VALID_PERIODS: Period[] = ["30", "90", "all"];
+const VALID_SOURCES: SourceKey[] = SOURCES.map((s) => s.key);
+
+function SearchForm() {
   const router = useRouter();
-  const [keyword, setKeyword] = useState("");
-  const [excludes, setExcludes] = useState("");
-  const [period, setPeriod] = useState<Period>("30");
-  const [selectedSources, setSelectedSources] = useState<SourceKey[]>([
-    "yahoo_auction",
-  ]);
+  const params = useSearchParams();
+
+  const initialKeyword = params.get("keyword") ?? "";
+  const initialExcludes = params.get("excludes") ?? "";
+  const periodParam = params.get("period");
+  const initialPeriod: Period =
+    periodParam && VALID_PERIODS.includes(periodParam as Period)
+      ? (periodParam as Period)
+      : "30";
+  const sourcesParam = params.get("sources");
+  const initialSources: SourceKey[] = sourcesParam
+    ? (sourcesParam.split(",").filter((s) =>
+        VALID_SOURCES.includes(s as SourceKey)
+      ) as SourceKey[])
+    : ["yahoo_auction"];
+
+  const [keyword, setKeyword] = useState(initialKeyword);
+  const [excludes, setExcludes] = useState(initialExcludes);
+  const [period, setPeriod] = useState<Period>(initialPeriod);
+  const [selectedSources, setSelectedSources] = useState<SourceKey[]>(
+    initialSources.length > 0 ? initialSources : ["yahoo_auction"]
+  );
 
   function toggleSource(key: SourceKey) {
     setSelectedSources((prev) =>
@@ -176,5 +195,21 @@ export default function SearchPage() {
         </section>
       </div>
     </AppShell>
+  );
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense
+      fallback={
+        <AppShell>
+          <div className="pt-8 text-center text-muted text-sm">
+            読み込み中...
+          </div>
+        </AppShell>
+      }
+    >
+      <SearchForm />
+    </Suspense>
   );
 }

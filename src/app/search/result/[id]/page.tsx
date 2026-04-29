@@ -10,11 +10,18 @@ import {
   ExternalLink,
   Gavel,
   ArrowDownNarrowWide,
+  Link2,
+  Check,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { SourceBadge } from "@/components/SourceBadge";
 import { MOCK_RESULT } from "@/lib/mock-data";
-import { formatYen, formatCount, formatRelativeDate } from "@/lib/utils";
+import {
+  formatYen,
+  formatCount,
+  formatRelativeDate,
+  buildPlatformSearchUrl,
+} from "@/lib/utils";
 import { SOURCES, type SourceKey, type Listing } from "@/lib/types";
 
 type FlatListing = Listing & { source: SourceKey };
@@ -70,6 +77,18 @@ function ResultInner() {
 
   const queryStr = new URLSearchParams(params.toString()).toString();
   const period = params.get("period") ?? result.query.period;
+  const keyword = params.get("keyword") ?? result.query.keyword;
+
+  const [copied, setCopied] = useState(false);
+  async function handleCopyUrl() {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // noop
+    }
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -106,6 +125,47 @@ function ResultInner() {
           <span className="ml-2 text-xs">
             ({formatCount(summary.totalCount)})
           </span>
+        </div>
+      </section>
+
+      <section>
+        <h3 className="text-sm font-semibold text-foreground mb-2 px-1">
+          媒体ページで全件を見る
+        </h3>
+        <div className="flex flex-col gap-2">
+          {requestedSources.map((key) => {
+            const meta = SOURCES.find((s) => s.key === key)!;
+            const url = buildPlatformSearchUrl(key, keyword);
+            return (
+              <a
+                key={key}
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-between gap-2 px-4 h-12 rounded-lg bg-surface border-2 hover:bg-surface-2 active:bg-surface-2 transition-colors"
+                style={{ borderColor: `${meta.color}33` }}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <span
+                    aria-hidden
+                    className="w-2 h-2 rounded-full shrink-0"
+                    style={{ backgroundColor: meta.color }}
+                  />
+                  <span
+                    className="text-sm font-semibold truncate"
+                    style={{ color: meta.color }}
+                  >
+                    {meta.name}で「{keyword}」を見る
+                  </span>
+                </div>
+                <ExternalLink
+                  size={16}
+                  style={{ color: meta.color }}
+                  className="shrink-0"
+                />
+              </a>
+            );
+          })}
         </div>
       </section>
 
@@ -221,13 +281,36 @@ function ResultInner() {
         </Link>
         <button
           type="button"
-          className="h-12 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90"
+          onClick={handleCopyUrl}
+          className={
+            copied
+              ? "h-12 rounded-lg bg-success text-white font-medium text-sm flex items-center justify-center gap-2"
+              : "h-12 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 flex items-center justify-center gap-2"
+          }
         >
-          履歴に保存
+          {copied ? (
+            <>
+              <Check size={16} />
+              コピーしました
+            </>
+          ) : (
+            <>
+              <Link2 size={16} />
+              URLをコピー
+            </>
+          )}
         </button>
       </section>
 
-      <section className="bg-surface-2 rounded-xl p-3 mt-2">
+      <section className="bg-surface-2 rounded-xl p-3 mt-2 flex items-start gap-2">
+        <Check size={14} className="text-success mt-0.5 shrink-0" />
+        <p className="text-xs text-muted leading-relaxed">
+          検索結果は履歴に自動保存されています。このページのURLを共有すれば、
+          社内の他のスタッフも同じ結果を確認できます。
+        </p>
+      </section>
+
+      <section className="bg-surface-2 rounded-xl p-3">
         <p className="text-xs text-muted leading-relaxed">
           ※ 表示価格は選択した媒体から取得した直近の
           {period === "all" ? "全期間" : `${period}日`}
