@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ChevronRight,
   Search as SearchIcon,
@@ -87,6 +87,11 @@ export default function HistoryPage() {
   const [pinnedOnly, setPinnedOnly] = useState(false);
   const [memoOnly, setMemoOnly] = useState(false);
   const [query, setQuery] = useState("");
+  // groupByDate が new Date() を使うためサーバ (UTC) とクライアント (JST) で
+  // 日付境界が異なり、項目のグループ分けが変わって HTML 不一致 (#418) になる。
+  // マウント後にだけリスト本体をレンダリングして回避する。
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   return (
     <AppShell>
@@ -190,22 +195,22 @@ export default function HistoryPage() {
           </button>
         </div>
 
-        {tab === "searches" && (
+        {mounted && tab === "searches" && (
           <SearchHistoryList
             pinnedOnly={pinnedOnly}
             memoOnly={memoOnly}
             query={query}
           />
         )}
-        {tab === "views" && (
+        {mounted && tab === "views" && (
           <ViewHistoryList
             pinnedOnly={pinnedOnly}
             memoOnly={memoOnly}
             query={query}
           />
         )}
-        {tab === "lists" && <SavedListsHistory query={query} />}
-        {tab === "advices" && <AdviceHistoryList query={query} />}
+        {mounted && tab === "lists" && <SavedListsHistory query={query} />}
+        {mounted && tab === "advices" && <AdviceHistoryList query={query} />}
       </div>
     </AppShell>
   );
