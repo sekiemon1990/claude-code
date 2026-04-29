@@ -197,12 +197,76 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
         </div>
       </section>
 
-      {/* タブ: 詳細 / 価格 / 説明 */}
-      <DetailTabs
-        listing={listing}
-        meta={meta}
+      {/* 詳細情報 */}
+      <section className="bg-surface border border-border rounded-xl divide-y divide-border">
+        {listing.condition && (
+          <DetailRow
+            icon={<Tag size={16} />}
+            label="状態"
+            value={listing.condition}
+          />
+        )}
+        <DetailRow
+          icon={<CalendarDays size={16} />}
+          label={meta.status}
+          value={formatRelativeDate(listing.endedAt)}
+          sub={new Date(listing.endedAt).toLocaleString("ja-JP", {
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
+        />
+        {listing.sellerName && (
+          <DetailRow
+            icon={<User size={16} />}
+            label="出品者"
+            value={listing.sellerName}
+          />
+        )}
+        {listing.shippingInfo && (
+          <DetailRow
+            icon={<Truck size={16} />}
+            label="配送"
+            value={listing.shippingInfo}
+          />
+        )}
+        {listing.location && (
+          <DetailRow
+            icon={<MapPin size={16} />}
+            label="所在地"
+            value={listing.location}
+          />
+        )}
+      </section>
+
+      {/* 実質商品価値 */}
+      <NetValueSection
+        title={listing.title}
+        price={listing.price}
+        shipping={listing.shipping}
         source={source}
       />
+
+      {/* 付属品 */}
+      <AccessoriesSection
+        title={listing.title}
+        description={listing.description}
+        accessories={listing.accessories}
+      />
+
+      {/* 商品説明 */}
+      {listing.description && (
+        <section className="bg-surface border border-border rounded-xl p-4">
+          <h2 className="text-sm font-semibold text-foreground mb-2">
+            商品説明
+          </h2>
+          <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
+            {listing.description}
+          </p>
+        </section>
+      )}
 
       {/* CTA */}
       <a
@@ -405,139 +469,6 @@ function ImageGallery({
         </div>
       )}
     </>
-  );
-}
-
-function DetailTabs({
-  listing,
-  meta,
-  source,
-}: {
-  listing: import("@/lib/types").Listing;
-  meta: { name: string; status: string };
-  source: SourceKey;
-}) {
-  const [tab, setTab] = useState<"info" | "price" | "desc">("info");
-
-  return (
-    <section className="bg-surface border border-border rounded-xl overflow-hidden">
-      <div className="grid grid-cols-3 gap-1 p-1 bg-surface-2 border-b border-border">
-        <TabBtn
-          active={tab === "info"}
-          onClick={() => setTab("info")}
-          label="詳細"
-        />
-        <TabBtn
-          active={tab === "price"}
-          onClick={() => setTab("price")}
-          label="価格内訳"
-        />
-        <TabBtn
-          active={tab === "desc"}
-          onClick={() => setTab("desc")}
-          label="商品説明"
-        />
-      </div>
-
-      <div className="p-3 anim-content-fade" key={tab}>
-        {tab === "info" && (
-          <div className="flex flex-col gap-3">
-            <div className="bg-surface-2 rounded-lg divide-y divide-border">
-              {listing.condition && (
-                <DetailRow
-                  icon={<Tag size={16} />}
-                  label="状態"
-                  value={listing.condition}
-                />
-              )}
-              <DetailRow
-                icon={<CalendarDays size={16} />}
-                label={meta.status}
-                value={formatRelativeDate(listing.endedAt)}
-                sub={new Date(listing.endedAt).toLocaleString("ja-JP", {
-                  year: "numeric",
-                  month: "2-digit",
-                  day: "2-digit",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-              />
-              {listing.sellerName && (
-                <DetailRow
-                  icon={<User size={16} />}
-                  label="出品者"
-                  value={listing.sellerName}
-                />
-              )}
-              {listing.shippingInfo && (
-                <DetailRow
-                  icon={<Truck size={16} />}
-                  label="配送"
-                  value={listing.shippingInfo}
-                />
-              )}
-              {listing.location && (
-                <DetailRow
-                  icon={<MapPin size={16} />}
-                  label="所在地"
-                  value={listing.location}
-                />
-              )}
-            </div>
-            <AccessoriesSection
-              title={listing.title}
-              description={listing.description}
-              accessories={listing.accessories}
-            />
-          </div>
-        )}
-        {tab === "price" && (
-          <NetValueSection
-            title={listing.title}
-            price={listing.price}
-            shipping={listing.shipping}
-            source={source}
-          />
-        )}
-        {tab === "desc" && (
-          <div>
-            {listing.description ? (
-              <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
-                {listing.description}
-              </p>
-            ) : (
-              <p className="text-sm text-muted text-center py-6">
-                商品説明はありません
-              </p>
-            )}
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function TabBtn({
-  active,
-  onClick,
-  label,
-}: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={
-        active
-          ? "tap-scale h-9 rounded-md text-xs font-semibold bg-surface text-foreground shadow-sm"
-          : "tap-scale h-9 rounded-md text-xs font-medium text-muted hover:text-foreground"
-      }
-    >
-      {label}
-    </button>
   );
 }
 
