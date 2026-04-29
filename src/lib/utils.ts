@@ -1,8 +1,24 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import type { SourceKey } from "./types";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
+}
+
+export function buildPlatformSearchUrl(
+  source: SourceKey,
+  keyword: string
+): string {
+  const q = encodeURIComponent(keyword);
+  switch (source) {
+    case "yahoo_auction":
+      return `https://auctions.yahoo.co.jp/closedsearch/closedsearch?p=${q}&va=${q}&b=1&n=50`;
+    case "mercari":
+      return `https://jp.mercari.com/search?keyword=${q}&status=sold_out&order=desc&sort=created_time`;
+    case "jimoty":
+      return `https://jmty.jp/all?keyword=${q}`;
+  }
 }
 
 export function formatYen(value: number): string {
