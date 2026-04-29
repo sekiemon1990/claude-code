@@ -30,8 +30,18 @@ export const MOCK_RESULT: SearchResult = {
           endedAt: "2026-04-28T22:14:00+09:00",
           url: "https://auctions.yahoo.co.jp/jp/auction/y1",
           thumbnail: "https://picsum.photos/seed/y1cam/240/240",
+          images: [
+            "https://picsum.photos/seed/y1cam/800/800",
+            "https://picsum.photos/seed/y1cam2/800/800",
+            "https://picsum.photos/seed/y1cam3/800/800",
+            "https://picsum.photos/seed/y1cam4/800/800",
+          ],
           bidCount: 38,
           condition: "中古 - 美品",
+          description:
+            "SONY α7 IV ILCE-7M4 ボディです。\n2024年購入、ショット数2,800以下。動作確認済み、目立った傷はありません。\n元箱・取扱説明書・バッテリー2個・充電器・ストラップすべて揃っています。\nノークレーム・ノーリターンでお願いします。",
+          sellerName: "camera_shop_tokyo",
+          shippingInfo: "佐川急便（送料込み）",
         },
         {
           id: "y2",
@@ -109,7 +119,16 @@ export const MOCK_RESULT: SearchResult = {
           endedAt: "2026-04-28T15:20:00+09:00",
           url: "https://jp.mercari.com/item/m1",
           thumbnail: "https://picsum.photos/seed/m1cam/240/240",
+          images: [
+            "https://picsum.photos/seed/m1cam/800/800",
+            "https://picsum.photos/seed/m1cam2/800/800",
+            "https://picsum.photos/seed/m1cam3/800/800",
+          ],
           condition: "目立った傷や汚れなし",
+          description:
+            "SONY α7 IV ILCE-7M4 ボディです。\nシャッター回数500回未満の極上品。\n外装に擦れや汚れは一切なく、新品同様の状態です。\n付属品は全て揃っています（外箱、説明書、充電器、バッテリー、ストラップ）。\n即購入OKです。",
+          sellerName: "Sアカウント",
+          shippingInfo: "らくらくメルカリ便（送料込み）",
         },
         {
           id: "m2",
@@ -172,7 +191,15 @@ export const MOCK_RESULT: SearchResult = {
           endedAt: "2026-04-28T10:00:00+09:00",
           url: "https://jmty.jp/item/j1",
           thumbnail: "https://picsum.photos/seed/j1cam/240/240",
+          images: [
+            "https://picsum.photos/seed/j1cam/800/800",
+            "https://picsum.photos/seed/j1cam2/800/800",
+          ],
           condition: "目立った傷なし",
+          description:
+            "SONY α7 IV ボディ単体です。\n買い替えのため出品します。動作確認済み、状態は良好です。\n引き取り限定でお願いします。場所は世田谷区内です。\n値下げ交渉応相談、現金支払いのみ。",
+          sellerName: "user_setagaya",
+          location: "東京都 世田谷区",
         },
         {
           id: "j2",

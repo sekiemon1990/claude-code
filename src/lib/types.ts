@@ -38,9 +38,14 @@ export type Listing = {
   price: number;
   endedAt: string;
   thumbnail?: string;
+  images?: string[];
   url: string;
   bidCount?: number;
   condition?: string;
+  description?: string;
+  sellerName?: string;
+  shippingInfo?: string;
+  location?: string;
 };
 
 export type SourceResult = {
