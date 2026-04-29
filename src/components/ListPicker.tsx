@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import {
   useAllLists,
-  getCurrentList,
+  useCurrentList,
   switchToList,
   createList,
   deleteList,
@@ -31,7 +31,7 @@ export function ListPicker({ onClose }: Props) {
   const lists = useAllLists();
   const [renameTarget, setRenameTarget] = useState<AppraisalList | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<AppraisalList | null>(null);
-  const current = getCurrentList();
+  const current = useCurrentList();
 
   function selectList(id: string) {
     switchToList(id);
