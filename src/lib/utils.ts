@@ -25,6 +25,17 @@ export function formatYen(value: number): string {
   return `¥${value.toLocaleString("ja-JP")}`;
 }
 
+export function formatYenShort(value: number): string {
+  if (value >= 100000000) {
+    return `¥${(value / 100000000).toFixed(value >= 1000000000 ? 0 : 1)}億`;
+  }
+  if (value >= 10000) {
+    const v = value / 10000;
+    return `¥${v >= 100 ? Math.round(v) : v.toFixed(1).replace(/\.0$/, "")}万`;
+  }
+  return `¥${value.toLocaleString("ja-JP")}`;
+}
+
 export function formatCount(value: number): string {
   return `${value.toLocaleString("ja-JP")}件`;
 }

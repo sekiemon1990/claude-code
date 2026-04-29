@@ -52,6 +52,7 @@ import {
   saveScrollPosition,
   restoreScrollPosition,
 } from "@/lib/storage";
+import { toast } from "@/lib/toast";
 import {
   CONDITION_RANKS,
   CONDITION_META,
@@ -62,6 +63,7 @@ import { generateSuggestions } from "@/lib/suggestions";
 import { ConditionBadge } from "@/components/ConditionBadge";
 import { ToolsPanel } from "@/components/ToolsPanel";
 import { QuickMemoModal } from "@/components/QuickMemoModal";
+import { PlatformPriceBars } from "@/components/PlatformPriceBars";
 import {
   SOURCES,
   type SourceKey,
@@ -245,9 +247,10 @@ function ResultInner({ resultId }: { resultId: string }) {
     try {
       await navigator.clipboard.writeText(window.location.href);
       setCopied(true);
+      toast({ message: "URLをコピーしました" });
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // noop
+      toast({ message: "コピーに失敗しました", variant: "error" });
     }
   }
 
@@ -274,6 +277,9 @@ function ResultInner({ resultId }: { resultId: string }) {
   function saveMemo() {
     if (memoDraft !== null) setMemo(searchKey, memoDraft);
     haptic(8);
+    toast({
+      message: memoDraft?.trim() ? "メモを保存しました" : "メモを削除しました",
+    });
     setMemoEditing(false);
     setMemoDraft(null);
   }
@@ -295,17 +301,28 @@ function ResultInner({ resultId }: { resultId: string }) {
           <button
             type="button"
             onClick={() => {
-              setPinned(searchKey, !pinned);
+              const next = !pinned;
+              setPinned(searchKey, next);
               haptic(8);
+              toast({
+                message: next ? "検索をピン留めしました" : "ピンを外しました",
+                actionLabel: next ? "履歴で見る" : undefined,
+                actionHref: next ? "/history" : undefined,
+              });
             }}
             aria-label={pinned ? "ピンを外す" : "ピン留め"}
             className={
               pinned
-                ? "shrink-0 w-8 h-8 rounded-lg flex items-center justify-center bg-warning/10 text-warning"
-                : "shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-muted hover:bg-surface-2"
+                ? "tap-scale shrink-0 w-9 h-9 rounded-lg flex items-center justify-center bg-pin/10 text-pin"
+                : "tap-scale shrink-0 w-9 h-9 rounded-lg flex items-center justify-center text-muted hover:bg-surface-2"
             }
           >
-            <Star size={16} fill={pinned ? "currentColor" : "none"} />
+            <Star
+              size={18}
+              fill={pinned ? "currentColor" : "none"}
+              className={pinned ? "pin-anim" : ""}
+              key={String(pinned)}
+            />
           </button>
         </div>
         <h2 className="text-base font-bold text-foreground">
@@ -378,6 +395,11 @@ function ResultInner({ resultId }: { resultId: string }) {
             </p>
           )}
         </section>
+      )}
+
+      {/* 媒体別の価格分布 */}
+      {!isEmpty && requestedSources.length > 1 && (
+        <PlatformPriceBars listings={flatListings} />
       )}
 
       {/* 媒体別検索リンク */}
@@ -1078,12 +1100,18 @@ function ListingCard({
   function togglePin(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
-    setListingPinned(ref, !pinned);
+    const next = !pinned;
+    setListingPinned(ref, next);
     haptic(8);
+    toast({
+      message: next ? "商品をピン留めしました" : "ピンを外しました",
+      actionLabel: next ? "履歴で見る" : undefined,
+      actionHref: next ? "/history" : undefined,
+    });
   }
 
   const cardClass = pinned
-    ? "bg-surface border-2 border-warning/40 rounded-xl overflow-hidden hover:border-warning/60 transition-colors"
+    ? "tap-scale bg-surface border-2 border-pin/40 rounded-xl overflow-hidden hover:border-pin/60 transition-colors"
     : "bg-surface border border-border rounded-xl overflow-hidden hover:border-primary/40 transition-colors";
 
   if (compact) {
@@ -1128,7 +1156,7 @@ function ListingCard({
             aria-label={pinned ? "ピンを外す" : "ピン留め"}
             className={
               pinned
-                ? "shrink-0 w-9 h-9 rounded-md flex items-center justify-center bg-warning/10 text-warning"
+                ? "tap-scale shrink-0 w-9 h-9 rounded-md flex items-center justify-center bg-pin/10 text-pin"
                 : "shrink-0 w-9 h-9 rounded-md flex items-center justify-center text-muted hover:bg-surface-2"
             }
           >
@@ -1176,7 +1204,7 @@ function ListingCard({
                   aria-label={pinned ? "ピンを外す" : "ピン留め"}
                   className={
                     pinned
-                      ? "shrink-0 w-9 h-9 rounded-md flex items-center justify-center bg-warning/10 text-warning"
+                      ? "tap-scale shrink-0 w-9 h-9 rounded-md flex items-center justify-center bg-pin/10 text-pin"
                       : "shrink-0 w-9 h-9 rounded-md flex items-center justify-center text-muted hover:bg-surface-2"
                   }
                 >
