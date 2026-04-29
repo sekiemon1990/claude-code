@@ -32,7 +32,9 @@ import {
   type SavedAdvice,
 } from "@/lib/storage";
 import { classifyCondition } from "@/lib/conditions";
-import { useArchivedLists } from "@/lib/list";
+import { useAllLists, switchToList, getCurrentList } from "@/lib/list";
+import { useRouter } from "next/navigation";
+import { toast } from "@/lib/toast";
 
 type Tab = "searches" | "views" | "advices" | "lists";
 
@@ -646,22 +648,37 @@ function TabBtn({
 }
 
 function SavedListsHistory({ query }: { query: string }) {
-  const lists = useArchivedLists();
+  const lists = useAllLists();
+  const router = useRouter();
+  const current = getCurrentList();
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return lists;
-    return lists.filter((l) =>
-      l.items.some((i) => i.query.keyword.toLowerCase().includes(q))
+    return lists.filter(
+      (l) =>
+        l.items.some((i) => i.query.keyword.toLowerCase().includes(q)) ||
+        (l.name?.toLowerCase().includes(q) ?? false)
     );
   }, [lists, query]);
+
+  function handleResume(id: string) {
+    switchToList(id);
+    toast({
+      message: "リストに切替えました",
+      actionLabel: "リストへ",
+      actionHref: "/list",
+    });
+    router.push("/list");
+  }
 
   if (lists.length === 0) {
     return (
       <div className="bg-surface border border-border rounded-xl p-8 text-center">
         <ListChecks className="text-muted mx-auto mb-2" size={28} />
-        <p className="text-sm text-muted">保存された査定リストがありません</p>
+        <p className="text-sm text-muted">査定リストがありません</p>
         <p className="text-xs text-muted mt-1 leading-relaxed">
-          査定リスト画面から「保存して新規」を押すと、ここに記録されます
+          検索画面から「査定リストに追加」すると、ここに記録されます
         </p>
       </div>
     );
@@ -684,45 +701,68 @@ function SavedListsHistory({ query }: { query: string }) {
           (s, i) => s + (i.result?.suggestedBuyPrice ?? 0),
           0
         );
+        const isCurrent = l.id === current.id;
         return (
           <div
-            key={l.id + l.savedAt}
-            className="bg-surface border border-border rounded-xl p-4"
+            key={l.id}
+            className={
+              isCurrent
+                ? "bg-primary/5 border-2 border-primary rounded-xl p-4"
+                : "bg-surface border border-border rounded-xl p-4"
+            }
           >
             <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-1.5">
-                <ListChecks size={14} className="text-primary" />
-                <span className="text-sm font-semibold text-foreground">
-                  {l.name ?? `${l.items[0]?.query.keyword ?? "リスト"} 他${l.items.length - 1}件`}
+              <div className="flex items-center gap-1.5 min-w-0">
+                <ListChecks size={14} className="text-primary shrink-0" />
+                <span className="text-sm font-semibold text-foreground truncate">
+                  {l.name ?? "（無題）"}
                 </span>
+                {isCurrent && (
+                  <span className="shrink-0 text-[10px] font-bold text-primary px-1.5 py-0.5 rounded-full bg-primary/10">
+                    使用中
+                  </span>
+                )}
               </div>
-              <span className="text-[10px] text-muted">
-                {formatRelativeDate(l.savedAt)}
+              <span className="text-[10px] text-muted shrink-0">
+                {formatRelativeDate(l.updatedAt)}
               </span>
             </div>
-            <div className="flex flex-wrap gap-1 mb-3">
-              {l.items.slice(0, 5).map((i) => (
-                <span
-                  key={i.id}
-                  className="text-[11px] text-foreground bg-surface-2 px-2 py-0.5 rounded-full"
-                >
-                  {i.query.keyword}
-                </span>
-              ))}
-              {l.items.length > 5 && (
-                <span className="text-[11px] text-muted px-1 self-center">
-                  他{l.items.length - 5}件
-                </span>
-              )}
-            </div>
-            <div className="flex items-center justify-between text-xs">
+            {l.items.length > 0 && (
+              <div className="flex flex-wrap gap-1 mb-3">
+                {l.items.slice(0, 5).map((i) => (
+                  <span
+                    key={i.id}
+                    className="text-[11px] text-foreground bg-surface-2 px-2 py-0.5 rounded-full"
+                  >
+                    {i.query.keyword}
+                  </span>
+                ))}
+                {l.items.length > 5 && (
+                  <span className="text-[11px] text-muted px-1 self-center">
+                    他{l.items.length - 5}件
+                  </span>
+                )}
+              </div>
+            )}
+            <div className="flex items-center justify-between text-xs mb-3">
               <span className="text-muted">
                 完了 {completed.length} / {l.items.length}件
               </span>
-              <span className="font-bold text-foreground">
-                合計目安 {formatYen(total)}
-              </span>
+              {completed.length > 0 && (
+                <span className="font-bold text-foreground">
+                  合計目安 {formatYen(total)}
+                </span>
+              )}
             </div>
+            {!isCurrent && (
+              <button
+                type="button"
+                onClick={() => handleResume(l.id)}
+                className="tap-scale w-full h-10 rounded-lg border-2 border-primary text-primary text-xs font-semibold hover:bg-primary/5"
+              >
+                このリストで査定を再開
+              </button>
+            )}
           </div>
         );
       })}

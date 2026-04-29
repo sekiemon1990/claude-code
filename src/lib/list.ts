@@ -7,8 +7,12 @@ import type { Period, ShippingFilter } from "@/components/SearchFormFields";
 import { toast } from "./toast";
 
 const PREFIX = "maxus_search:";
-const ACTIVE_LIST_KEY = "list_active";
-const ARCHIVED_LIST_KEY = "list_archived";
+const LISTS_KEY = "lists_v2";
+const CURRENT_LIST_ID_KEY = "current_list_id";
+// Legacy keys (for migration only)
+const OLD_ACTIVE_KEY = "list_active";
+const OLD_ARCHIVED_KEY = "list_archived";
+
 const MAX_PARALLEL = 3;
 
 export type ListItemStatus =
@@ -54,10 +58,8 @@ export type AppraisalList = {
   name?: string;
   items: ListItem[];
   createdAt: string;
-};
-
-export type ArchivedList = AppraisalList & {
-  savedAt: string;
+  updatedAt: string;
+  archivedAt?: string;
 };
 
 function read(key: string): string | null {
@@ -85,41 +87,222 @@ function newId(): string {
 }
 
 function newListId(): string {
-  return `list_${Date.now()}`;
+  return `list_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 }
 
-export function getActiveList(): AppraisalList {
-  const raw = read(ACTIVE_LIST_KEY);
-  if (!raw) {
-    const fresh: AppraisalList = {
-      id: newListId(),
-      items: [],
-      createdAt: new Date().toISOString(),
-    };
-    return fresh;
+function defaultListName(): string {
+  const d = new Date();
+  return `査定リスト ${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+// ---------- ストレージ操作 ----------
+
+function migrateFromOldFormat(): AppraisalList[] | null {
+  const oldActive = read(OLD_ACTIVE_KEY);
+  const oldArchived = read(OLD_ARCHIVED_KEY);
+  const migrated: AppraisalList[] = [];
+
+  if (oldArchived) {
+    try {
+      const archived = JSON.parse(oldArchived);
+      if (Array.isArray(archived)) {
+        for (const a of archived) {
+          if (a && a.id && Array.isArray(a.items)) {
+            migrated.push({
+              id: a.id,
+              name: a.name,
+              items: a.items,
+              createdAt: a.createdAt ?? new Date().toISOString(),
+              updatedAt: a.savedAt ?? a.createdAt ?? new Date().toISOString(),
+              archivedAt: a.savedAt,
+            });
+          }
+        }
+      }
+    } catch {}
   }
-  try {
-    return JSON.parse(raw) as AppraisalList;
-  } catch {
-    return {
-      id: newListId(),
-      items: [],
-      createdAt: new Date().toISOString(),
-    };
+
+  if (oldActive) {
+    try {
+      const active = JSON.parse(oldActive);
+      if (active && active.id && Array.isArray(active.items)) {
+        migrated.unshift({
+          id: active.id,
+          name: active.name,
+          items: active.items,
+          createdAt: active.createdAt ?? new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+      }
+    } catch {}
+  }
+
+  return migrated.length > 0 ? migrated : null;
+}
+
+function getAllListsRaw(): AppraisalList[] {
+  const raw = read(LISTS_KEY);
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {}
+  }
+  // 旧フォーマットからの自動マイグレーション
+  const migrated = migrateFromOldFormat();
+  if (migrated) {
+    saveAllLists(migrated);
+    if (!getCurrentListIdRaw()) {
+      setCurrentListIdRaw(migrated[0].id);
+    }
+    return migrated;
+  }
+  return [];
+}
+
+function saveAllLists(lists: AppraisalList[]): void {
+  write(LISTS_KEY, JSON.stringify(lists));
+}
+
+function getCurrentListIdRaw(): string | null {
+  return read(CURRENT_LIST_ID_KEY);
+}
+
+function setCurrentListIdRaw(id: string | null): void {
+  write(CURRENT_LIST_ID_KEY, id);
+}
+
+// ---------- 公開 API: リスト管理 ----------
+
+export function getAllLists(): AppraisalList[] {
+  return getAllListsRaw();
+}
+
+export function getCurrentList(): AppraisalList {
+  const lists = getAllListsRaw();
+  const currentId = getCurrentListIdRaw();
+  if (currentId) {
+    const found = lists.find((l) => l.id === currentId);
+    if (found) return found;
+  }
+  if (lists.length > 0) {
+    setCurrentListIdRaw(lists[0].id);
+    return lists[0];
+  }
+  // 一つも無い場合は新規作成
+  const now = new Date().toISOString();
+  const fresh: AppraisalList = {
+    id: newListId(),
+    name: defaultListName(),
+    items: [],
+    createdAt: now,
+    updatedAt: now,
+  };
+  saveAllLists([fresh]);
+  setCurrentListIdRaw(fresh.id);
+  return fresh;
+}
+
+export function createList(name?: string): AppraisalList {
+  const lists = getAllListsRaw();
+  const now = new Date().toISOString();
+  const list: AppraisalList = {
+    id: newListId(),
+    name: name?.trim() || defaultListName(),
+    items: [],
+    createdAt: now,
+    updatedAt: now,
+  };
+  lists.unshift(list);
+  saveAllLists(lists);
+  setCurrentListIdRaw(list.id);
+  return list;
+}
+
+export function switchToList(id: string): void {
+  const lists = getAllListsRaw();
+  if (lists.find((l) => l.id === id)) {
+    setCurrentListIdRaw(id);
   }
 }
 
-function saveActiveList(list: AppraisalList): void {
-  write(ACTIVE_LIST_KEY, JSON.stringify(list));
+export function deleteList(id: string): void {
+  const lists = getAllListsRaw().filter((l) => l.id !== id);
+  saveAllLists(lists);
+  const currentId = getCurrentListIdRaw();
+  if (currentId === id) {
+    if (lists.length > 0) setCurrentListIdRaw(lists[0].id);
+    else setCurrentListIdRaw(null);
+  }
+}
+
+export function renameList(id: string, name: string): void {
+  const lists = getAllListsRaw();
+  const list = lists.find((l) => l.id === id);
+  if (list) {
+    list.name = name.trim() || defaultListName();
+    list.updatedAt = new Date().toISOString();
+    saveAllLists(lists);
+  }
+}
+
+// ---------- 公開 API: アイテム操作（現在のリストに対して） ----------
+
+function updateCurrentList(updater: (list: AppraisalList) => void): void {
+  const lists = getAllListsRaw();
+  const current = getCurrentList();
+  const idx = lists.findIndex((l) => l.id === current.id);
+  if (idx < 0) return;
+  updater(lists[idx]);
+  lists[idx].updatedAt = new Date().toISOString();
+  saveAllLists(lists);
+}
+
+function updateItemInLists(itemId: string, updates: Partial<ListItem>): void {
+  const lists = getAllListsRaw();
+  for (const list of lists) {
+    const idx = list.items.findIndex((i) => i.id === itemId);
+    if (idx >= 0) {
+      list.items[idx] = { ...list.items[idx], ...updates };
+      list.updatedAt = new Date().toISOString();
+      saveAllLists(lists);
+      return;
+    }
+  }
+}
+
+export function addItemToList(query: ListItemQuery): ListItem {
+  const item: ListItem = {
+    id: newId(),
+    query,
+    status: "queued",
+    progress: 0,
+    addedAt: new Date().toISOString(),
+  };
+  updateCurrentList((l) => l.items.unshift(item));
+  processQueue();
+  return item;
+}
+
+export function addItemsToList(queries: ListItemQuery[]): ListItem[] {
+  const items: ListItem[] = queries.map((q) => ({
+    id: newId(),
+    query: q,
+    status: "queued",
+    progress: 0,
+    addedAt: new Date().toISOString(),
+  }));
+  updateCurrentList((l) => l.items.unshift(...items));
+  processQueue();
+  return items;
 }
 
 export function addCompletedItem(
   query: ListItemQuery,
   result: ListItemResult
 ): ListItem {
-  const list = getActiveList();
-  // 同じキーワードが既にリストにあればスキップ
-  const existing = list.items.find(
+  const current = getCurrentList();
+  const existing = current.items.find(
     (i) => i.query.keyword.trim() === query.keyword.trim()
   );
   if (existing) return existing;
@@ -133,117 +316,50 @@ export function addCompletedItem(
     addedAt: new Date().toISOString(),
     completedAt: new Date().toISOString(),
   };
-  list.items.unshift(item);
-  saveActiveList(list);
+  updateCurrentList((l) => l.items.unshift(item));
   return item;
 }
 
 export function isInList(keyword: string): boolean {
-  const list = getActiveList();
-  return list.items.some(
-    (i) => i.query.keyword.trim() === keyword.trim()
-  );
-}
-
-export function useIsInList(keyword: string): boolean {
-  const [val, setVal] = useState<boolean>(false);
-  useEffect(() => {
-    setVal(isInList(keyword));
-    const onChange = () => setVal(isInList(keyword));
-    window.addEventListener("maxus_search:list", onChange);
-    return () => window.removeEventListener("maxus_search:list", onChange);
-  }, [keyword]);
-  return val;
-}
-
-export function addItemToList(query: ListItemQuery): ListItem {
-  const list = getActiveList();
-  const item: ListItem = {
-    id: newId(),
-    query,
-    status: "queued",
-    progress: 0,
-    addedAt: new Date().toISOString(),
-  };
-  list.items.unshift(item);
-  saveActiveList(list);
-  processQueue();
-  return item;
-}
-
-export function addItemsToList(queries: ListItemQuery[]): ListItem[] {
-  const list = getActiveList();
-  const items: ListItem[] = queries.map((q) => ({
-    id: newId(),
-    query: q,
-    status: "queued",
-    progress: 0,
-    addedAt: new Date().toISOString(),
-  }));
-  list.items.unshift(...items);
-  saveActiveList(list);
-  processQueue();
-  return items;
-}
-
-function updateItem(itemId: string, updates: Partial<ListItem>): void {
-  const list = getActiveList();
-  const idx = list.items.findIndex((i) => i.id === itemId);
-  if (idx < 0) return;
-  list.items[idx] = { ...list.items[idx], ...updates };
-  saveActiveList(list);
+  const current = getCurrentList();
+  return current.items.some((i) => i.query.keyword.trim() === keyword.trim());
 }
 
 export function removeItem(itemId: string): void {
-  const list = getActiveList();
-  list.items = list.items.filter((i) => i.id !== itemId);
-  saveActiveList(list);
+  const lists = getAllListsRaw();
+  for (const list of lists) {
+    const before = list.items.length;
+    list.items = list.items.filter((i) => i.id !== itemId);
+    if (list.items.length !== before) {
+      list.updatedAt = new Date().toISOString();
+      saveAllLists(lists);
+      return;
+    }
+  }
 }
 
 export function cancelItem(itemId: string): void {
-  updateItem(itemId, { status: "cancelled" });
+  updateItemInLists(itemId, { status: "cancelled" });
   processQueue();
 }
 
-export function clearList(): void {
-  const fresh: AppraisalList = {
-    id: newListId(),
-    items: [],
-    createdAt: new Date().toISOString(),
-  };
-  saveActiveList(fresh);
-}
-
-export function archiveCurrentList(name?: string): void {
-  const list = getActiveList();
-  if (list.items.length === 0) return;
-  const raw = read(ARCHIVED_LIST_KEY);
-  let archives: ArchivedList[] = [];
-  if (raw) {
-    try {
-      archives = JSON.parse(raw);
-    } catch {}
-  }
-  archives.unshift({
-    ...list,
-    name,
-    savedAt: new Date().toISOString(),
+export function clearCurrentList(): void {
+  updateCurrentList((l) => {
+    l.items = [];
   });
-  write(ARCHIVED_LIST_KEY, JSON.stringify(archives.slice(0, 50)));
-  clearList();
 }
 
-export function getArchivedLists(): ArchivedList[] {
-  const raw = read(ARCHIVED_LIST_KEY);
-  if (!raw) return [];
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return [];
+export function saveCurrentAndCreateNew(name?: string): AppraisalList {
+  // 現在のリストに名前があれば確定（無ければデフォルト名のまま）
+  const current = getCurrentList();
+  if (name && name.trim()) {
+    renameList(current.id, name);
   }
+  // 新しいリストを作成して current に
+  return createList();
 }
 
-// ---------- 擬似バックグラウンド検索ジョブ ----------
+// ---------- バックグラウンドジョブ ----------
 
 const activeTickers = new Set<string>();
 
@@ -252,16 +368,23 @@ function tick(itemId: string): void {
   activeTickers.add(itemId);
 
   function loop() {
-    const list = getActiveList();
-    const item = list.items.find((i) => i.id === itemId);
-    if (!item || item.status !== "running") {
+    let foundItem: ListItem | null = null;
+    const lists = getAllListsRaw();
+    for (const list of lists) {
+      const f = list.items.find((i) => i.id === itemId);
+      if (f) {
+        foundItem = f;
+        break;
+      }
+    }
+    if (!foundItem || foundItem.status !== "running") {
       activeTickers.delete(itemId);
       return;
     }
 
-    if (!item.targetCompleteAt) {
+    if (!foundItem.targetCompleteAt) {
       const total = 1800 + Math.random() * 2600;
-      updateItem(itemId, {
+      updateItemInLists(itemId, {
         targetCompleteAt: Date.now() + total,
         totalMs: total,
       });
@@ -269,8 +392,8 @@ function tick(itemId: string): void {
       return;
     }
 
-    const total = item.totalMs ?? 3000;
-    const remaining = item.targetCompleteAt - Date.now();
+    const total = foundItem.totalMs ?? 3000;
+    const remaining = foundItem.targetCompleteAt - Date.now();
     if (remaining <= 0) {
       completeItem(itemId);
       activeTickers.delete(itemId);
@@ -278,7 +401,7 @@ function tick(itemId: string): void {
       return;
     }
     const progress = Math.min(99, Math.round(((total - remaining) / total) * 100));
-    updateItem(itemId, { progress });
+    updateItemInLists(itemId, { progress });
     setTimeout(loop, 200);
   }
 
@@ -286,11 +409,17 @@ function tick(itemId: string): void {
 }
 
 function completeItem(itemId: string): void {
-  const list = getActiveList();
-  const item = list.items.find((i) => i.id === itemId);
+  const lists = getAllListsRaw();
+  let item: ListItem | null = null;
+  for (const list of lists) {
+    const f = list.items.find((i) => i.id === itemId);
+    if (f) {
+      item = f;
+      break;
+    }
+  }
   if (!item) return;
 
-  // モック結果生成（キーワードから疑似生成、実装時はスクレイパー結果を入れる）
   const seed = Array.from(item.query.keyword).reduce(
     (a, c) => a + c.charCodeAt(0),
     0
@@ -302,7 +431,7 @@ function completeItem(itemId: string): void {
   const count = 25 + (seed % 100);
   const suggestedBuyPrice = Math.round((median * 70) / 100);
 
-  updateItem(itemId, {
+  updateItemInLists(itemId, {
     status: "completed",
     progress: 100,
     completedAt: new Date().toISOString(),
@@ -317,43 +446,40 @@ function completeItem(itemId: string): void {
 }
 
 export function processQueue(): void {
-  const list = getActiveList();
-  const running = list.items.filter((i) => i.status === "running").length;
-  const slots = MAX_PARALLEL - running;
-  if (slots <= 0) {
-    // 既存runningがtickしてなければ起動（リロード時のレジューム）
-    list.items
-      .filter((i) => i.status === "running")
-      .forEach((i) => tick(i.id));
-    return;
+  const lists = getAllListsRaw();
+  const allItems = lists.flatMap((l) => l.items);
+  const running = allItems.filter((i) => i.status === "running");
+  const slots = MAX_PARALLEL - running.length;
+
+  // 走行中のものに ticker が付いていなければ起動（ページ再訪時のレジューム）
+  for (const r of running) {
+    if (!activeTickers.has(r.id)) tick(r.id);
   }
-  const queued = list.items.filter((i) => i.status === "queued");
+
+  if (slots <= 0) return;
+
+  const queued = allItems.filter((i) => i.status === "queued");
   const toStart = queued.slice(0, slots);
   for (const item of toStart) {
-    updateItem(item.id, {
+    updateItemInLists(item.id, {
       status: "running",
       startedAt: new Date().toISOString(),
       progress: 0,
     });
     tick(item.id);
   }
-  // 念のためrunningを再開
-  list.items
-    .filter((i) => i.status === "running" && !activeTickers.has(i.id))
-    .forEach((i) => tick(i.id));
 }
 
 // ---------- React フック ----------
 
-export function useActiveList(): AppraisalList {
-  const [list, setList] = useState<AppraisalList>(() => getActiveList());
+export function useCurrentList(): AppraisalList {
+  const [list, setList] = useState<AppraisalList>(() => getCurrentList());
 
   useEffect(() => {
-    setList(getActiveList());
-    const onChange = () => setList(getActiveList());
+    setList(getCurrentList());
+    const onChange = () => setList(getCurrentList());
     window.addEventListener("maxus_search:list", onChange);
     window.addEventListener("storage", onChange);
-    // ページマウント時に走行中のジョブを再開
     processQueue();
     return () => {
       window.removeEventListener("maxus_search:list", onChange);
@@ -364,15 +490,46 @@ export function useActiveList(): AppraisalList {
   return list;
 }
 
-export function useArchivedLists(): ArchivedList[] {
-  const [lists, setLists] = useState<ArchivedList[]>([]);
+// 後方互換
+export const useActiveList = useCurrentList;
 
+export function useAllLists(): AppraisalList[] {
+  const [lists, setLists] = useState<AppraisalList[]>([]);
   useEffect(() => {
-    setLists(getArchivedLists());
-    const onChange = () => setLists(getArchivedLists());
+    setLists(getAllLists());
+    const onChange = () => setLists(getAllLists());
+    window.addEventListener("maxus_search:list", onChange);
+    window.addEventListener("storage", onChange);
+    return () => {
+      window.removeEventListener("maxus_search:list", onChange);
+      window.removeEventListener("storage", onChange);
+    };
+  }, []);
+  return lists;
+}
+
+export function useIsInList(keyword: string): boolean {
+  const [val, setVal] = useState<boolean>(false);
+  useEffect(() => {
+    setVal(isInList(keyword));
+    const onChange = () => setVal(isInList(keyword));
     window.addEventListener("maxus_search:list", onChange);
     return () => window.removeEventListener("maxus_search:list", onChange);
-  }, []);
+  }, [keyword]);
+  return val;
+}
 
-  return lists;
+// 後方互換: 旧 useArchivedLists は廃止予定だが、history ページの参照のため残す
+export function useArchivedLists() {
+  return useAllLists();
+}
+
+// 後方互換: 旧 archiveCurrentList → saveCurrentAndCreateNew にリネーム
+export function archiveCurrentList(name?: string): void {
+  saveCurrentAndCreateNew(name);
+}
+
+// 後方互換
+export function clearList(): void {
+  clearCurrentList();
 }

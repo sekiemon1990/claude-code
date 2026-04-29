@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Loader2, ListChecks, ChevronRight } from "lucide-react";
-import { useActiveList } from "@/lib/list";
+import { useCurrentList } from "@/lib/list";
 import { formatYen } from "@/lib/utils";
 
 export function ListBar() {
-  const list = useActiveList();
+  const list = useCurrentList();
   const pathname = usePathname();
 
   // 査定リスト画面では出さない
@@ -30,8 +30,8 @@ export function ListBar() {
     >
       <div className="mx-auto max-w-md w-full px-4 py-2 flex items-center gap-2">
         <ListChecks size={14} className="text-primary shrink-0" />
-        <span className="text-xs font-semibold text-primary shrink-0">
-          査定リスト
+        <span className="text-xs font-semibold text-primary truncate min-w-0">
+          {list.name ?? "査定リスト"}
         </span>
         <span className="text-xs text-foreground shrink-0">
           {list.items.length}件
@@ -44,7 +44,7 @@ export function ListBar() {
         )}
         {completed.length > 0 && (
           <span className="text-xs text-foreground ml-auto shrink-0 tabular-nums">
-            合計 {formatYen(total)}
+            {formatYen(total)}
           </span>
         )}
         <ChevronRight size={14} className="text-primary shrink-0" />

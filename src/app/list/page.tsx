@@ -24,19 +24,23 @@ import { BulkAddModal } from "@/components/BulkAddModal";
 import { SOURCES, type SourceKey } from "@/lib/types";
 import { formatYen } from "@/lib/utils";
 import {
-  useActiveList,
+  useCurrentList,
   removeItem,
   cancelItem,
-  clearList,
-  archiveCurrentList,
+  clearCurrentList,
+  saveCurrentAndCreateNew,
+  createList,
   type ListItem,
 } from "@/lib/list";
+import { ListPicker } from "@/components/ListPicker";
+import { ChevronDown } from "lucide-react";
 import { toast } from "@/lib/toast";
 
 export default function ListPage() {
-  const list = useActiveList();
+  const list = useCurrentList();
   const [bulkOpen, setBulkOpen] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const running = list.items.filter((i) => i.status === "running");
   const queued = list.items.filter((i) => i.status === "queued");
@@ -50,40 +54,42 @@ export default function ListPage() {
     0
   );
 
-  function save() {
-    archiveCurrentList();
+  function saveAndNew() {
+    saveCurrentAndCreateNew();
     toast({
-      message: "査定リストを保存しました",
-      actionLabel: "履歴で見る",
-      actionHref: "/history",
+      message: "現在のリストを残して新しいリストに切替えました",
     });
   }
 
   function reset() {
-    clearList();
+    clearCurrentList();
     setConfirmClear(false);
-    toast({ message: "査定リストをクリアしました" });
+    toast({ message: "リストをクリアしました" });
   }
 
   return (
     <AppShell title="査定リスト">
       <div className="flex flex-col gap-4">
         <section>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <ListChecks size={20} className="text-primary" />
-              <h2 className="text-xl font-bold text-foreground">
-                査定リスト
-              </h2>
-            </div>
-            {list.items.length > 0 && (
-              <span className="text-xs text-muted">
+          <button
+            type="button"
+            onClick={() => setPickerOpen(true)}
+            className="tap-scale w-full bg-surface border border-border rounded-xl p-3 flex items-center gap-3 hover:border-primary/40"
+          >
+            <ListChecks size={20} className="text-primary shrink-0" />
+            <div className="flex-1 min-w-0 text-left">
+              <p className="text-sm font-bold text-foreground truncate">
+                {list.name ?? "査定リスト"}
+              </p>
+              <p className="text-[11px] text-muted">
                 {list.items.length}件
-              </span>
-            )}
-          </div>
-          <p className="text-sm text-muted mt-1">
-            複数の商品を並列で検索しながら査定できます（同時実行 最大3件）
+                {list.items.length > 0 && " ・ タップで切替"}
+              </p>
+            </div>
+            <ChevronDown size={16} className="text-muted shrink-0" />
+          </button>
+          <p className="text-xs text-muted mt-2 px-1 leading-relaxed">
+            検索で追加した商品はすべてこのリストに入ります。同時実行 最大3件、超過分は待機。
           </p>
         </section>
 
@@ -190,12 +196,11 @@ export default function ListPage() {
             <section className="grid grid-cols-2 gap-2 pt-2">
               <button
                 type="button"
-                onClick={save}
-                disabled={completed.length === 0}
-                className="tap-scale h-12 rounded-lg bg-surface border border-border text-foreground font-medium text-sm flex items-center justify-center gap-1.5 hover:border-foreground/30 disabled:opacity-40 disabled:cursor-not-allowed"
+                onClick={saveAndNew}
+                className="tap-scale h-12 rounded-lg bg-surface border border-border text-foreground font-medium text-sm flex items-center justify-center gap-1.5 hover:border-foreground/30"
               >
-                <Save size={14} />
-                保存して新規
+                <Plus size={14} />
+                新しいリスト
               </button>
               <button
                 type="button"
@@ -203,7 +208,7 @@ export default function ListPage() {
                 className="tap-scale h-12 rounded-lg bg-surface border border-border text-foreground font-medium text-sm flex items-center justify-center gap-1.5 hover:border-foreground/30"
               >
                 <Trash2 size={14} />
-                クリア
+                このリストをクリア
               </button>
             </section>
           </>
@@ -211,6 +216,8 @@ export default function ListPage() {
       </div>
 
       {bulkOpen && <BulkAddModal onClose={() => setBulkOpen(false)} />}
+
+      {pickerOpen && <ListPicker onClose={() => setPickerOpen(false)} />}
 
       {confirmClear && (
         <ConfirmDialog
