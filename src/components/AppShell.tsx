@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Search, History, LogOut } from "lucide-react";
+import { Search, History, Settings as SettingsIcon } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
 
 type AppShellProps = {
@@ -66,7 +66,11 @@ export function AppShell({
               icon={<History size={20} />}
               label="履歴"
             />
-            <NavItem href="/login" icon={<LogOut size={20} />} label="ログアウト" />
+            <NavItem
+              href="/settings"
+              icon={<SettingsIcon size={20} />}
+              label="設定"
+            />
           </div>
         </nav>
       )}

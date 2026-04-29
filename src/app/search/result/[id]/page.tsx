@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, use, useMemo, useRef, useState } from "react";
+import { Suspense, use, useEffect, useMemo, useRef, useState } from "react";
 import {
   BarChart3,
   Sparkles,
@@ -21,6 +21,7 @@ import {
   SlidersHorizontal,
   ChevronDown,
   ChevronUp,
+  MoreVertical,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { SourceBadge } from "@/components/SourceBadge";
@@ -47,6 +48,9 @@ import {
   usePinnedValue,
   setListingPinned,
   useListingPinnedValue,
+  haptic,
+  saveScrollPosition,
+  restoreScrollPosition,
 } from "@/lib/storage";
 import {
   CONDITION_RANKS,
@@ -57,8 +61,7 @@ import {
 import { generateSuggestions } from "@/lib/suggestions";
 import { estimateShipping } from "@/lib/shipping-estimate";
 import { ConditionBadge } from "@/components/ConditionBadge";
-import { PriceCalculator } from "@/components/PriceCalculator";
-import { AiAdvisor } from "@/components/AiAdvisor";
+import { ToolsPanel } from "@/components/ToolsPanel";
 import { QuickMemoModal } from "@/components/QuickMemoModal";
 import {
   SOURCES,
@@ -119,6 +122,23 @@ function ResultInner({ resultId }: { resultId: string }) {
   const [extraPages, setExtraPages] = useState(0);
   const [lightbox, setLightbox] = useState<{ src: string } | null>(null);
   const [memoModal, setMemoModal] = useState<FlatListing | null>(null);
+  const [compact, setCompact] = useState(false);
+
+  // スクロール位置の保存・復元
+  const scrollKey = useMemo(
+    () => `result:${resultId}:${params.toString()}`,
+    [resultId, params]
+  );
+
+  useEffect(() => {
+    restoreScrollPosition(scrollKey);
+    const onSave = () => saveScrollPosition(scrollKey);
+    window.addEventListener("beforeunload", onSave);
+    return () => {
+      saveScrollPosition(scrollKey);
+      window.removeEventListener("beforeunload", onSave);
+    };
+  }, [scrollKey]);
   const [copied, setCopied] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
 
@@ -253,6 +273,7 @@ function ResultInner({ resultId }: { resultId: string }) {
 
   function saveMemo() {
     if (memoDraft !== null) setMemo(searchKey, memoDraft);
+    haptic(8);
     setMemoEditing(false);
     setMemoDraft(null);
   }
@@ -273,7 +294,10 @@ function ResultInner({ resultId }: { resultId: string }) {
           </div>
           <button
             type="button"
-            onClick={() => setPinned(searchKey, !pinned)}
+            onClick={() => {
+              setPinned(searchKey, !pinned);
+              haptic(8);
+            }}
             aria-label={pinned ? "ピンを外す" : "ピン留め"}
             className={
               pinned
@@ -417,37 +441,58 @@ function ResultInner({ resultId }: { resultId: string }) {
         </section>
       )}
 
-      {/* キーワード提案 */}
+      {/* 査定ツールパネル（AI / 計算機 / 提案を統合） */}
       {!isEmpty && (
-        <SuggestionsSection
-          listings={flatListings}
-          keyword={keyword}
-          onAdd={(term) => {
-            const next = new URLSearchParams(params.toString());
-            next.set("keyword", `${keyword} ${term}`.trim());
-            router.push(`/search/loading?${next.toString()}`);
-          }}
-          onExclude={(term) => {
-            setRefine((prev) =>
-              prev.trim() ? `${prev} ${term}` : term
-            );
-            setRefineOpen(true);
-            setExtraPages(0);
-          }}
-        />
-      )}
-
-      {/* AI査定アシスタント */}
-      {!isEmpty && (
-        <AiAdvisor
+        <ToolsPanel
           keyword={keyword}
           productGuess={result.productGuess}
           listings={flatListings}
+          defaultBase={summary.median}
+          suggestionsContent={
+            <SuggestionsContent
+              listings={flatListings}
+              keyword={keyword}
+              onAdd={(term) => {
+                const next = new URLSearchParams(params.toString());
+                next.set("keyword", `${keyword} ${term}`.trim());
+                router.push(`/search/loading?${next.toString()}`);
+              }}
+              onExclude={(term) => {
+                setRefine((prev) =>
+                  prev.trim() ? `${prev} ${term}` : term
+                );
+                setRefineOpen(true);
+                setExtraPages(0);
+              }}
+            />
+          }
         />
       )}
 
-      {/* 買取額計算機 */}
-      {!isEmpty && <PriceCalculator defaultBase={summary.median} />}
+      {/* スティッキー中央値バー（一覧表示時に常時表示） */}
+      {!isEmpty && summary.totalCount > 0 && (
+        <div className="sticky top-14 z-20 -mx-4 px-4 py-2 bg-background/95 backdrop-blur border-b border-border">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-baseline gap-1.5 min-w-0">
+              <span className="text-[10px] text-muted">中央値</span>
+              <span className="text-base font-bold text-foreground truncate">
+                {formatYen(summary.median)}
+              </span>
+              <span className="text-[10px] text-muted shrink-0">
+                · {formatCount(summary.totalCount)}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setCompact(!compact)}
+              aria-label={compact ? "通常表示に戻す" : "コンパクト表示"}
+              className="shrink-0 inline-flex items-center gap-1 h-7 px-2 rounded text-[11px] font-medium text-muted hover:text-foreground hover:bg-surface-2"
+            >
+              {compact ? "通常表示" : "コンパクト表示"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 一覧コントロール */}
       {!isEmpty && (
@@ -662,6 +707,7 @@ function ResultInner({ resultId }: { resultId: string }) {
                 detailHref={`/search/result/${resultId}/listing/${l.source}-${l.id}?${queryStr}`}
                 onLightbox={(src) => setLightbox({ src })}
                 onMemoOpen={() => setMemoModal(l)}
+                compact={compact}
               />
             ))}
 
@@ -862,7 +908,7 @@ function ResultInner({ resultId }: { resultId: string }) {
   );
 }
 
-function SuggestionsSection({
+function SuggestionsContent({
   listings,
   keyword,
   onAdd,
@@ -873,38 +919,30 @@ function SuggestionsSection({
   onAdd: (term: string) => void;
   onExclude: (term: string) => void;
 }) {
-  const [hidden, setHidden] = useState(false);
   const suggestions = useMemo(
     () => generateSuggestions(listings, keyword),
     [listings, keyword]
   );
 
-  if (listings.length < 10) return null;
-  if (suggestions.additions.length === 0 && suggestions.excludes.length === 0) {
-    return null;
+  if (listings.length < 10) {
+    return (
+      <div className="text-center py-6 text-sm text-muted">
+        検索結果が10件未満のため、絞り込み候補は表示しません
+      </div>
+    );
   }
-  if (hidden) return null;
+  if (suggestions.additions.length === 0 && suggestions.excludes.length === 0) {
+    return (
+      <div className="text-center py-6 text-sm text-muted">
+        現状の結果からは追加候補・除外候補が見つかりませんでした
+      </div>
+    );
+  }
 
   return (
-    <section className="bg-surface border border-border rounded-xl p-4">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <Sparkles size={14} className="text-primary" />
-          <span className="text-sm font-semibold text-foreground">
-            こんな絞り込みは？
-          </span>
-        </div>
-        <button
-          type="button"
-          onClick={() => setHidden(true)}
-          className="text-xs text-muted hover:text-foreground"
-        >
-          非表示
-        </button>
-      </div>
-
+    <div className="flex flex-col gap-3">
       {suggestions.additions.length > 0 && (
-        <div className="mb-3">
+        <div>
           <div className="text-[11px] text-muted mb-1.5">
             追加（タップで再検索）
           </div>
@@ -944,7 +982,7 @@ function SuggestionsSection({
           </div>
         </div>
       )}
-    </section>
+    </div>
   );
 }
 
@@ -953,11 +991,13 @@ function ListingCard({
   detailHref,
   onLightbox,
   onMemoOpen,
+  compact,
 }: {
   listing: FlatListing;
   detailHref: string;
   onLightbox: (src: string) => void;
   onMemoOpen: () => void;
+  compact: boolean;
 }) {
   const router = useRouter();
   const ref = `${listing.source}-${listing.id}`;
@@ -968,6 +1008,7 @@ function ListingCard({
     listing.shipping === "free" ? estimateShipping(listing.title) : null;
   const netValue = shippingEst ? listing.price - shippingEst.amount : null;
 
+  const [menuOpen, setMenuOpen] = useState(false);
   const tapCountRef = useRef(0);
   const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -989,8 +1030,72 @@ function ListingCard({
     }, 250);
   }
 
+  function togglePin(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setListingPinned(ref, !pinned);
+    haptic(8);
+  }
+
+  const cardClass = pinned
+    ? "bg-surface border-2 border-warning/40 rounded-xl overflow-hidden hover:border-warning/60 transition-colors"
+    : "bg-surface border border-border rounded-xl overflow-hidden hover:border-primary/40 transition-colors";
+
+  if (compact) {
+    return (
+      <article className={cardClass}>
+        <Link
+          href={detailHref}
+          onClick={handleCardTap}
+          className="flex items-center gap-3 p-2.5"
+        >
+          {listing.thumbnail ? (
+            <img
+              src={listing.thumbnail}
+              alt=""
+              loading="lazy"
+              className="w-12 h-12 rounded object-cover bg-surface-2 shrink-0"
+            />
+          ) : (
+            <div className="w-12 h-12 rounded bg-surface-2 shrink-0" />
+          )}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 mb-0.5">
+              <SourceBadge source={listing.source} />
+              <ConditionBadge rank={rank} size="sm" />
+              <ShippingBadge shipping={listing.shipping} size="sm" />
+            </div>
+            <p className="text-xs font-medium text-foreground line-clamp-1 leading-tight">
+              {listing.title}
+            </p>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="text-sm font-bold text-foreground">
+                {formatYen(listing.price)}
+              </span>
+              <span className="text-[10px] text-muted">
+                {formatRelativeDate(listing.endedAt)}
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={togglePin}
+            aria-label={pinned ? "ピンを外す" : "ピン留め"}
+            className={
+              pinned
+                ? "shrink-0 w-9 h-9 rounded-md flex items-center justify-center bg-warning/10 text-warning"
+                : "shrink-0 w-9 h-9 rounded-md flex items-center justify-center text-muted hover:bg-surface-2"
+            }
+          >
+            <Star size={16} fill={pinned ? "currentColor" : "none"} />
+          </button>
+        </Link>
+      </article>
+    );
+  }
+
   return (
-    <article className="bg-surface border border-border rounded-xl overflow-hidden hover:border-primary/40 transition-colors">
+    <article className={cardClass}>
       <Link href={detailHref} onClick={handleCardTap} className="block">
         <div className="flex p-3 gap-3">
           {listing.thumbnail ? (
@@ -1019,28 +1124,41 @@ function ListingCard({
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-2 mb-1.5">
               <SourceBadge source={listing.source} />
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setListingPinned(ref, !pinned);
-                }}
-                aria-label={pinned ? "ピンを外す" : "ピン留め"}
-                className={
-                  pinned
-                    ? "shrink-0 -mt-1 -mr-1 w-7 h-7 rounded-md flex items-center justify-center bg-warning/10 text-warning"
-                    : "shrink-0 -mt-1 -mr-1 w-7 h-7 rounded-md flex items-center justify-center text-muted hover:bg-surface-2"
-                }
-              >
-                <Star size={14} fill={pinned ? "currentColor" : "none"} />
-              </button>
+              <div className="flex items-center gap-0.5 -mt-1 -mr-1">
+                <button
+                  type="button"
+                  onClick={togglePin}
+                  aria-label={pinned ? "ピンを外す" : "ピン留め"}
+                  className={
+                    pinned
+                      ? "shrink-0 w-9 h-9 rounded-md flex items-center justify-center bg-warning/10 text-warning"
+                      : "shrink-0 w-9 h-9 rounded-md flex items-center justify-center text-muted hover:bg-surface-2"
+                  }
+                >
+                  <Star
+                    size={18}
+                    fill={pinned ? "currentColor" : "none"}
+                  />
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setMenuOpen(!menuOpen);
+                  }}
+                  aria-label="メニュー"
+                  className="shrink-0 w-9 h-9 rounded-md flex items-center justify-center text-muted hover:bg-surface-2"
+                >
+                  <MoreVertical size={18} />
+                </button>
+              </div>
             </div>
             <p className="text-sm font-medium text-foreground line-clamp-2 leading-snug">
               {listing.title}
             </p>
-            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-              <span className="text-lg font-bold text-foreground">
+            <div className="flex items-baseline gap-2 mt-1.5 flex-wrap">
+              <span className="text-xl font-bold text-foreground tracking-tight">
                 {formatYen(listing.price)}
               </span>
               {listing.bidCount !== undefined && (
@@ -1058,7 +1176,7 @@ function ListingCard({
                 </span>
               </div>
             )}
-            <div className="flex items-center gap-1.5 mt-1 text-xs text-muted flex-wrap">
+            <div className="flex items-center gap-1.5 mt-1 text-xs flex-wrap">
               <ConditionBadge rank={rank} size="sm" />
               <ShippingBadge shipping={listing.shipping} size="sm" />
               {shippingEst && (
@@ -1098,7 +1216,76 @@ function ListingCard({
           <ExternalLink size={12} />
         </a>
       </div>
+
+      {menuOpen && (
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() => setMenuOpen(false)}
+        >
+          <div
+            className="absolute right-4 top-1/2 -translate-y-1/2 bg-surface border border-border rounded-xl shadow-xl py-1 min-w-[180px]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <MenuItem
+              onClick={() => {
+                setMenuOpen(false);
+                onMemoOpen();
+              }}
+              icon={<StickyNote size={14} />}
+              label="メモを追加 / 編集"
+            />
+            <MenuItem
+              onClick={() => {
+                setMenuOpen(false);
+                setListingPinned(ref, !pinned);
+                haptic(8);
+              }}
+              icon={
+                <Star size={14} fill={pinned ? "currentColor" : "none"} />
+              }
+              label={pinned ? "ピンを外す" : "ピン留め"}
+            />
+            <MenuItem
+              onClick={() => {
+                setMenuOpen(false);
+                router.push(detailHref);
+              }}
+              icon={<ExternalLink size={14} />}
+              label="詳細ページへ"
+            />
+            <MenuItem
+              onClick={() => {
+                setMenuOpen(false);
+                window.open(listing.url, "_blank");
+              }}
+              icon={<PlatformLogo source={listing.source} size={14} />}
+              label={`${sourceMeta.name}で開く`}
+            />
+          </div>
+        </div>
+      )}
     </article>
+  );
+}
+
+function MenuItem({
+  onClick,
+  icon,
+  label,
+}: {
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-foreground hover:bg-surface-2 text-left"
+    >
+      <span className="text-muted">{icon}</span>
+      {label}
+    </button>
   );
 }
 

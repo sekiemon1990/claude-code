@@ -1,11 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { Search, Check, ClipboardPaste } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { Search, Check, ClipboardPaste, History as HistoryIcon } from "lucide-react";
 import { PlatformLogo } from "@/components/PlatformLogo";
 import { SOURCES, type SourceKey } from "@/lib/types";
 import { CONDITION_RANKS, CONDITION_META, type ConditionRank } from "@/lib/conditions";
+import { MOCK_HISTORY } from "@/lib/mock-data";
 
 export type Period = "30" | "90" | "all";
 export type ShippingFilter = "any" | "free" | "paid";
@@ -47,6 +48,17 @@ export function SearchFormFields({
   const [shipping, setShipping] = useState<ShippingFilter>(
     initial?.shipping ?? "any"
   );
+  const [keywordFocused, setKeywordFocused] = useState(false);
+  const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const suggestions = useMemo(() => {
+    const q = keyword.trim().toLowerCase();
+    const all = MOCK_HISTORY.map((h) => h.keyword);
+    const filtered = q
+      ? all.filter((k) => k.toLowerCase().includes(q) && k.toLowerCase() !== q)
+      : all;
+    return filtered.slice(0, 6);
+  }, [keyword]);
 
   async function handlePasteFromClipboard() {
     try {
@@ -112,15 +124,53 @@ export function SearchFormFields({
             クリップボードから貼り付け
           </button>
         </div>
-        <input
-          id="keyword"
-          type="text"
-          required
-          value={keyword}
-          onChange={(e) => setKeyword(e.target.value)}
-          placeholder="例: SONY α7 IV ILCE-7M4"
-          className="h-12 px-4 rounded-lg bg-surface border border-border text-foreground placeholder:text-muted focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-        />
+        <div className="relative">
+          <input
+            id="keyword"
+            type="text"
+            required
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            onFocus={() => {
+              if (blurTimerRef.current) clearTimeout(blurTimerRef.current);
+              setKeywordFocused(true);
+            }}
+            onBlur={() => {
+              blurTimerRef.current = setTimeout(
+                () => setKeywordFocused(false),
+                150
+              );
+            }}
+            placeholder="例: SONY α7 IV ILCE-7M4"
+            autoComplete="off"
+            className="w-full h-12 px-4 rounded-lg bg-surface border border-border text-foreground placeholder:text-muted focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+          />
+          {keywordFocused && suggestions.length > 0 && (
+            <div className="absolute z-20 left-0 right-0 mt-1 bg-surface border border-border rounded-lg shadow-lg max-h-72 overflow-y-auto">
+              <div className="px-3 py-1.5 text-[10px] text-muted bg-surface-2 sticky top-0 border-b border-border">
+                {keyword.trim() ? "履歴から候補" : "最近の検索"}
+              </div>
+              {suggestions.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    setKeyword(s);
+                    setKeywordFocused(false);
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-foreground hover:bg-surface-2 text-left"
+                >
+                  <HistoryIcon
+                    size={14}
+                    className="text-muted shrink-0"
+                  />
+                  <span className="truncate">{s}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-col gap-1.5">

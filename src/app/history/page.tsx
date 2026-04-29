@@ -9,6 +9,7 @@ import {
   StickyNote,
   Eye,
   History as HistoryIcon,
+  X as XIcon,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { SourceBadge } from "@/components/SourceBadge";
@@ -27,6 +28,49 @@ import {
 import { classifyCondition } from "@/lib/conditions";
 
 type Tab = "searches" | "views";
+
+const DATE_GROUP_ORDER = [
+  "今日",
+  "昨日",
+  "今週",
+  "先週",
+  "それ以前",
+] as const;
+type DateGroup = (typeof DATE_GROUP_ORDER)[number];
+
+function groupByDate<T>(
+  items: T[],
+  getDate: (item: T) => string
+): Record<DateGroup, T[]> {
+  const now = new Date();
+  const startOfToday = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate()
+  ).getTime();
+  const startOfYesterday = startOfToday - 86400000;
+  const startOfThisWeek = startOfToday - now.getDay() * 86400000;
+  const startOfLastWeek = startOfThisWeek - 7 * 86400000;
+
+  const groups: Record<DateGroup, T[]> = {
+    今日: [],
+    昨日: [],
+    今週: [],
+    先週: [],
+    それ以前: [],
+  };
+
+  for (const item of items) {
+    const t = new Date(getDate(item)).getTime();
+    if (t >= startOfToday) groups["今日"].push(item);
+    else if (t >= startOfYesterday) groups["昨日"].push(item);
+    else if (t >= startOfThisWeek) groups["今週"].push(item);
+    else if (t >= startOfLastWeek) groups["先週"].push(item);
+    else groups["それ以前"].push(item);
+  }
+
+  return groups;
+}
 
 export default function HistoryPage() {
   const [tab, setTab] = useState<Tab>("searches");
@@ -90,7 +134,7 @@ export default function HistoryPage() {
               aria-label="クリア"
               className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full text-muted hover:bg-surface-2 flex items-center justify-center"
             >
-              ✕
+              <XIcon size={14} />
             </button>
           )}
         </div>
@@ -171,6 +215,11 @@ function SearchHistoryList({
     })).filter((h) => !q || h.keyword.toLowerCase().includes(q));
   }, [query]);
 
+  const groups = useMemo(
+    () => groupByDate(items, (i) => i.searchedAt),
+    [items]
+  );
+
   if (items.length === 0) {
     return (
       <div className="bg-surface border border-border rounded-xl p-8 text-center">
@@ -181,20 +230,31 @@ function SearchHistoryList({
   }
 
   return (
-    <div className="flex flex-col gap-2">
-      {items.map((h) => (
-        <SearchHistoryCard
-          key={h.id}
-          id={h.id}
-          keyword={h.keyword}
-          searchKey={h.searchKey}
-          median={h.median}
-          totalCount={h.totalCount}
-          searchedAt={h.searchedAt}
-          pinnedOnly={pinnedOnly}
-          memoOnly={memoOnly}
-        />
-      ))}
+    <div className="flex flex-col gap-3">
+      {DATE_GROUP_ORDER.map((g) => {
+        const list = groups[g];
+        if (list.length === 0) return null;
+        return (
+          <div key={g} className="flex flex-col gap-2">
+            <div className="text-[11px] font-semibold text-muted px-1">
+              {g}
+            </div>
+            {list.map((h) => (
+              <SearchHistoryCard
+                key={h.id}
+                id={h.id}
+                keyword={h.keyword}
+                searchKey={h.searchKey}
+                median={h.median}
+                totalCount={h.totalCount}
+                searchedAt={h.searchedAt}
+                pinnedOnly={pinnedOnly}
+                memoOnly={memoOnly}
+              />
+            ))}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -293,6 +353,11 @@ function ViewHistoryList({
     );
   }, [allViews, query]);
 
+  const groups = useMemo(
+    () => groupByDate(views, (v) => v.viewedAt),
+    [views]
+  );
+
   if (allViews.length === 0) {
     return (
       <div className="bg-surface border border-border rounded-xl p-8 text-center">
@@ -315,15 +380,26 @@ function ViewHistoryList({
   }
 
   return (
-    <div className="flex flex-col gap-2">
-      {views.map((v) => (
-        <ViewHistoryCard
-          key={v.ref + v.viewedAt}
-          view={v}
-          pinnedOnly={pinnedOnly}
-          memoOnly={memoOnly}
-        />
-      ))}
+    <div className="flex flex-col gap-3">
+      {DATE_GROUP_ORDER.map((g) => {
+        const list = groups[g];
+        if (list.length === 0) return null;
+        return (
+          <div key={g} className="flex flex-col gap-2">
+            <div className="text-[11px] font-semibold text-muted px-1">
+              {g}
+            </div>
+            {list.map((v) => (
+              <ViewHistoryCard
+                key={v.ref + v.viewedAt}
+                view={v}
+                pinnedOnly={pinnedOnly}
+                memoOnly={memoOnly}
+              />
+            ))}
+          </div>
+        );
+      })}
     </div>
   );
 }
