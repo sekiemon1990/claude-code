@@ -10,6 +10,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
@@ -136,7 +137,8 @@ export function RecordingDetailScreen({ recordingId, onBack }: Props) {
   const percent = pipelinePercent(recording.status);
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <ScrollView contentContainerStyle={styles.content}>
       <Pressable onPress={onBack}>
         <Text style={styles.link}>← 一覧へ</Text>
       </Pressable>
@@ -300,7 +302,8 @@ export function RecordingDetailScreen({ recordingId, onBack }: Props) {
       <Pressable style={styles.deleteButton} onPress={handleDelete}>
         <Text style={styles.deleteButtonText}>削除</Text>
       </Pressable>
-    </ScrollView>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
