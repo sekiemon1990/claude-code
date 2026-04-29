@@ -41,10 +41,13 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: false,
     bundleIdentifier: 'com.makxas.salesrecording',
-    // Firebase Console から取得した GoogleService-Info.plist を
-    // app/GoogleService-Info.plist に配置する。EAS Build はこれを
-    // ネイティブ Firebase iOS SDK の初期化用に取り込む。
-    googleServicesFile: './GoogleService-Info.plist',
+    // Firebase Console から取得した GoogleService-Info.plist。
+    // - ローカル開発時は ./GoogleService-Info.plist を直接参照
+    // - EAS Build 時は env file 変数 GOOGLE_SERVICES_PLIST 経由で
+    //   渡される（git にコミットしたファイルが EAS でアップロードされない
+    //   事象があったため、EAS 公式推奨の env file 機能を使う）
+    googleServicesFile:
+      process.env.GOOGLE_SERVICES_PLIST ?? './GoogleService-Info.plist',
     infoPlist: {
       NSMicrophoneUsageDescription:
         '商談の録音に使用します。お客様の同意を得た上で録音してください。',
