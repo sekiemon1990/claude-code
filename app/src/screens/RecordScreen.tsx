@@ -32,19 +32,30 @@ type Props = {
 };
 
 export function RecordScreen({ deal, onDone, onChangeDeal }: Props) {
-  // === 録音画面遷移時クラッシュの切り分け用 ===
-  // 段階的にフックを有効化して、どこで落ちるかを画面で特定する。
-  // クラッシュしたら、その直前に表示されていた stage が原因。
-  const [stage, setStage] = useState(0);
-
-  if (stage < 4) {
-    return <DiagnosticStages stage={stage} setStage={setStage} dealName={deal.customerName} />;
-  }
-
-  return <RecordScreenInner deal={deal} onDone={onDone} onChangeDeal={onChangeDeal} />;
+  // === 究極の単純化テスト ===
+  // RecordScreen 関数本体が実行される前にクラッシュしているか確認するため、
+  // 一切のフックを呼ばず、ただ Text を返すだけにする。
+  // これでもクラッシュするなら原因はこの関数より外（react-native-screens の
+  // 画面プッシュ、ヘッダー描画、ナビゲーションパラメータの直列化など）。
+  return (
+    <View style={{ flex: 1, padding: 24, paddingTop: 60, backgroundColor: '#0a2540' }}>
+      <Text style={{ color: '#fff', fontSize: 22, fontWeight: '700' }}>
+        ✓ RecordScreen マウント成功
+      </Text>
+      <Text style={{ color: '#94A3B8', marginTop: 12 }}>
+        案件: {deal.customerName}
+      </Text>
+      <Pressable
+        onPress={onDone}
+        style={{ backgroundColor: '#2563EB', padding: 14, borderRadius: 8, marginTop: 24 }}
+      >
+        <Text style={{ color: '#fff' }}>戻る</Text>
+      </Pressable>
+    </View>
+  );
 }
 
-function DiagnosticStages({
+function _UnusedDiagnosticStages({
   stage,
   setStage,
   dealName,
