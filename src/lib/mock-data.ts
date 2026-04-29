@@ -200,6 +200,7 @@ export const MOCK_RESULT: SearchResult = {
             "SONY α7 IV ボディ単体です。\n買い替えのため出品します。動作確認済み、状態は良好です。\n引き取り限定でお願いします。場所は世田谷区内です。\n値下げ交渉応相談、現金支払いのみ。",
           sellerName: "user_setagaya",
           location: "東京都 世田谷区",
+          accessories: ["バッテリー", "充電器", "ストラップ"],
         },
         {
           id: "j2",
