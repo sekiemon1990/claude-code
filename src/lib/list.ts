@@ -527,8 +527,15 @@ export function processQueue(): void {
 
 // ---------- React フック ----------
 
+const EMPTY_LIST: AppraisalList = {
+  id: "",
+  items: [],
+  createdAt: "1970-01-01T00:00:00.000Z",
+  updatedAt: "1970-01-01T00:00:00.000Z",
+};
+
 export function useCurrentList(): AppraisalList {
-  const [list, setList] = useState<AppraisalList>(() => getCurrentList());
+  const [list, setList] = useState<AppraisalList>(EMPTY_LIST);
 
   useEffect(() => {
     setList(getCurrentList());
