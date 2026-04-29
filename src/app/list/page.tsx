@@ -4,23 +4,18 @@ import Link from "next/link";
 import { useState } from "react";
 import {
   Plus,
-  Star,
-  StickyNote,
   Trash2,
-  ExternalLink,
-  RefreshCw,
   X,
   ChevronRight,
   ListChecks,
-  Save,
-  Sparkles,
   Loader2,
   AlertCircle,
   Inbox,
+  ChevronDown,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { PlatformLogo } from "@/components/PlatformLogo";
-import { BulkAddModal } from "@/components/BulkAddModal";
+import { QuickAddBar } from "@/components/QuickAddBar";
 import { SOURCES, type SourceKey } from "@/lib/types";
 import { formatYen } from "@/lib/utils";
 import {
@@ -29,16 +24,13 @@ import {
   cancelItem,
   clearCurrentList,
   saveCurrentAndCreateNew,
-  createList,
   type ListItem,
 } from "@/lib/list";
 import { ListPicker } from "@/components/ListPicker";
-import { ChevronDown } from "lucide-react";
 import { toast } from "@/lib/toast";
 
 export default function ListPage() {
   const list = useCurrentList();
-  const [bulkOpen, setBulkOpen] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -88,28 +80,9 @@ export default function ListPage() {
             </div>
             <ChevronDown size={16} className="text-muted shrink-0" />
           </button>
-          <p className="text-xs text-muted mt-2 px-1 leading-relaxed">
-            検索で追加した商品はすべてこのリストに入ります。同時実行 最大3件、超過分は待機。
-          </p>
         </section>
 
-        <div className="grid grid-cols-2 gap-2">
-          <Link
-            href="/search"
-            className="tap-scale h-12 rounded-lg bg-primary text-primary-foreground font-semibold text-sm flex items-center justify-center gap-1.5 hover:bg-primary/90"
-          >
-            <Plus size={16} />
-            商品を追加
-          </Link>
-          <button
-            type="button"
-            onClick={() => setBulkOpen(true)}
-            className="tap-scale h-12 rounded-lg border border-border bg-surface text-foreground font-medium text-sm flex items-center justify-center gap-1.5 hover:border-foreground/30"
-          >
-            <Sparkles size={14} />
-            一括入力
-          </button>
-        </div>
+        <QuickAddBar />
 
         {list.items.length === 0 ? (
           <div className="bg-surface border border-border rounded-xl p-8 text-center">
@@ -214,8 +187,6 @@ export default function ListPage() {
           </>
         )}
       </div>
-
-      {bulkOpen && <BulkAddModal onClose={() => setBulkOpen(false)} />}
 
       {pickerOpen && <ListPicker onClose={() => setPickerOpen(false)} />}
 

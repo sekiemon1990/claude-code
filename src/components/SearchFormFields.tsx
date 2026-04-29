@@ -2,13 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
-import { Search, Check, ClipboardPaste, History as HistoryIcon, ListPlus } from "lucide-react";
+import { Search, Check, ClipboardPaste, History as HistoryIcon } from "lucide-react";
 import { PlatformLogo } from "@/components/PlatformLogo";
 import { SOURCES, type SourceKey } from "@/lib/types";
 import { CONDITION_RANKS, CONDITION_META, type ConditionRank } from "@/lib/conditions";
 import { MOCK_HISTORY } from "@/lib/mock-data";
-import { addItemToList } from "@/lib/list";
-import { toast } from "@/lib/toast";
 
 export type Period = "30" | "90" | "all";
 export type ShippingFilter = "any" | "free" | "paid";
@@ -107,27 +105,6 @@ export function SearchFormFields({
     if (!keyword.trim()) return;
     if (selectedSources.length === 0) return;
     router.push(`/search/loading?${buildParams().toString()}`);
-    onAfterSubmit?.();
-  }
-
-  function handleAddToList() {
-    if (!keyword.trim()) return;
-    if (selectedSources.length === 0) return;
-    addItemToList({
-      keyword: keyword.trim(),
-      excludes: excludes.trim() || undefined,
-      period,
-      sources: selectedSources,
-      conditions: selectedConditions,
-      shipping,
-    });
-    toast({
-      message: `「${keyword.trim()}」をリストに追加しました`,
-      actionLabel: "リストを見る",
-      actionHref: "/list",
-    });
-    setKeyword("");
-    setExcludes("");
     onAfterSubmit?.();
   }
 
@@ -349,23 +326,13 @@ export function SearchFormFields({
         </div>
       </div>
 
-      <div className="flex flex-col gap-2 mt-2">
-        <button
-          type="submit"
-          className="tap-scale h-14 rounded-lg bg-primary text-primary-foreground font-semibold text-base hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 shadow-sm"
-        >
-          <Search size={20} />
-          {submitLabel}
-        </button>
-        <button
-          type="button"
-          onClick={handleAddToList}
-          className="tap-scale h-12 rounded-lg bg-surface border border-border text-foreground font-medium text-sm hover:border-primary/40 transition-colors flex items-center justify-center gap-2"
-        >
-          <ListPlus size={16} />
-          査定リストに追加（複数の商品を並列検索）
-        </button>
-      </div>
+      <button
+        type="submit"
+        className="tap-scale h-14 mt-2 rounded-lg bg-primary text-primary-foreground font-semibold text-base hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 shadow-sm"
+      >
+        <Search size={20} />
+        {submitLabel}
+      </button>
     </form>
   );
 }

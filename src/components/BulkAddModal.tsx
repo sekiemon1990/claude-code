@@ -3,7 +3,12 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { X, Sparkles, ListChecks } from "lucide-react";
-import { addItemsToList, type ListItemQuery } from "@/lib/list";
+import {
+  addItemsToList,
+  getDefaultQuery,
+  type ListItemQuery,
+} from "@/lib/list";
+import { SOURCES } from "@/lib/types";
 import { toast } from "@/lib/toast";
 
 type Props = {
@@ -21,12 +26,14 @@ export function BulkAddModal({ onClose }: Props) {
 
   function handleSubmit() {
     if (lines.length === 0) return;
+    const defaults = getDefaultQuery();
     const queries: ListItemQuery[] = lines.map((kw) => ({
       keyword: kw,
-      period: "30",
-      sources: ["yahoo_auction", "mercari", "jimoty"],
-      conditions: [],
-      shipping: "any",
+      excludes: defaults.excludes?.trim() || undefined,
+      period: defaults.period,
+      sources: defaults.sources,
+      conditions: defaults.conditions,
+      shipping: defaults.shipping,
     }));
     addItemsToList(queries);
     toast({
@@ -87,9 +94,9 @@ export function BulkAddModal({ onClose }: Props) {
           </div>
 
           <p className="text-[11px] text-muted leading-relaxed">
-            検索条件: ヤフオク・メルカリ・ジモティー / 直近30日 / 状態指定なし
+            ※ クイック追加バーで設定された検索条件が適用されます。
             <br />
-            個別の条件を変えたい場合は、追加後にカードから「再検索」できます。
+            条件を変えたい場合は、リスト画面の「条件:」を開いて変更してください。
           </p>
         </div>
 

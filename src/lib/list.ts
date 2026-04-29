@@ -172,6 +172,61 @@ function setCurrentListIdRaw(id: string | null): void {
   write(CURRENT_LIST_ID_KEY, id);
 }
 
+// ---------- デフォルト検索条件 (クイック追加用) ----------
+
+const DEFAULT_QUERY_KEY = "default_query";
+
+export type DefaultQuery = Omit<ListItemQuery, "keyword">;
+
+const FALLBACK_DEFAULT_QUERY: DefaultQuery = {
+  excludes: "",
+  period: "30",
+  sources: ["yahoo_auction", "mercari", "jimoty"],
+  conditions: [],
+  shipping: "any",
+};
+
+export function getDefaultQuery(): DefaultQuery {
+  const raw = read(DEFAULT_QUERY_KEY);
+  if (!raw) return FALLBACK_DEFAULT_QUERY;
+  try {
+    const parsed = JSON.parse(raw);
+    return { ...FALLBACK_DEFAULT_QUERY, ...parsed };
+  } catch {
+    return FALLBACK_DEFAULT_QUERY;
+  }
+}
+
+export function setDefaultQuery(query: DefaultQuery): void {
+  write(DEFAULT_QUERY_KEY, JSON.stringify(query));
+}
+
+export function useDefaultQuery(): [
+  DefaultQuery,
+  (q: Partial<DefaultQuery>) => void,
+] {
+  const [q, setLocal] = useState<DefaultQuery>(FALLBACK_DEFAULT_QUERY);
+
+  useEffect(() => {
+    setLocal(getDefaultQuery());
+    const onChange = () => setLocal(getDefaultQuery());
+    window.addEventListener("maxus_search:list", onChange);
+    window.addEventListener("storage", onChange);
+    return () => {
+      window.removeEventListener("maxus_search:list", onChange);
+      window.removeEventListener("storage", onChange);
+    };
+  }, []);
+
+  const update = (partial: Partial<DefaultQuery>) => {
+    const next = { ...q, ...partial };
+    setDefaultQuery(next);
+    setLocal(next);
+  };
+
+  return [q, update];
+}
+
 // ---------- 公開 API: リスト管理 ----------
 
 export function getAllLists(): AppraisalList[] {
