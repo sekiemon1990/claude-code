@@ -69,17 +69,11 @@ const config: ExpoConfig = {
     },
   },
   plugins: [
-    [
-      'expo-audio',
-      {
-        microphonePermission:
-          '商談の録音のためにマイクへのアクセスを許可してください。',
-      },
-    ],
-    // @react-native-firebase 用。`@react-native-firebase/app` プラグインを
-    // 入れることで iOS の AppDelegate に [FIRApp configure] が自動挿入される。
+    // expo-audio の config plugin は npm install 後の依存関係解決で
+    // 一時的に解決できなくなる事象が発生したため一旦撤去。
+    // マイク権限 NSMicrophoneUsageDescription は infoPlist に直接設定済みなので
+    // 機能上は問題ない。録音モジュール自体は依存パッケージ経由で読まれる。
     '@react-native-firebase/app',
-    // CocoaPods の use_frameworks! を static にする必要がある（公式手順）
     [
       'expo-build-properties',
       {
