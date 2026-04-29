@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, use, useMemo, useState } from "react";
 import {
   BarChart3,
   Sparkles,
@@ -40,6 +40,14 @@ import { SOURCES, type SourceKey, type Listing } from "@/lib/types";
 
 type FlatListing = Listing & { source: SourceKey };
 type SortMode = "date_desc" | "date_asc" | "price_desc" | "price_asc";
+type PageSize = 10 | 20 | 50 | "all";
+
+const PAGE_SIZE_OPTIONS: { value: PageSize; label: string }[] = [
+  { value: 10, label: "10件" },
+  { value: 20, label: "20件" },
+  { value: 50, label: "50件" },
+  { value: "all", label: "全件" },
+];
 
 function median(nums: number[]): number {
   if (nums.length === 0) return 0;
@@ -50,9 +58,7 @@ function median(nums: number[]): number {
     : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
 }
 
-const PAGE_SIZE = 10;
-
-function ResultInner() {
+function ResultInner({ resultId }: { resultId: string }) {
   const params = useSearchParams();
   const result = MOCK_RESULT;
 
@@ -79,7 +85,8 @@ function ResultInner() {
   const [sort, setSort] = useState<SortMode>("date_desc");
   const [refine, setRefine] = useState("");
   const [refineOpen, setRefineOpen] = useState(false);
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [pageSize, setPageSize] = useState<PageSize>(20);
+  const [extraPages, setExtraPages] = useState(0);
   const [lightbox, setLightbox] = useState<{ src: string } | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -123,7 +130,12 @@ function ResultInner() {
     });
   }, [flatListings, filter, refine, sort]);
 
+  const visibleCount =
+    pageSize === "all"
+      ? filteredListings.length
+      : pageSize * (1 + extraPages);
   const visibleListings = filteredListings.slice(0, visibleCount);
+  const hasMore = visibleCount < filteredListings.length;
 
   const summary = useMemo(() => {
     const prices = filteredListings.map((l) => l.price);
@@ -193,63 +205,6 @@ function ResultInner() {
         <div className="text-xs text-muted mt-1">
           検索: {keyword} ・ 直近{period === "all" ? "全期間" : `${period}日`}
         </div>
-      </section>
-
-      {/* メモ */}
-      <section className="bg-surface border border-border rounded-xl p-4">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <StickyNote size={16} className="text-warning" />
-            <span className="text-sm font-semibold text-foreground">
-              検索メモ
-            </span>
-          </div>
-          {!memoEditing && (
-            <button
-              type="button"
-              onClick={startMemoEdit}
-              className="text-xs text-primary hover:underline"
-            >
-              {memo ? "編集" : "+ 追加"}
-            </button>
-          )}
-        </div>
-        {memoEditing ? (
-          <div className="flex flex-col gap-2">
-            <textarea
-              value={memoDraft ?? ""}
-              onChange={(e) => setMemoDraft(e.target.value)}
-              rows={3}
-              placeholder="例: 〇〇宅で査定。状態Bで¥80,000で成約"
-              className="w-full p-3 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 resize-none"
-              autoFocus
-            />
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={cancelMemoEdit}
-                className="flex-1 h-9 rounded-lg border border-border text-foreground text-sm hover:bg-surface-2"
-              >
-                キャンセル
-              </button>
-              <button
-                type="button"
-                onClick={saveMemo}
-                className="flex-1 h-9 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90"
-              >
-                保存
-              </button>
-            </div>
-          </div>
-        ) : memo ? (
-          <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
-            {memo}
-          </p>
-        ) : (
-          <p className="text-xs text-muted">
-            この検索にメモを残せます。履歴ページから一覧で確認できます。
-          </p>
-        )}
       </section>
 
       {/* サマリー */}
@@ -384,7 +339,7 @@ function ResultInner() {
                 value={refine}
                 onChange={(e) => {
                   setRefine(e.target.value);
-                  setVisibleCount(PAGE_SIZE);
+                  setExtraPages(0);
                 }}
                 placeholder="さらに除外（スペース区切り）例: ジャンク 部品"
                 className="flex-1 h-10 px-3 rounded-lg bg-surface border border-border text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
@@ -409,7 +364,7 @@ function ResultInner() {
                 active={filter === "all"}
                 onClick={() => {
                   setFilter("all");
-                  setVisibleCount(PAGE_SIZE);
+                  setExtraPages(0);
                 }}
                 label={`全て (${flatListings.length})`}
               />
@@ -426,7 +381,7 @@ function ResultInner() {
                       active={filter === key}
                       onClick={() => {
                         setFilter(key);
-                        setVisibleCount(PAGE_SIZE);
+                        setExtraPages(0);
                       }}
                       label={`${meta.shortName} (${count})`}
                       color={meta.color}
@@ -439,70 +394,85 @@ function ResultInner() {
           <div className="flex flex-col gap-2">
             {visibleListings.map((l) => {
               const sourceMeta = SOURCES.find((s) => s.key === l.source)!;
+              const detailHref = `/search/result/${resultId}/listing/${l.source}-${l.id}?${queryStr}`;
               return (
                 <article
                   key={`${l.source}-${l.id}`}
-                  className="bg-surface border border-border rounded-xl overflow-hidden"
+                  className="bg-surface border border-border rounded-xl overflow-hidden hover:border-primary/40 transition-colors"
                 >
-                  <div className="flex p-3 gap-3">
-                    {l.thumbnail ? (
-                      <button
-                        type="button"
-                        onClick={() => setLightbox({ src: l.thumbnail! })}
-                        className="w-20 h-20 rounded-lg overflow-hidden bg-surface-2 shrink-0"
-                        aria-label="画像を拡大"
-                      >
-                        <img
-                          src={l.thumbnail}
-                          alt=""
-                          loading="lazy"
-                          className="w-full h-full object-cover"
-                        />
-                      </button>
-                    ) : (
-                      <div className="w-20 h-20 rounded-lg bg-surface-2 shrink-0 flex items-center justify-center text-muted text-[10px]">
-                        画像なし
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="mb-1.5">
-                        <SourceBadge source={l.source} />
-                      </div>
-                      <p className="text-sm font-medium text-foreground line-clamp-2 leading-snug">
-                        {l.title}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                        <span className="text-lg font-bold text-foreground">
-                          {formatYen(l.price)}
-                        </span>
-                        {l.bidCount !== undefined && (
-                          <span className="inline-flex items-center gap-1 text-xs text-muted">
-                            <Gavel size={12} />
-                            {l.bidCount}件
+                  <Link href={detailHref} className="block">
+                    <div className="flex p-3 gap-3">
+                      {l.thumbnail ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setLightbox({ src: l.thumbnail! });
+                          }}
+                          className="w-20 h-20 rounded-lg overflow-hidden bg-surface-2 shrink-0"
+                          aria-label="画像を拡大"
+                        >
+                          <img
+                            src={l.thumbnail}
+                            alt=""
+                            loading="lazy"
+                            className="w-full h-full object-cover"
+                          />
+                        </button>
+                      ) : (
+                        <div className="w-20 h-20 rounded-lg bg-surface-2 shrink-0 flex items-center justify-center text-muted text-[10px]">
+                          画像なし
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="mb-1.5">
+                          <SourceBadge source={l.source} />
+                        </div>
+                        <p className="text-sm font-medium text-foreground line-clamp-2 leading-snug">
+                          {l.title}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                          <span className="text-lg font-bold text-foreground">
+                            {formatYen(l.price)}
                           </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 mt-1 text-xs text-muted">
-                        {l.condition && (
-                          <span className="truncate">{l.condition}</span>
-                        )}
-                        {l.condition && <span>・</span>}
-                        <span className="shrink-0">
-                          {formatRelativeDate(l.endedAt)}
-                        </span>
+                          {l.bidCount !== undefined && (
+                            <span className="inline-flex items-center gap-1 text-xs text-muted">
+                              <Gavel size={12} />
+                              {l.bidCount}件
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 mt-1 text-xs text-muted">
+                          {l.condition && (
+                            <span className="truncate">{l.condition}</span>
+                          )}
+                          {l.condition && <span>・</span>}
+                          <span className="shrink-0">
+                            {formatRelativeDate(l.endedAt)}
+                          </span>
+                        </div>
                       </div>
                     </div>
+                  </Link>
+                  <div className="grid grid-cols-2 border-t border-border">
+                    <Link
+                      href={detailHref}
+                      className="flex items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-semibold text-foreground hover:bg-surface-2 transition-colors border-r border-border"
+                    >
+                      詳細を見る
+                    </Link>
+                    <a
+                      href={l.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-semibold hover:bg-surface-2 transition-colors"
+                      style={{ color: sourceMeta.color }}
+                    >
+                      {sourceMeta.shortName}で見る
+                      <ExternalLink size={12} />
+                    </a>
                   </div>
-                  <a
-                    href={l.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-1.5 py-2.5 px-4 border-t border-border text-xs font-semibold hover:bg-surface-2 active:bg-surface-2 transition-colors"
-                    style={{ color: sourceMeta.color }}
-                  >
-                    {sourceMeta.name}で詳細を見る
-                    <ExternalLink size={14} />
-                  </a>
                 </article>
               );
             })}
@@ -526,14 +496,42 @@ function ResultInner() {
               </div>
             )}
 
-            {visibleCount < filteredListings.length && (
+            {hasMore && (
               <button
                 type="button"
-                onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
+                onClick={() => setExtraPages((c) => c + 1)}
                 className="h-12 rounded-lg border border-border bg-surface text-foreground text-sm font-medium hover:bg-surface-2 transition-colors"
               >
                 もっと見る ({filteredListings.length - visibleCount}件)
               </button>
+            )}
+
+            {filteredListings.length > 0 && (
+              <div className="flex items-center justify-center gap-2 mt-2 text-xs">
+                <span className="text-muted">表示件数:</span>
+                <div className="flex gap-1">
+                  {PAGE_SIZE_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => {
+                        setPageSize(opt.value);
+                        setExtraPages(0);
+                      }}
+                      className={
+                        pageSize === opt.value
+                          ? "h-7 px-2.5 rounded-full text-xs font-semibold border-2 border-primary bg-primary/5 text-primary"
+                          : "h-7 px-2.5 rounded-full text-xs text-foreground border border-border bg-surface hover:border-foreground/30"
+                      }
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                <span className="text-muted ml-1">
+                  / {filteredListings.length}件中
+                </span>
+              </div>
             )}
           </div>
         </section>
@@ -588,6 +586,63 @@ function ResultInner() {
             </>
           )}
         </button>
+      </section>
+
+      {/* 検索メモ（ページ下部） */}
+      <section className="bg-surface border border-border rounded-xl p-4 mt-4">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <StickyNote size={16} className="text-warning" />
+            <span className="text-sm font-semibold text-foreground">
+              検索メモ
+            </span>
+          </div>
+          {!memoEditing && (
+            <button
+              type="button"
+              onClick={startMemoEdit}
+              className="text-xs text-primary hover:underline"
+            >
+              {memo ? "編集" : "+ 追加"}
+            </button>
+          )}
+        </div>
+        {memoEditing ? (
+          <div className="flex flex-col gap-2">
+            <textarea
+              value={memoDraft ?? ""}
+              onChange={(e) => setMemoDraft(e.target.value)}
+              rows={3}
+              placeholder="例: 〇〇宅で査定。状態Bで¥80,000で成約"
+              className="w-full p-3 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 resize-none"
+              autoFocus
+            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={cancelMemoEdit}
+                className="flex-1 h-9 rounded-lg border border-border text-foreground text-sm hover:bg-surface-2"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={saveMemo}
+                className="flex-1 h-9 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90"
+              >
+                保存
+              </button>
+            </div>
+          </div>
+        ) : memo ? (
+          <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
+            {memo}
+          </p>
+        ) : (
+          <p className="text-xs text-muted">
+            この検索にメモを残せます。履歴ページから一覧で確認できます。
+          </p>
+        )}
       </section>
 
       <section className="bg-surface-2 rounded-xl p-3 mt-2 flex items-start gap-2">
@@ -683,7 +738,12 @@ function FilterChip({
   );
 }
 
-export default function SearchResultPage() {
+export default function SearchResultPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = use(params);
   return (
     <AppShell back={{ href: "/search", label: "検索" }} title="検索結果">
       <Suspense
@@ -693,7 +753,7 @@ export default function SearchResultPage() {
           </div>
         }
       >
-        <ResultInner />
+        <ResultInner resultId={id} />
       </Suspense>
     </AppShell>
   );
