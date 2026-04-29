@@ -146,43 +146,64 @@ function ResultInner() {
         )}
 
         <div className="flex flex-col gap-2">
-          {visibleListings.map((l) => (
-            <a
-              key={`${l.source}-${l.id}`}
-              href={l.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="bg-surface border border-border rounded-xl p-3 hover:border-primary/40 active:bg-surface-2 transition-colors"
-            >
-              <div className="flex items-start gap-2">
-                <div className="flex-1 min-w-0">
-                  <div className="mb-1.5">
-                    <SourceBadge source={l.source} />
-                  </div>
-                  <p className="text-sm font-medium text-foreground line-clamp-2 leading-snug">
-                    {l.title}
-                  </p>
-                  <div className="flex items-center gap-2 mt-2 flex-wrap">
-                    <span className="text-lg font-bold text-foreground">
-                      {formatYen(l.price)}
-                    </span>
-                    {l.bidCount !== undefined && (
-                      <span className="inline-flex items-center gap-1 text-xs text-muted">
-                        <Gavel size={12} />
-                        {l.bidCount}件
+          {visibleListings.map((l) => {
+            const sourceMeta = SOURCES.find((s) => s.key === l.source)!;
+            return (
+              <article
+                key={`${l.source}-${l.id}`}
+                className="bg-surface border border-border rounded-xl overflow-hidden"
+              >
+                <div className="flex p-3 gap-3">
+                  {l.thumbnail ? (
+                    <img
+                      src={l.thumbnail}
+                      alt=""
+                      loading="lazy"
+                      className="w-20 h-20 rounded-lg object-cover bg-surface-2 shrink-0"
+                    />
+                  ) : (
+                    <div className="w-20 h-20 rounded-lg bg-surface-2 shrink-0 flex items-center justify-center text-muted text-[10px]">
+                      画像なし
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="mb-1.5">
+                      <SourceBadge source={l.source} />
+                    </div>
+                    <p className="text-sm font-medium text-foreground line-clamp-2 leading-snug">
+                      {l.title}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      <span className="text-lg font-bold text-foreground">
+                        {formatYen(l.price)}
                       </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 mt-1.5 text-xs text-muted">
-                    {l.condition && <span>{l.condition}</span>}
-                    {l.condition && <span>・</span>}
-                    <span>{formatRelativeDate(l.endedAt)}</span>
+                      {l.bidCount !== undefined && (
+                        <span className="inline-flex items-center gap-1 text-xs text-muted">
+                          <Gavel size={12} />
+                          {l.bidCount}件
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 mt-1 text-xs text-muted">
+                      {l.condition && <span className="truncate">{l.condition}</span>}
+                      {l.condition && <span>・</span>}
+                      <span className="shrink-0">{formatRelativeDate(l.endedAt)}</span>
+                    </div>
                   </div>
                 </div>
-                <ExternalLink size={16} className="text-muted shrink-0 mt-1" />
-              </div>
-            </a>
-          ))}
+                <a
+                  href={l.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-1.5 py-2.5 px-4 border-t border-border text-xs font-semibold hover:bg-surface-2 active:bg-surface-2 transition-colors"
+                  style={{ color: sourceMeta.color }}
+                >
+                  {sourceMeta.name}で詳細を見る
+                  <ExternalLink size={14} />
+                </a>
+              </article>
+            );
+          })}
 
           {visibleListings.length === 0 && (
             <div className="bg-surface border border-border rounded-xl p-8 text-center text-sm text-muted">
