@@ -40,6 +40,43 @@ export function formatCount(value: number): string {
   return `${value.toLocaleString("ja-JP")}件`;
 }
 
+function pad2(n: number): string {
+  return n.toString().padStart(2, "0");
+}
+
+// JST (UTC+9) のローカル時刻成分を取得 (タイムゾーン非依存)
+function jstParts(iso: string): {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+} {
+  const d = new Date(new Date(iso).getTime() + 9 * 60 * 60 * 1000);
+  return {
+    year: d.getUTCFullYear(),
+    month: d.getUTCMonth() + 1,
+    day: d.getUTCDate(),
+    hour: d.getUTCHours(),
+    minute: d.getUTCMinutes(),
+  };
+}
+
+// 決定的 (SSR/CSR で同じ結果) な JST 日付フォーマット
+export function formatJSTDate(iso: string): string {
+  const p = jstParts(iso);
+  return `${p.year}/${pad2(p.month)}/${pad2(p.day)}`;
+}
+
+// 決定的な JST 日時フォーマット
+export function formatJSTDateTime(iso: string): string {
+  const p = jstParts(iso);
+  return `${p.year}/${pad2(p.month)}/${pad2(p.day)} ${pad2(p.hour)}:${pad2(p.minute)}`;
+}
+
+// 相対表記: "今" の現在時刻が必要なため、常に new Date() を呼ぶと
+// サーバ/クライアントで結果が異なりハイドレーション不一致になる。
+// → 必ず client 側の <RelativeDate> 経由で呼ぶこと。
 export function formatRelativeDate(iso: string): string {
   const date = new Date(iso);
   const now = new Date();
@@ -48,9 +85,5 @@ export function formatRelativeDate(iso: string): string {
   if (diff < 3600) return `${Math.floor(diff / 60)}分前`;
   if (diff < 86400) return `${Math.floor(diff / 3600)}時間前`;
   if (diff < 86400 * 7) return `${Math.floor(diff / 86400)}日前`;
-  return date.toLocaleDateString("ja-JP", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
+  return formatJSTDate(iso);
 }

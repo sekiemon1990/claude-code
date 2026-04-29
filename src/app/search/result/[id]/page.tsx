@@ -37,9 +37,9 @@ import { MOCK_RESULT } from "@/lib/mock-data";
 import {
   formatYen,
   formatCount,
-  formatRelativeDate,
   buildPlatformSearchUrl,
 } from "@/lib/utils";
+import { RelativeDate } from "@/components/RelativeDate";
 import {
   searchKeyFromKeyword,
   setMemo,
@@ -1215,7 +1215,7 @@ function ListingCard({
                 {formatYen(listing.price)}
               </span>
               <span className="text-[10px] text-muted">
-                {formatRelativeDate(listing.endedAt)}
+                <RelativeDate iso={listing.endedAt} />
               </span>
             </div>
           </div>
@@ -1320,7 +1320,7 @@ function ListingCard({
               )}
               {listing.condition && <span>・</span>}
               <span className="shrink-0">
-                {formatRelativeDate(listing.endedAt)}
+                <RelativeDate iso={listing.endedAt} />
               </span>
             </div>
           </div>

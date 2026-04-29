@@ -18,7 +18,8 @@ import {
   deleteList,
   type AppraisalList,
 } from "@/lib/list";
-import { formatYen, formatRelativeDate } from "@/lib/utils";
+import { formatYen } from "@/lib/utils";
+import { RelativeDate } from "@/components/RelativeDate";
 import { toast } from "@/lib/toast";
 import { RenameListModal } from "./RenameListModal";
 
@@ -188,7 +189,7 @@ function ListPickerItem({
             )}
           </div>
           <div className="text-[11px] text-muted mt-1">
-            最終更新 {formatRelativeDate(list.updatedAt)}
+            最終更新 <RelativeDate iso={list.updatedAt} />
           </div>
         </div>
         {!isCurrent && (
