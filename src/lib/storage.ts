@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { SourceKey } from "./types";
 
 export function searchKeyFromKeyword(keyword: string): string {
   return keyword.trim().toLowerCase().replace(/\s+/g, " ");
@@ -33,6 +34,8 @@ function write(key: string, value: string | null): void {
   }
 }
 
+// ---------- 検索メモ・ピン (キーワード単位) ----------
+
 export function getMemo(searchKey: string): string {
   return read(`memo:${searchKey}`) ?? "";
 }
@@ -48,6 +51,67 @@ export function isPinned(searchKey: string): boolean {
 export function setPinned(searchKey: string, pinned: boolean): void {
   write(`pinned:${searchKey}`, pinned ? "1" : null);
 }
+
+// ---------- 商品単位のメモ・ピン ----------
+
+export function getListingMemo(ref: string): string {
+  return read(`listing_memo:${ref}`) ?? "";
+}
+
+export function setListingMemo(ref: string, memo: string): void {
+  write(`listing_memo:${ref}`, memo.trim() ? memo : null);
+}
+
+export function isListingPinned(ref: string): boolean {
+  return read(`listing_pinned:${ref}`) === "1";
+}
+
+export function setListingPinned(ref: string, pinned: boolean): void {
+  write(`listing_pinned:${ref}`, pinned ? "1" : null);
+}
+
+// ---------- 閲覧履歴 ----------
+
+export type ListingViewSnapshot = {
+  ref: string;
+  source: SourceKey;
+  title: string;
+  price: number;
+  thumbnail?: string;
+  endedAt: string;
+  condition?: string;
+  fromKeyword?: string;
+  viewedAt: string;
+};
+
+const VIEW_HISTORY_KEY = "listing_views";
+const VIEW_HISTORY_LIMIT = 100;
+
+export function getListingViews(): ListingViewSnapshot[] {
+  const raw = read(VIEW_HISTORY_KEY);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed as ListingViewSnapshot[];
+  } catch {
+    return [];
+  }
+}
+
+export function recordListingView(snapshot: Omit<ListingViewSnapshot, "viewedAt">): void {
+  if (typeof window === "undefined") return;
+  const views = getListingViews().filter((v) => v.ref !== snapshot.ref);
+  views.unshift({ ...snapshot, viewedAt: new Date().toISOString() });
+  const trimmed = views.slice(0, VIEW_HISTORY_LIMIT);
+  write(VIEW_HISTORY_KEY, JSON.stringify(trimmed));
+}
+
+export function clearListingViews(): void {
+  write(VIEW_HISTORY_KEY, null);
+}
+
+// ---------- React フック ----------
 
 function useStorageValue<T>(reader: () => T): T {
   const [value, setValue] = useState<T>(reader);
@@ -75,6 +139,23 @@ export function usePinnedValue(searchKey: string): boolean {
   const reader = () => isPinned(searchKey);
   return useStorageValue(reader);
 }
+
+export function useListingMemoValue(ref: string): string {
+  const reader = () => getListingMemo(ref);
+  return useStorageValue(reader);
+}
+
+export function useListingPinnedValue(ref: string): boolean {
+  const reader = () => isListingPinned(ref);
+  return useStorageValue(reader);
+}
+
+export function useListingViews(): ListingViewSnapshot[] {
+  const reader = () => getListingViews();
+  return useStorageValue(reader);
+}
+
+// ---------- テーマ ----------
 
 const THEME_KEY = "theme";
 

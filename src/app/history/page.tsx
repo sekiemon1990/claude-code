@@ -7,37 +7,67 @@ import {
   Search as SearchIcon,
   Star,
   StickyNote,
+  Eye,
+  History as HistoryIcon,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { SourceBadge } from "@/components/SourceBadge";
+import { ConditionBadge } from "@/components/ConditionBadge";
 import { MOCK_HISTORY } from "@/lib/mock-data";
 import { formatYen, formatCount, formatRelativeDate } from "@/lib/utils";
 import {
   searchKeyFromKeyword,
   useMemoValue,
   usePinnedValue,
+  useListingMemoValue,
+  useListingPinnedValue,
+  useListingViews,
+  type ListingViewSnapshot,
 } from "@/lib/storage";
+import { classifyCondition } from "@/lib/conditions";
+
+type Tab = "searches" | "views";
 
 export default function HistoryPage() {
+  const [tab, setTab] = useState<Tab>("searches");
   const [pinnedOnly, setPinnedOnly] = useState(false);
-
-  const items = useMemo(
-    () =>
-      MOCK_HISTORY.map((h) => ({
-        ...h,
-        searchKey: searchKeyFromKeyword(h.keyword),
-      })),
-    []
-  );
 
   return (
     <AppShell>
       <div className="flex flex-col gap-4">
         <section>
-          <h2 className="text-xl font-bold text-foreground">検索履歴</h2>
+          <h2 className="text-xl font-bold text-foreground">履歴</h2>
           <p className="text-sm text-muted mt-1">
-            過去の検索結果（直近順）
+            検索や閲覧した商品を後から確認できます
           </p>
         </section>
+
+        <div className="grid grid-cols-2 bg-surface-2 rounded-lg p-1 gap-1">
+          <button
+            type="button"
+            onClick={() => setTab("searches")}
+            className={
+              tab === "searches"
+                ? "h-9 rounded-md text-sm font-semibold bg-surface text-foreground shadow-sm flex items-center justify-center gap-1.5"
+                : "h-9 rounded-md text-sm font-medium text-muted hover:text-foreground flex items-center justify-center gap-1.5"
+            }
+          >
+            <HistoryIcon size={14} />
+            検索履歴
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("views")}
+            className={
+              tab === "views"
+                ? "h-9 rounded-md text-sm font-semibold bg-surface text-foreground shadow-sm flex items-center justify-center gap-1.5"
+                : "h-9 rounded-md text-sm font-medium text-muted hover:text-foreground flex items-center justify-center gap-1.5"
+            }
+          >
+            <Eye size={14} />
+            閲覧履歴
+          </button>
+        </div>
 
         <Link
           href="/search"
@@ -68,34 +98,50 @@ export default function HistoryPage() {
                 : "shrink-0 h-8 px-3 rounded-full text-xs font-medium border border-border text-foreground bg-surface flex items-center gap-1"
             }
           >
-            <Star
-              size={12}
-              fill={pinnedOnly ? "currentColor" : "none"}
-            />
+            <Star size={12} fill={pinnedOnly ? "currentColor" : "none"} />
             ピン留めのみ
           </button>
         </div>
 
-        <div className="flex flex-col gap-2">
-          {items.map((h) => (
-            <HistoryItemCard
-              key={h.id}
-              id={h.id}
-              keyword={h.keyword}
-              searchKey={h.searchKey}
-              median={h.median}
-              totalCount={h.totalCount}
-              searchedAt={h.searchedAt}
-              pinnedOnly={pinnedOnly}
-            />
-          ))}
-        </div>
+        {tab === "searches" ? (
+          <SearchHistoryList pinnedOnly={pinnedOnly} />
+        ) : (
+          <ViewHistoryList pinnedOnly={pinnedOnly} />
+        )}
       </div>
     </AppShell>
   );
 }
 
-function HistoryItemCard({
+function SearchHistoryList({ pinnedOnly }: { pinnedOnly: boolean }) {
+  const items = useMemo(
+    () =>
+      MOCK_HISTORY.map((h) => ({
+        ...h,
+        searchKey: searchKeyFromKeyword(h.keyword),
+      })),
+    []
+  );
+
+  return (
+    <div className="flex flex-col gap-2">
+      {items.map((h) => (
+        <SearchHistoryCard
+          key={h.id}
+          id={h.id}
+          keyword={h.keyword}
+          searchKey={h.searchKey}
+          median={h.median}
+          totalCount={h.totalCount}
+          searchedAt={h.searchedAt}
+          pinnedOnly={pinnedOnly}
+        />
+      ))}
+    </div>
+  );
+}
+
+function SearchHistoryCard({
   id,
   keyword,
   searchKey,
@@ -161,6 +207,119 @@ function HistoryItemCard({
         </div>
       </div>
       <ChevronRight size={18} className="text-muted shrink-0 mt-1" />
+    </Link>
+  );
+}
+
+function ViewHistoryList({ pinnedOnly }: { pinnedOnly: boolean }) {
+  const views = useListingViews();
+
+  if (views.length === 0) {
+    return (
+      <div className="bg-surface border border-border rounded-xl p-8 text-center">
+        <Eye className="text-muted mx-auto mb-2" size={28} />
+        <p className="text-sm text-muted">まだ閲覧した商品がありません</p>
+        <p className="text-xs text-muted mt-1 leading-relaxed">
+          検索結果から商品の詳細を開くと、ここに記録されます
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      {views.map((v) => (
+        <ViewHistoryCard
+          key={v.ref + v.viewedAt}
+          view={v}
+          pinnedOnly={pinnedOnly}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ViewHistoryCard({
+  view,
+  pinnedOnly,
+}: {
+  view: ListingViewSnapshot;
+  pinnedOnly: boolean;
+}) {
+  const pinned = useListingPinnedValue(view.ref);
+  const memo = useListingMemoValue(view.ref);
+
+  if (pinnedOnly && !pinned) return null;
+
+  const detailHref = `/search/result/recent/listing/${view.ref}${
+    view.fromKeyword
+      ? `?keyword=${encodeURIComponent(view.fromKeyword)}`
+      : ""
+  }`;
+
+  const rank = classifyCondition(view.condition);
+
+  return (
+    <Link
+      href={detailHref}
+      className="bg-surface border border-border rounded-xl overflow-hidden hover:border-primary/40 active:bg-surface-2 transition-colors"
+    >
+      <div className="flex p-3 gap-3">
+        {view.thumbnail ? (
+          <img
+            src={view.thumbnail}
+            alt=""
+            loading="lazy"
+            className="w-20 h-20 rounded-lg object-cover bg-surface-2 shrink-0"
+          />
+        ) : (
+          <div className="w-20 h-20 rounded-lg bg-surface-2 shrink-0 flex items-center justify-center text-muted text-[10px]">
+            画像なし
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2 mb-1.5">
+            <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+              <SourceBadge source={view.source} />
+              <ConditionBadge rank={rank} size="sm" />
+            </div>
+            {pinned && (
+              <Star
+                size={14}
+                className="text-warning shrink-0"
+                fill="currentColor"
+              />
+            )}
+          </div>
+          <p className="text-sm font-medium text-foreground line-clamp-2 leading-snug">
+            {view.title}
+          </p>
+          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+            <span className="text-base font-bold text-foreground">
+              {formatYen(view.price)}
+            </span>
+          </div>
+          <div className="text-xs text-muted mt-1">
+            閲覧: {formatRelativeDate(view.viewedAt)}
+            {view.fromKeyword && (
+              <span className="ml-2">・ 検索: {view.fromKeyword}</span>
+            )}
+          </div>
+        </div>
+      </div>
+      {memo && (
+        <div className="flex items-start gap-1.5 px-3 pb-3 pt-0">
+          <div className="flex-1 flex items-start gap-1.5 p-2 rounded-md bg-warning/10 border border-warning/20">
+            <StickyNote
+              size={12}
+              className="text-warning mt-0.5 shrink-0"
+            />
+            <p className="text-xs text-foreground line-clamp-2 leading-relaxed">
+              {memo}
+            </p>
+          </div>
+        </div>
+      )}
     </Link>
   );
 }
