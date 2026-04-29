@@ -55,6 +55,7 @@ import {
   type ConditionRank,
 } from "@/lib/conditions";
 import { generateSuggestions } from "@/lib/suggestions";
+import { estimateShipping } from "@/lib/shipping-estimate";
 import { ConditionBadge } from "@/components/ConditionBadge";
 import {
   SOURCES,
@@ -928,6 +929,15 @@ function ListingCard({
   const pinned = useListingPinnedValue(ref);
   const sourceMeta = SOURCES.find((s) => s.key === listing.source)!;
   const rank = classifyCondition(listing.condition);
+  const showShippingEstimate =
+    listing.shipping === "free" || listing.shipping === "paid";
+  const shippingEst = showShippingEstimate
+    ? estimateShipping(listing.title)
+    : null;
+  const netValue =
+    listing.shipping === "free" && shippingEst
+      ? listing.price - shippingEst.amount
+      : null;
 
   return (
     <article className="bg-surface border border-border rounded-xl overflow-hidden hover:border-primary/40 transition-colors">
@@ -990,13 +1000,28 @@ function ListingCard({
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-2 mt-1 text-xs text-muted">
+            {netValue !== null && (
+              <div className="flex items-center gap-1 mt-0.5 text-[11px] text-muted">
+                <span>送料を引いた実質</span>
+                <span className="font-semibold text-foreground">
+                  {formatYen(netValue)}
+                </span>
+              </div>
+            )}
+            <div className="flex items-center gap-1.5 mt-1 text-xs text-muted flex-wrap">
               <ConditionBadge rank={rank} size="sm" />
               <ShippingBadge shipping={listing.shipping} size="sm" />
+              {shippingEst && (
+                <span className="text-[10px] text-muted">
+                  想定 {formatYen(shippingEst.amount)}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5 mt-1 text-xs text-muted">
               {listing.condition && (
                 <span className="truncate">{listing.condition}</span>
               )}
-              <span>・</span>
+              {listing.condition && <span>・</span>}
               <span className="shrink-0">
                 {formatRelativeDate(listing.endedAt)}
               </span>
