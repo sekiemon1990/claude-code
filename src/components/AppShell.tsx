@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Search, History, Settings as SettingsIcon } from "lucide-react";
+import { Search, History, Settings as SettingsIcon, ListChecks } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
+import { ListBar } from "./ListBar";
 
 type AppShellProps = {
   title?: string;
@@ -55,18 +56,26 @@ export function AppShell({
         </div>
       </header>
 
+      <ListBar />
+
       <main className="flex-1 mx-auto max-w-md w-full px-4 py-4 pb-24">
         {children}
       </main>
 
       {showNav && (
         <nav className="fixed bottom-0 inset-x-0 z-30 bg-surface border-t border-border">
-          <div className="mx-auto max-w-md w-full grid grid-cols-3">
+          <div className="mx-auto max-w-md w-full grid grid-cols-4">
             <NavItem
               href="/search"
               icon={<Search size={20} />}
               label="検索"
               matchPrefix="/search"
+            />
+            <NavItem
+              href="/list"
+              icon={<ListChecks size={20} />}
+              label="リスト"
+              matchPrefix="/list"
             />
             <NavItem
               href="/history"

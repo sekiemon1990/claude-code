@@ -12,6 +12,7 @@ import {
   X as XIcon,
   Sparkles,
   Trash2,
+  ListChecks,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { SourceBadge } from "@/components/SourceBadge";
@@ -31,8 +32,9 @@ import {
   type SavedAdvice,
 } from "@/lib/storage";
 import { classifyCondition } from "@/lib/conditions";
+import { useArchivedLists } from "@/lib/list";
 
-type Tab = "searches" | "views" | "advices";
+type Tab = "searches" | "views" | "advices" | "lists";
 
 const DATE_GROUP_ORDER = [
   "今日",
@@ -93,43 +95,31 @@ export default function HistoryPage() {
           </p>
         </section>
 
-        <div className="grid grid-cols-3 bg-surface-2 rounded-lg p-1 gap-1">
-          <button
-            type="button"
+        <div className="grid grid-cols-4 bg-surface-2 rounded-lg p-1 gap-1">
+          <TabBtn
+            active={tab === "searches"}
             onClick={() => setTab("searches")}
-            className={
-              tab === "searches"
-                ? "h-9 rounded-md text-xs font-semibold bg-surface text-foreground shadow-sm flex items-center justify-center gap-1"
-                : "h-9 rounded-md text-xs font-medium text-muted hover:text-foreground flex items-center justify-center gap-1"
-            }
-          >
-            <HistoryIcon size={12} />
-            検索
-          </button>
-          <button
-            type="button"
+            icon={<HistoryIcon size={12} />}
+            label="検索"
+          />
+          <TabBtn
+            active={tab === "views"}
             onClick={() => setTab("views")}
-            className={
-              tab === "views"
-                ? "h-9 rounded-md text-xs font-semibold bg-surface text-foreground shadow-sm flex items-center justify-center gap-1"
-                : "h-9 rounded-md text-xs font-medium text-muted hover:text-foreground flex items-center justify-center gap-1"
-            }
-          >
-            <Eye size={12} />
-            閲覧
-          </button>
-          <button
-            type="button"
+            icon={<Eye size={12} />}
+            label="閲覧"
+          />
+          <TabBtn
+            active={tab === "lists"}
+            onClick={() => setTab("lists")}
+            icon={<ListChecks size={12} />}
+            label="リスト"
+          />
+          <TabBtn
+            active={tab === "advices"}
             onClick={() => setTab("advices")}
-            className={
-              tab === "advices"
-                ? "h-9 rounded-md text-xs font-semibold bg-surface text-foreground shadow-sm flex items-center justify-center gap-1"
-                : "h-9 rounded-md text-xs font-medium text-muted hover:text-foreground flex items-center justify-center gap-1"
-            }
-          >
-            <Sparkles size={12} />
-            AI査定
-          </button>
+            icon={<Sparkles size={12} />}
+            label="AI査定"
+          />
         </div>
 
         <div className="relative">
@@ -211,6 +201,7 @@ export default function HistoryPage() {
             query={query}
           />
         )}
+        {tab === "lists" && <SavedListsHistory query={query} />}
         {tab === "advices" && <AdviceHistoryList query={query} />}
       </div>
     </AppShell>
@@ -623,6 +614,118 @@ function AdviceCard({ advice }: { advice: SavedAdvice }) {
           検索を開く →
         </Link>
       </div>
+    </div>
+  );
+}
+
+function TabBtn({
+  active,
+  onClick,
+  icon,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={
+        active
+          ? "tap-scale h-9 rounded-md text-xs font-semibold bg-surface text-foreground shadow-sm flex items-center justify-center gap-1"
+          : "tap-scale h-9 rounded-md text-xs font-medium text-muted hover:text-foreground flex items-center justify-center gap-1"
+      }
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
+function SavedListsHistory({ query }: { query: string }) {
+  const lists = useArchivedLists();
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return lists;
+    return lists.filter((l) =>
+      l.items.some((i) => i.query.keyword.toLowerCase().includes(q))
+    );
+  }, [lists, query]);
+
+  if (lists.length === 0) {
+    return (
+      <div className="bg-surface border border-border rounded-xl p-8 text-center">
+        <ListChecks className="text-muted mx-auto mb-2" size={28} />
+        <p className="text-sm text-muted">保存された査定リストがありません</p>
+        <p className="text-xs text-muted mt-1 leading-relaxed">
+          査定リスト画面から「保存して新規」を押すと、ここに記録されます
+        </p>
+      </div>
+    );
+  }
+
+  if (filtered.length === 0) {
+    return (
+      <div className="bg-surface border border-border rounded-xl p-8 text-center">
+        <SearchIcon className="text-muted mx-auto mb-2" size={28} />
+        <p className="text-sm text-muted">該当する査定リストがありません</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      {filtered.map((l) => {
+        const completed = l.items.filter((i) => i.status === "completed");
+        const total = completed.reduce(
+          (s, i) => s + (i.result?.suggestedBuyPrice ?? 0),
+          0
+        );
+        return (
+          <div
+            key={l.id + l.savedAt}
+            className="bg-surface border border-border rounded-xl p-4"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-1.5">
+                <ListChecks size={14} className="text-primary" />
+                <span className="text-sm font-semibold text-foreground">
+                  {l.name ?? `${l.items[0]?.query.keyword ?? "リスト"} 他${l.items.length - 1}件`}
+                </span>
+              </div>
+              <span className="text-[10px] text-muted">
+                {formatRelativeDate(l.savedAt)}
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-1 mb-3">
+              {l.items.slice(0, 5).map((i) => (
+                <span
+                  key={i.id}
+                  className="text-[11px] text-foreground bg-surface-2 px-2 py-0.5 rounded-full"
+                >
+                  {i.query.keyword}
+                </span>
+              ))}
+              {l.items.length > 5 && (
+                <span className="text-[11px] text-muted px-1 self-center">
+                  他{l.items.length - 5}件
+                </span>
+              )}
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted">
+                完了 {completed.length} / {l.items.length}件
+              </span>
+              <span className="font-bold text-foreground">
+                合計目安 {formatYen(total)}
+              </span>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
