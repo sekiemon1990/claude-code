@@ -374,67 +374,22 @@ function ShippingEstimateSection({
   price: number;
   shipping?: "free" | "paid" | "pickup";
 }) {
-  if (!shipping || shipping === "pickup") return null;
+  if (shipping !== "free") return null;
 
   const est = estimateShipping(title);
+  const netValue = price - est.amount;
 
-  if (shipping === "free") {
-    const netValue = price - est.amount;
-    return (
-      <section className="bg-warning/10 border border-warning/30 rounded-xl p-4">
-        <div className="flex items-center gap-2 mb-2">
-          <Truck size={16} className="text-warning" />
-          <h2 className="text-sm font-semibold text-foreground">
-            送料の想定（送料無料の内訳）
-          </h2>
-        </div>
-        <p className="text-xs text-muted leading-relaxed mb-3">
-          表示価格は送料込みです。利益計算では送料分を控除した
-          「実質商品価値」を基準にしてください。
-        </p>
-        <div className="space-y-1.5 text-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-muted">表示価格</span>
-            <span className="font-semibold text-foreground">
-              ¥{price.toLocaleString("ja-JP")}
-            </span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-muted">
-              想定送料（{est.size}）
-              {est.isDefault && (
-                <span className="ml-1 text-[10px] text-muted">概算</span>
-              )}
-            </span>
-            <span className="font-semibold text-warning">
-              − ¥{est.amount.toLocaleString("ja-JP")}
-            </span>
-          </div>
-          <div className="border-t border-border pt-1.5 flex items-center justify-between">
-            <span className="text-foreground font-semibold">
-              実質商品価値
-            </span>
-            <span className="text-base font-bold text-success">
-              ¥{netValue.toLocaleString("ja-JP")}
-            </span>
-          </div>
-        </div>
-      </section>
-    );
-  }
-
-  // paid
-  const totalCost = price + est.amount;
   return (
-    <section className="bg-surface border border-border rounded-xl p-4">
+    <section className="bg-warning/10 border border-warning/30 rounded-xl p-4">
       <div className="flex items-center gap-2 mb-2">
-        <Truck size={16} className="text-primary" />
+        <Truck size={16} className="text-warning" />
         <h2 className="text-sm font-semibold text-foreground">
-          送料の想定（送料別）
+          送料の想定（送料無料の内訳）
         </h2>
       </div>
       <p className="text-xs text-muted leading-relaxed mb-3">
-        表示価格に加えて送料が必要です。
+        表示価格は送料込みです。利益計算では送料分を控除した
+        「実質商品価値」を基準にしてください。
       </p>
       <div className="space-y-1.5 text-sm">
         <div className="flex items-center justify-between">
@@ -450,14 +405,16 @@ function ShippingEstimateSection({
               <span className="ml-1 text-[10px] text-muted">概算</span>
             )}
           </span>
-          <span className="font-semibold text-primary">
-            + ¥{est.amount.toLocaleString("ja-JP")}
+          <span className="font-semibold text-warning">
+            − ¥{est.amount.toLocaleString("ja-JP")}
           </span>
         </div>
         <div className="border-t border-border pt-1.5 flex items-center justify-between">
-          <span className="text-foreground font-semibold">合計目安</span>
-          <span className="text-base font-bold text-foreground">
-            ¥{totalCost.toLocaleString("ja-JP")}
+          <span className="text-foreground font-semibold">
+            実質商品価値
+          </span>
+          <span className="text-base font-bold text-success">
+            ¥{netValue.toLocaleString("ja-JP")}
           </span>
         </div>
       </div>

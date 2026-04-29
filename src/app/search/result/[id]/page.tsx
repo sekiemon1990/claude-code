@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, use, useMemo, useState } from "react";
+import { Suspense, use, useMemo, useRef, useState } from "react";
 import {
   BarChart3,
   Sparkles,
@@ -57,6 +57,9 @@ import {
 import { generateSuggestions } from "@/lib/suggestions";
 import { estimateShipping } from "@/lib/shipping-estimate";
 import { ConditionBadge } from "@/components/ConditionBadge";
+import { PriceCalculator } from "@/components/PriceCalculator";
+import { AiAdvisor } from "@/components/AiAdvisor";
+import { QuickMemoModal } from "@/components/QuickMemoModal";
 import {
   SOURCES,
   type SourceKey,
@@ -115,6 +118,7 @@ function ResultInner({ resultId }: { resultId: string }) {
   const [pageSize, setPageSize] = useState<PageSize>(20);
   const [extraPages, setExtraPages] = useState(0);
   const [lightbox, setLightbox] = useState<{ src: string } | null>(null);
+  const [memoModal, setMemoModal] = useState<FlatListing | null>(null);
   const [copied, setCopied] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
 
@@ -433,10 +437,22 @@ function ResultInner({ resultId }: { resultId: string }) {
         />
       )}
 
+      {/* AI査定アシスタント */}
+      {!isEmpty && (
+        <AiAdvisor
+          keyword={keyword}
+          productGuess={result.productGuess}
+          listings={flatListings}
+        />
+      )}
+
+      {/* 買取額計算機 */}
+      {!isEmpty && <PriceCalculator defaultBase={summary.median} />}
+
       {/* 一覧コントロール */}
       {!isEmpty && (
         <section>
-          <div className="flex items-center justify-between mb-2 px-1">
+          <div className="flex items-center justify-between mb-1 px-1">
             <h3 className="text-sm font-semibold text-foreground">
               落札・売切一覧
             </h3>
@@ -633,6 +649,11 @@ function ResultInner({ resultId }: { resultId: string }) {
             )}
           </div>
 
+          <div className="text-[10px] text-muted px-1 mb-2 flex items-center gap-1">
+            <StickyNote size={10} />
+            ヒント: カードをダブルタップで査定メモを追加できます
+          </div>
+
           <div className="flex flex-col gap-2">
             {visibleListings.map((l) => (
               <ListingCard
@@ -640,6 +661,7 @@ function ResultInner({ resultId }: { resultId: string }) {
                 listing={l}
                 detailHref={`/search/result/${resultId}/listing/${l.source}-${l.id}?${queryStr}`}
                 onLightbox={(src) => setLightbox({ src })}
+                onMemoOpen={() => setMemoModal(l)}
               />
             ))}
 
@@ -826,6 +848,16 @@ function ResultInner({ resultId }: { resultId: string }) {
           onClose={() => setLightbox(null)}
         />
       )}
+
+      {memoModal && (
+        <QuickMemoModal
+          ref={`${memoModal.source}-${memoModal.id}`}
+          title={memoModal.title}
+          thumbnail={memoModal.thumbnail}
+          price={memoModal.price}
+          onClose={() => setMemoModal(null)}
+        />
+      )}
     </div>
   );
 }
@@ -920,28 +952,46 @@ function ListingCard({
   listing,
   detailHref,
   onLightbox,
+  onMemoOpen,
 }: {
   listing: FlatListing;
   detailHref: string;
   onLightbox: (src: string) => void;
+  onMemoOpen: () => void;
 }) {
+  const router = useRouter();
   const ref = `${listing.source}-${listing.id}`;
   const pinned = useListingPinnedValue(ref);
   const sourceMeta = SOURCES.find((s) => s.key === listing.source)!;
   const rank = classifyCondition(listing.condition);
-  const showShippingEstimate =
-    listing.shipping === "free" || listing.shipping === "paid";
-  const shippingEst = showShippingEstimate
-    ? estimateShipping(listing.title)
-    : null;
-  const netValue =
-    listing.shipping === "free" && shippingEst
-      ? listing.price - shippingEst.amount
-      : null;
+  const shippingEst =
+    listing.shipping === "free" ? estimateShipping(listing.title) : null;
+  const netValue = shippingEst ? listing.price - shippingEst.amount : null;
+
+  const tapCountRef = useRef(0);
+  const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function handleCardTap(e: React.MouseEvent) {
+    e.preventDefault();
+    tapCountRef.current += 1;
+    if (tapTimerRef.current) {
+      clearTimeout(tapTimerRef.current);
+      tapTimerRef.current = null;
+    }
+    if (tapCountRef.current >= 2) {
+      tapCountRef.current = 0;
+      onMemoOpen();
+      return;
+    }
+    tapTimerRef.current = setTimeout(() => {
+      tapCountRef.current = 0;
+      router.push(detailHref);
+    }, 250);
+  }
 
   return (
     <article className="bg-surface border border-border rounded-xl overflow-hidden hover:border-primary/40 transition-colors">
-      <Link href={detailHref} className="block">
+      <Link href={detailHref} onClick={handleCardTap} className="block">
         <div className="flex p-3 gap-3">
           {listing.thumbnail ? (
             <button

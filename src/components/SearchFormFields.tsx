@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Search, Check } from "lucide-react";
+import { Search, Check, ClipboardPaste } from "lucide-react";
 import { PlatformLogo } from "@/components/PlatformLogo";
 import { SOURCES, type SourceKey } from "@/lib/types";
 import { CONDITION_RANKS, CONDITION_META, type ConditionRank } from "@/lib/conditions";
@@ -48,6 +48,17 @@ export function SearchFormFields({
     initial?.shipping ?? "any"
   );
 
+  async function handlePasteFromClipboard() {
+    try {
+      if (!navigator.clipboard?.readText) return;
+      const text = await navigator.clipboard.readText();
+      const trimmed = text.trim();
+      if (trimmed) setKeyword(trimmed);
+    } catch {
+      // permission denied, ignore
+    }
+  }
+
   function toggleSource(key: SourceKey) {
     setSelectedSources((prev) =>
       prev.includes(key)
@@ -85,12 +96,22 @@ export function SearchFormFields({
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <div className="flex flex-col gap-1.5">
-        <label
-          htmlFor="keyword"
-          className="text-sm font-medium text-foreground"
-        >
-          商品名・型番 <span className="text-danger">*</span>
-        </label>
+        <div className="flex items-center justify-between">
+          <label
+            htmlFor="keyword"
+            className="text-sm font-medium text-foreground"
+          >
+            商品名・型番 <span className="text-danger">*</span>
+          </label>
+          <button
+            type="button"
+            onClick={handlePasteFromClipboard}
+            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+          >
+            <ClipboardPaste size={13} />
+            クリップボードから貼り付け
+          </button>
+        </div>
         <input
           id="keyword"
           type="text"
