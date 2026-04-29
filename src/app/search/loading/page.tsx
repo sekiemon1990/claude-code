@@ -1,8 +1,8 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
-import { SOURCES } from "@/lib/types";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { SOURCES, type SourceKey } from "@/lib/types";
 import { AppShell } from "@/components/AppShell";
 
 function LoadingInner() {
@@ -11,20 +11,28 @@ function LoadingInner() {
   const [step, setStep] = useState(0);
 
   const keyword = params.get("keyword") ?? "";
+  const sourcesParam = params.get("sources");
+
+  const activeSources = useMemo(() => {
+    const requested = sourcesParam
+      ? (sourcesParam.split(",") as SourceKey[])
+      : (["yahoo_auction"] as SourceKey[]);
+    return SOURCES.filter((s) => requested.includes(s.key));
+  }, [sourcesParam]);
 
   useEffect(() => {
     const timers: ReturnType<typeof setTimeout>[] = [];
-    SOURCES.forEach((_, i) => {
+    activeSources.forEach((_, i) => {
       timers.push(setTimeout(() => setStep(i + 1), 800 * (i + 1)));
     });
     timers.push(
       setTimeout(() => {
         const next = new URLSearchParams(params.toString());
         router.push(`/search/result/search_001?${next.toString()}`);
-      }, 800 * (SOURCES.length + 1))
+      }, 800 * (activeSources.length + 1))
     );
     return () => timers.forEach(clearTimeout);
-  }, [router, params]);
+  }, [router, params, activeSources]);
 
   return (
     <div className="flex flex-col items-center justify-center pt-16 gap-8">
@@ -41,7 +49,7 @@ function LoadingInner() {
       </div>
 
       <div className="w-full bg-surface border border-border rounded-xl p-4 flex flex-col gap-3">
-        {SOURCES.map((s, i) => {
+        {activeSources.map((s, i) => {
           const done = step > i;
           const active = step === i;
           return (

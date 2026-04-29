@@ -2,8 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Search } from "lucide-react";
+import { Search, Check } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { SOURCES, type SourceKey } from "@/lib/types";
 
 type Period = "30" | "90" | "all";
 
@@ -13,15 +14,30 @@ export default function SearchPage() {
   const [model, setModel] = useState("");
   const [excludes, setExcludes] = useState("");
   const [period, setPeriod] = useState<Period>("30");
+  const [selectedSources, setSelectedSources] = useState<SourceKey[]>([
+    "yahoo_auction",
+  ]);
+
+  function toggleSource(key: SourceKey) {
+    setSelectedSources((prev) =>
+      prev.includes(key)
+        ? prev.length > 1
+          ? prev.filter((k) => k !== key)
+          : prev
+        : [...prev, key]
+    );
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!keyword.trim()) return;
+    if (selectedSources.length === 0) return;
     const params = new URLSearchParams({
       keyword: keyword.trim(),
       ...(model.trim() && { model: model.trim() }),
       ...(excludes.trim() && { excludes: excludes.trim() }),
       period,
+      sources: selectedSources.join(","),
     });
     router.push(`/search/loading?${params.toString()}`);
   }
@@ -32,7 +48,7 @@ export default function SearchPage() {
         <section>
           <h2 className="text-xl font-bold text-foreground">相場を検索</h2>
           <p className="text-sm text-muted mt-1">
-            ヤフオク・メルカリ・ジモティーから一括検索します
+            選択した媒体から一括で落札相場を取得します
           </p>
         </section>
 
@@ -97,6 +113,44 @@ export default function SearchPage() {
 
           <div className="flex flex-col gap-1.5">
             <span className="text-sm font-medium text-foreground">
+              検索媒体
+              <span className="ml-1 text-xs text-muted font-normal">
+                （複数選択可）
+              </span>
+            </span>
+            <div className="grid grid-cols-3 gap-2">
+              {SOURCES.map((s) => {
+                const selected = selectedSources.includes(s.key);
+                return (
+                  <button
+                    key={s.key}
+                    type="button"
+                    onClick={() => toggleSource(s.key)}
+                    className={
+                      selected
+                        ? "h-11 rounded-lg border-2 bg-surface text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors"
+                        : "h-11 rounded-lg border border-border bg-surface text-foreground text-sm flex items-center justify-center gap-1.5 hover:border-foreground/30"
+                    }
+                    style={
+                      selected
+                        ? {
+                            borderColor: s.color,
+                            color: s.color,
+                            backgroundColor: `${s.color}0d`,
+                          }
+                        : undefined
+                    }
+                  >
+                    {selected && <Check size={14} />}
+                    {s.shortName}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-foreground">
               検索期間
             </span>
             <div className="grid grid-cols-3 gap-2">
@@ -139,7 +193,7 @@ export default function SearchPage() {
           <ul className="text-xs text-muted space-y-1 leading-relaxed">
             <li>・ ブランド名と型番をセットで入れると精度UP</li>
             <li>・ 「ジャンク」「部品取り」を除外すると相場が安定</li>
-            <li>・ 期間は短い方が直近トレンドを反映</li>
+            <li>・ 媒体を増やすほど取得時間が長くなります</li>
           </ul>
         </section>
       </div>
