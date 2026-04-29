@@ -11,7 +11,6 @@ type Period = "30" | "90" | "all";
 export default function SearchPage() {
   const router = useRouter();
   const [keyword, setKeyword] = useState("");
-  const [model, setModel] = useState("");
   const [excludes, setExcludes] = useState("");
   const [period, setPeriod] = useState<Period>("30");
   const [selectedSources, setSelectedSources] = useState<SourceKey[]>([
@@ -34,7 +33,6 @@ export default function SearchPage() {
     if (selectedSources.length === 0) return;
     const params = new URLSearchParams({
       keyword: keyword.trim(),
-      ...(model.trim() && { model: model.trim() }),
       ...(excludes.trim() && { excludes: excludes.trim() }),
       period,
       sources: selectedSources.join(","),
@@ -58,7 +56,7 @@ export default function SearchPage() {
               htmlFor="keyword"
               className="text-sm font-medium text-foreground"
             >
-              商品名 <span className="text-danger">*</span>
+              商品名・型番 <span className="text-danger">*</span>
             </label>
             <input
               id="keyword"
@@ -66,27 +64,7 @@ export default function SearchPage() {
               required
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
-              placeholder="例: SONY α7 IV"
-              className="h-12 px-4 rounded-lg bg-surface border border-border text-foreground placeholder:text-muted focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-            />
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <label
-              htmlFor="model"
-              className="text-sm font-medium text-foreground"
-            >
-              型番・メーカー
-              <span className="ml-1 text-xs text-muted font-normal">
-                （任意）
-              </span>
-            </label>
-            <input
-              id="model"
-              type="text"
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              placeholder="例: ILCE-7M4"
+              placeholder="例: SONY α7 IV ILCE-7M4"
               className="h-12 px-4 rounded-lg bg-surface border border-border text-foreground placeholder:text-muted focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
             />
           </div>
@@ -191,7 +169,7 @@ export default function SearchPage() {
             検索のコツ
           </h3>
           <ul className="text-xs text-muted space-y-1 leading-relaxed">
-            <li>・ ブランド名と型番をセットで入れると精度UP</li>
+            <li>・ ブランド名・型番をスペース区切りで入れると精度UP</li>
             <li>・ 「ジャンク」「部品取り」を除外すると相場が安定</li>
             <li>・ 媒体を増やすほど取得時間が長くなります</li>
           </ul>

@@ -56,7 +56,6 @@ export type SearchResult = {
   id: string;
   query: {
     keyword: string;
-    model?: string;
     excludes?: string;
     period: "30" | "90" | "all";
   };

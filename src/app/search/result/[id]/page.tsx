@@ -83,8 +83,6 @@ function ResultInner() {
         </h2>
         <div className="text-xs text-muted mt-1">
           検索: {params.get("keyword") ?? result.query.keyword}
-          {(params.get("model") ?? result.query.model) &&
-            ` / ${params.get("model") ?? result.query.model}`}
           {" ・ "}
           直近{period === "all" ? "全期間" : `${period}日`}
         </div>
