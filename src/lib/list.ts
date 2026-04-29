@@ -113,6 +113,49 @@ function saveActiveList(list: AppraisalList): void {
   write(ACTIVE_LIST_KEY, JSON.stringify(list));
 }
 
+export function addCompletedItem(
+  query: ListItemQuery,
+  result: ListItemResult
+): ListItem {
+  const list = getActiveList();
+  // 同じキーワードが既にリストにあればスキップ
+  const existing = list.items.find(
+    (i) => i.query.keyword.trim() === query.keyword.trim()
+  );
+  if (existing) return existing;
+
+  const item: ListItem = {
+    id: newId(),
+    query,
+    status: "completed",
+    progress: 100,
+    result,
+    addedAt: new Date().toISOString(),
+    completedAt: new Date().toISOString(),
+  };
+  list.items.unshift(item);
+  saveActiveList(list);
+  return item;
+}
+
+export function isInList(keyword: string): boolean {
+  const list = getActiveList();
+  return list.items.some(
+    (i) => i.query.keyword.trim() === keyword.trim()
+  );
+}
+
+export function useIsInList(keyword: string): boolean {
+  const [val, setVal] = useState<boolean>(false);
+  useEffect(() => {
+    setVal(isInList(keyword));
+    const onChange = () => setVal(isInList(keyword));
+    window.addEventListener("maxus_search:list", onChange);
+    return () => window.removeEventListener("maxus_search:list", onChange);
+  }, [keyword]);
+  return val;
+}
+
 export function addItemToList(query: ListItemQuery): ListItem {
   const list = getActiveList();
   const item: ListItem = {

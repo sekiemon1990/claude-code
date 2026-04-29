@@ -62,6 +62,8 @@ import {
 import { generateSuggestions } from "@/lib/suggestions";
 import { ConditionBadge } from "@/components/ConditionBadge";
 import { ToolsPanel } from "@/components/ToolsPanel";
+import { addCompletedItem, useIsInList } from "@/lib/list";
+import { ListPlus, ListChecks } from "lucide-react";
 import { QuickMemoModal } from "@/components/QuickMemoModal";
 import { PlatformPriceBars } from "@/components/PlatformPriceBars";
 import {
@@ -242,6 +244,40 @@ function ResultInner({ resultId }: { resultId: string }) {
   const queryStr = new URLSearchParams(params.toString()).toString();
   const isEmpty = flatListings.length === 0;
   const hasNoMatch = !isEmpty && filteredListings.length === 0;
+
+  const inList = useIsInList(keyword);
+
+  function handleAddToList() {
+    if (isEmpty || summary.totalCount === 0) {
+      toast({ message: "結果がないためリストに追加できません", variant: "error" });
+      return;
+    }
+    addCompletedItem(
+      {
+        keyword,
+        excludes: params.get("excludes") ?? undefined,
+        period: period as Period,
+        sources: requestedSources,
+        conditions: conditionFilter.filter(
+          (c): c is Exclude<ConditionRank, "unknown"> => c !== "unknown"
+        ),
+        shipping: shippingFilter,
+      },
+      {
+        median: summary.median,
+        min: summary.min,
+        max: summary.max,
+        count: summary.totalCount,
+        suggestedBuyPrice: Math.round((summary.median * 70) / 100),
+      }
+    );
+    haptic(8);
+    toast({
+      message: `「${keyword}」を査定リストに追加`,
+      actionLabel: "リストを見る",
+      actionHref: "/list",
+    });
+  }
 
   async function handleCopyUrl() {
     try {
@@ -861,11 +897,38 @@ function ResultInner({ resultId }: { resultId: string }) {
       )}
 
       {/* アクション */}
-      <section className="grid grid-cols-2 gap-2 pt-2">
+      {!isEmpty && (
+        <section className="pt-2">
+          <button
+            type="button"
+            onClick={handleAddToList}
+            disabled={inList}
+            className={
+              inList
+                ? "tap-scale w-full h-12 rounded-lg bg-success/10 border border-success/30 text-success font-semibold text-sm flex items-center justify-center gap-2"
+                : "tap-scale w-full h-12 rounded-lg bg-surface border-2 border-primary text-primary font-semibold text-sm hover:bg-primary/5 flex items-center justify-center gap-2"
+            }
+          >
+            {inList ? (
+              <>
+                <ListChecks size={16} />
+                査定リストに追加済み
+              </>
+            ) : (
+              <>
+                <ListPlus size={16} />
+                この検索を査定リストに追加
+              </>
+            )}
+          </button>
+        </section>
+      )}
+
+      <section className="grid grid-cols-2 gap-2">
         <button
           type="button"
           onClick={handleShare}
-          className="h-12 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 flex items-center justify-center gap-2"
+          className="tap-scale h-12 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 flex items-center justify-center gap-2"
         >
           <Share2 size={16} />
           共有
