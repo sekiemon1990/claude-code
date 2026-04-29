@@ -46,6 +46,7 @@ export type Listing = {
   sellerName?: string;
   shippingInfo?: string;
   location?: string;
+  accessories?: string[];
 };
 
 export type SourceResult = {

@@ -11,6 +11,8 @@ import {
   Truck,
   MapPin,
   Tag,
+  Package,
+  Sparkles,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { SourceBadge } from "@/components/SourceBadge";
@@ -18,6 +20,7 @@ import { PlatformLogo } from "@/components/PlatformLogo";
 import { ImageLightbox } from "@/components/ImageLightbox";
 import { MOCK_RESULT } from "@/lib/mock-data";
 import { formatYen, formatRelativeDate } from "@/lib/utils";
+import { detectAccessories } from "@/lib/accessories";
 import { SOURCES, type SourceKey } from "@/lib/types";
 
 function parseRef(ref: string): { source: SourceKey; lid: string } | null {
@@ -161,6 +164,13 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
         )}
       </section>
 
+      {/* 付属品 */}
+      <AccessoriesSection
+        title={listing.title}
+        description={listing.description}
+        accessories={listing.accessories}
+      />
+
       {/* 説明 */}
       {listing.description && (
         <section className="bg-surface border border-border rounded-xl p-4">
@@ -210,6 +220,56 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
         />
       )}
     </div>
+  );
+}
+
+function AccessoriesSection({
+  title,
+  description,
+  accessories,
+}: {
+  title?: string;
+  description?: string;
+  accessories?: string[];
+}) {
+  const { items, isInferred } = detectAccessories({
+    title,
+    description,
+    accessories,
+  });
+
+  if (items.length === 0) return null;
+
+  return (
+    <section className="bg-surface border border-border rounded-xl p-4">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <Package size={16} className="text-primary" />
+          <h2 className="text-sm font-semibold text-foreground">付属品</h2>
+        </div>
+        {isInferred && (
+          <span className="inline-flex items-center gap-1 text-[10px] text-muted px-2 py-0.5 rounded-full bg-surface-2">
+            <Sparkles size={10} />
+            本文から自動抽出
+          </span>
+        )}
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {items.map((a) => (
+          <span
+            key={a}
+            className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-md bg-surface-2 text-foreground border border-border"
+          >
+            {a}
+          </span>
+        ))}
+      </div>
+      {isInferred && (
+        <p className="text-[11px] text-muted mt-2 leading-relaxed">
+          ※ 本文中のキーワードから自動抽出した結果です。実際の付属品とは異なる場合があります。
+        </p>
+      )}
+    </section>
   );
 }
 
