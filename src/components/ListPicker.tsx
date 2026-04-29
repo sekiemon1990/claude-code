@@ -16,12 +16,11 @@ import {
   switchToList,
   createList,
   deleteList,
-  renameList,
   type AppraisalList,
 } from "@/lib/list";
-import { formatYen } from "@/lib/utils";
-import { formatRelativeDate } from "@/lib/utils";
+import { formatYen, formatRelativeDate } from "@/lib/utils";
 import { toast } from "@/lib/toast";
+import { RenameListModal } from "./RenameListModal";
 
 type Props = {
   onClose: () => void;
@@ -104,7 +103,7 @@ export function ListPicker({ onClose }: Props) {
       </div>
 
       {renameTarget && (
-        <RenameModal
+        <RenameListModal
           list={renameTarget}
           onClose={() => setRenameTarget(null)}
         />
@@ -213,62 +212,6 @@ function ListPickerItem({
           <Trash2 size={11} />
           削除
         </button>
-      </div>
-    </div>
-  );
-}
-
-function RenameModal({
-  list,
-  onClose,
-}: {
-  list: AppraisalList;
-  onClose: () => void;
-}) {
-  const [name, setName] = useState(list.name ?? "");
-
-  function save() {
-    renameList(list.id, name);
-    toast({ message: "名前を変更しました" });
-    onClose();
-  }
-
-  return (
-    <div
-      className="fixed inset-0 z-[60] bg-black/40 anim-fade-in flex items-center justify-center p-4"
-      onClick={onClose}
-    >
-      <div
-        className="anim-slide-up max-w-sm w-full bg-surface rounded-2xl shadow-xl border border-border p-5"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 className="text-base font-bold text-foreground mb-3">
-          リスト名を変更
-        </h3>
-        <input
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="例: 佐藤様 4/29"
-          className="w-full h-11 px-3 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-          autoFocus
-        />
-        <div className="grid grid-cols-2 gap-2 mt-4">
-          <button
-            type="button"
-            onClick={onClose}
-            className="tap-scale h-11 rounded-lg border border-border text-foreground text-sm hover:bg-surface-2"
-          >
-            キャンセル
-          </button>
-          <button
-            type="button"
-            onClick={save}
-            className="tap-scale h-11 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90"
-          >
-            保存
-          </button>
-        </div>
       </div>
     </div>
   );
