@@ -116,9 +116,9 @@ function rowToItem(row: ItemRow): ListItem {
   if (row.error_message) item.error = row.error_message;
   if (row.started_at) item.startedAt = row.started_at;
   if (row.completed_at) item.completedAt = row.completed_at;
-  if (row.total_ms !== null) item.totalMs = row.total_ms;
+  if (row.total_ms !== null) item.totalMs = Math.floor(row.total_ms);
   if (row.target_complete_at_ms !== null) {
-    item.targetCompleteAt = row.target_complete_at_ms;
+    item.targetCompleteAt = Math.floor(row.target_complete_at_ms);
   }
   return item;
 }
@@ -297,12 +297,12 @@ export async function updateListItem(
   const supabase = createClient();
   const patch: Record<string, unknown> = {};
   if (updates.status !== undefined) patch.status = updates.status;
-  if (updates.progress !== undefined) patch.progress = updates.progress;
+  if (updates.progress !== undefined) patch.progress = Math.floor(updates.progress);
   if (updates.startedAt !== undefined) patch.started_at = updates.startedAt;
   if (updates.completedAt !== undefined) patch.completed_at = updates.completedAt;
-  if (updates.totalMs !== undefined) patch.total_ms = updates.totalMs;
+  if (updates.totalMs !== undefined) patch.total_ms = Math.floor(updates.totalMs);
   if (updates.targetCompleteAt !== undefined) {
-    patch.target_complete_at_ms = updates.targetCompleteAt;
+    patch.target_complete_at_ms = Math.floor(updates.targetCompleteAt);
   }
   if (updates.error !== undefined) patch.error_message = updates.error;
   if (updates.result !== undefined) {
