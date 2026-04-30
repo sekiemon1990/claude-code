@@ -144,8 +144,11 @@ function findItemNode(node: unknown, depth = 0): Record<string, unknown> | null 
 }
 
 function extractDescription(o: Record<string, unknown>): string | undefined {
-  // Yahoo: description.text, description (string), itemDescription
-  if (typeof o.description === "string") return cleanText(o.description);
+  // Yahoo Auctions: description (string) または descriptionHtml (HTML 文字列)
+  if (typeof o.description === "string" && o.description.trim())
+    return cleanText(o.description);
+  if (typeof o.descriptionHtml === "string" && o.descriptionHtml.trim())
+    return stripHtml(o.descriptionHtml);
   if (o.description && typeof o.description === "object") {
     const d = o.description as Record<string, unknown>;
     if (typeof d.text === "string") return cleanText(d.text);
@@ -160,7 +163,24 @@ function extractDescription(o: Record<string, unknown>): string | undefined {
 }
 
 function extractImages(o: Record<string, unknown>): string[] | undefined {
-  // images, photos, imageUrls, mainImages 等
+  // Yahoo Auctions: img: [{image, thumbnail, width, height}, ...]
+  const imgArr = pickArr(o.img);
+  if (imgArr) {
+    const urls = imgArr
+      .map((it) => {
+        if (typeof it === "string") return it;
+        if (it && typeof it === "object") {
+          const big = (it as Record<string, unknown>).image;
+          if (typeof big === "string") return big;
+          const t = (it as Record<string, unknown>).thumbnail;
+          if (typeof t === "string") return t;
+        }
+        return null;
+      })
+      .filter((x): x is string => !!x);
+    if (urls.length > 0) return urls;
+  }
+  // 旧フィールド名 / 他形式のフォールバック
   const arr =
     pickArr(o.images) ||
     pickArr(o.photos) ||
@@ -183,7 +203,7 @@ function extractImages(o: Record<string, unknown>): string[] | undefined {
       .filter((x): x is string => !!x);
     if (urls.length > 0) return urls;
   }
-  // 単一画像のフォールバック
+  // 単一画像
   const single =
     typeof o.imageUrl === "string"
       ? o.imageUrl
@@ -240,6 +260,13 @@ function extractShippingInfo(o: Record<string, unknown>): string | undefined {
 }
 
 function extractLocation(o: Record<string, unknown>): string | undefined {
+  // Yahoo Auctions detail: seller.location.prefecture
+  const seller = o.seller as Record<string, unknown> | undefined;
+  if (seller && typeof seller.location === "object" && seller.location) {
+    const loc = seller.location as Record<string, unknown>;
+    if (typeof loc.prefecture === "string" && loc.prefecture.trim())
+      return loc.prefecture;
+  }
   const code =
     typeof o.prefectureCode === "string" ? o.prefectureCode : "";
   if (code) {
