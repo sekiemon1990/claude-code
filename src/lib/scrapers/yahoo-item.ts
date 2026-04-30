@@ -25,9 +25,12 @@ export async function scrapeYahooItem(
   id: string,
   isFleamarket: boolean,
 ): Promise<YahooItemDetail> {
+  // 商品ページ URL: 検索結果の URL と同じ canonical 形式
   const url = isFleamarket
     ? `https://paypayfleamarket.yahoo.co.jp/item/${id}`
-    : `https://page.auctions.yahoo.co.jp/jp/auction/${id}`;
+    : `https://auctions.yahoo.co.jp/jp/auction/${id}`;
+
+  console.log("[yahoo-item] fetching:", url);
 
   const res = await fetch(url, {
     headers: {
@@ -38,19 +41,26 @@ export async function scrapeYahooItem(
       "Cache-Control": "no-cache",
     },
     cache: "no-store",
+    redirect: "follow",
   });
 
-  console.log("[yahoo-item] status:", res.status, "url:", url);
-  if (!res.ok) throw new Error(`商品ページ取得エラー: ${res.status}`);
+  console.log("[yahoo-item] status:", res.status, "final url:", res.url);
+  if (!res.ok) {
+    throw new Error(`商品ページ取得エラー: ${res.status}`);
+  }
 
   const html = await res.text();
   console.log("[yahoo-item] html size:", html.length);
 
+  // __NEXT_DATA__ チェック
   const m = html.match(
     /<script\s+id="__NEXT_DATA__"\s+type="application\/json">([\s\S]*?)<\/script>/,
   );
   if (!m) {
-    console.log("[yahoo-item] __NEXT_DATA__ not found");
+    console.log(
+      "[yahoo-item] __NEXT_DATA__ not found. HTML head sample:",
+      html.slice(0, 800),
+    );
     return { id };
   }
 
@@ -62,17 +72,27 @@ export async function scrapeYahooItem(
     return { id };
   }
 
+  console.log(
+    "[yahoo-item] __NEXT_DATA__ top keys:",
+    typeof data === "object" && data
+      ? Object.keys(data as object).join(",")
+      : "(none)",
+  );
+
   // ページ内の商品データを再帰探索
   const item = findItemNode(data);
   if (!item) {
-    console.log("[yahoo-item] item node not found");
+    console.log("[yahoo-item] item node not found in __NEXT_DATA__");
     return { id };
   }
 
   console.log("[yahoo-item] item keys:", Object.keys(item).join(","));
-  console.log("[yahoo-item] item sample:", JSON.stringify(item).slice(0, 1500));
+  console.log(
+    "[yahoo-item] item sample (first 2000 chars):",
+    JSON.stringify(item).slice(0, 2000),
+  );
 
-  return {
+  const detail = {
     id,
     description: extractDescription(item),
     images: extractImages(item),
@@ -82,6 +102,18 @@ export async function scrapeYahooItem(
     shippingInfo: extractShippingInfo(item),
     location: extractLocation(item),
   };
+
+  console.log("[yahoo-item] mapped result:", {
+    hasDescription: !!detail.description,
+    descLen: detail.description?.length ?? 0,
+    imageCount: detail.images?.length ?? 0,
+    condition: detail.condition,
+    sellerName: detail.sellerName,
+    shipping: detail.shipping,
+    location: detail.location,
+  });
+
+  return detail;
 }
 
 // データ中で「商品ノード」っぽいオブジェクトを再帰探索
