@@ -4,7 +4,9 @@ import type { Listing, SourceResult } from "@/lib/types";
 /**
  * Yahoo オークション 落札相場 (closedsearch) スクレイパ
  *
- * URL: https://auctions.yahoo.co.jp/closedsearch/closedsearch?p=KEYWORD&va=KEYWORD&b=1&n=50
+ * 戦略:
+ *   1. __NEXT_DATA__ JSON に商品データがあるか探す (最優先)
+ *   2. 見つからなければ HTML 上のリンク要素を起点に近傍から情報を抽出
  */
 
 const YAHOO_BASE = "https://auctions.yahoo.co.jp/closedsearch/closedsearch";
@@ -51,36 +53,209 @@ export async function scrapeYahooAuction(
 
   const html = await res.text();
   console.log("[yahoo-scrape] html size:", html.length);
-  // 重要部分のサンプル (デバッグ用)
-  const sampleStart = html.indexOf("<body");
-  if (sampleStart > -1) {
+
+  // 1. __NEXT_DATA__ JSON から取得を試みる
+  const nextDataListings = parseFromNextData(html);
+  if (nextDataListings && nextDataListings.length > 0) {
     console.log(
-      "[yahoo-scrape] html sample:",
-      html.slice(sampleStart, sampleStart + 800),
+      "[yahoo-scrape] parsed via __NEXT_DATA__:",
+      nextDataListings.length,
     );
-  }
-  // 商品 URL 周辺のサンプル (日付フォーマット診断用)
-  const auctionLinkIdx = html.indexOf("/auction/");
-  if (auctionLinkIdx > -1) {
-    console.log(
-      "[yahoo-scrape] auction link context:",
-      html.slice(Math.max(0, auctionLinkIdx - 200), auctionLinkIdx + 800),
-    );
+    return summarize("yahoo_auction", nextDataListings);
   }
 
+  // 2. HTML 解析へフォールバック
+  console.log("[yahoo-scrape] falling back to HTML parse");
   const listings = parseYahooHtml(html);
-  console.log("[yahoo-scrape] parsed listings:", listings.length);
-
+  console.log("[yahoo-scrape] parsed via HTML:", listings.length);
   return summarize("yahoo_auction", listings);
 }
+
+// ---- __NEXT_DATA__ パース ----
+
+function parseFromNextData(html: string): Listing[] | null {
+  const match = html.match(
+    /<script\s+id="__NEXT_DATA__"\s+type="application\/json">([\s\S]*?)<\/script>/,
+  );
+  if (!match) {
+    console.log("[yahoo-scrape] __NEXT_DATA__ not found");
+    return null;
+  }
+  let data: unknown;
+  try {
+    data = JSON.parse(match[1]);
+  } catch (e) {
+    console.error("[yahoo-scrape] __NEXT_DATA__ parse failed:", e);
+    return null;
+  }
+
+  // 構造を診断ログに出す (初回のみ)
+  console.log(
+    "[yahoo-scrape] __NEXT_DATA__ top keys:",
+    typeof data === "object" && data ? Object.keys(data as object).join(",") : "(none)",
+  );
+
+  // 配列に「価格 / タイトル / 終了日 / オークションID」っぽいフィールドを持つ
+  // オブジェクトを再帰探索する。
+  const items = findAuctionItems(data);
+  console.log("[yahoo-scrape] __NEXT_DATA__ items found:", items.length);
+  if (items.length > 0) {
+    console.log(
+      "[yahoo-scrape] sample item keys:",
+      Object.keys(items[0]).join(","),
+    );
+    console.log(
+      "[yahoo-scrape] sample item:",
+      JSON.stringify(items[0]).slice(0, 500),
+    );
+  }
+
+  const listings: Listing[] = [];
+  for (const it of items) {
+    const listing = mapAuctionItem(it);
+    if (listing) listings.push(listing);
+  }
+  return listings;
+}
+
+type AuctionItemLike = Record<string, unknown>;
+
+function findAuctionItems(node: unknown, depth = 0): AuctionItemLike[] {
+  if (depth > 10) return [];
+  if (!node || typeof node !== "object") return [];
+
+  if (Array.isArray(node)) {
+    // 配列要素がオークション商品っぽければ採用
+    if (node.length > 0 && looksLikeAuctionItem(node[0])) {
+      return node.filter(looksLikeAuctionItem) as AuctionItemLike[];
+    }
+    // そうでなければ各要素を再帰
+    for (const child of node) {
+      const found = findAuctionItems(child, depth + 1);
+      if (found.length > 0) return found;
+    }
+    return [];
+  }
+
+  // オブジェクト: 各値を再帰
+  for (const value of Object.values(node as object)) {
+    const found = findAuctionItems(value, depth + 1);
+    if (found.length > 0) return found;
+  }
+  return [];
+}
+
+function looksLikeAuctionItem(x: unknown): boolean {
+  if (!x || typeof x !== "object") return false;
+  const o = x as Record<string, unknown>;
+  // タイトルっぽい / 価格っぽい / オークション ID っぽい のうち 2 個以上
+  let score = 0;
+  const titleKeys = ["title", "name", "auctionTitle"];
+  const priceKeys = [
+    "price",
+    "currentPrice",
+    "winningPrice",
+    "endPrice",
+    "soldPrice",
+  ];
+  const idKeys = ["auctionId", "auction_id", "id", "itemId"];
+  if (titleKeys.some((k) => typeof o[k] === "string")) score++;
+  if (priceKeys.some((k) => typeof o[k] === "number" || typeof o[k] === "string"))
+    score++;
+  if (idKeys.some((k) => typeof o[k] === "string")) score++;
+  return score >= 2;
+}
+
+function mapAuctionItem(o: AuctionItemLike): Listing | null {
+  const id =
+    str(o.auctionId) ||
+    str(o.auction_id) ||
+    str(o.itemId) ||
+    str(o.id) ||
+    "";
+  if (!id) return null;
+
+  const title =
+    str(o.title) ||
+    str(o.name) ||
+    str(o.auctionTitle) ||
+    "";
+  if (!title) return null;
+
+  const priceVal =
+    num(o.winningPrice) ??
+    num(o.endPrice) ??
+    num(o.soldPrice) ??
+    num(o.currentPrice) ??
+    num(o.price) ??
+    0;
+  if (priceVal <= 0) return null;
+
+  const endedAt =
+    isoDate(o.endTime) ||
+    isoDate(o.endedAt) ||
+    isoDate(o.endDate) ||
+    isoDate(o.end_time) ||
+    isoDate(o.closeTime) ||
+    "";
+
+  const thumbnail =
+    str(o.thumbnailUrl) ||
+    str(o.thumbnail) ||
+    str(o.imageUrl) ||
+    str(o.image) ||
+    undefined;
+
+  const bidCount = num(o.bidCount) ?? num(o.bids) ?? undefined;
+
+  const url =
+    str(o.url) ||
+    str(o.auctionUrl) ||
+    `https://page.auctions.yahoo.co.jp/jp/auction/${id}`;
+
+  return {
+    id,
+    title,
+    price: priceVal,
+    endedAt,
+    thumbnail,
+    url,
+    bidCount,
+  };
+}
+
+function str(v: unknown): string {
+  return typeof v === "string" ? v : "";
+}
+function num(v: unknown): number | null {
+  if (typeof v === "number") return v;
+  if (typeof v === "string") {
+    const n = Number(v.replace(/[^\d.\-]/g, ""));
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+function isoDate(v: unknown): string {
+  if (!v) return "";
+  if (typeof v === "string") {
+    const d = new Date(v);
+    if (Number.isFinite(d.getTime())) return d.toISOString();
+  }
+  if (typeof v === "number") {
+    // unix sec or ms
+    const d = new Date(v < 1e12 ? v * 1000 : v);
+    if (Number.isFinite(d.getTime())) return d.toISOString();
+  }
+  return "";
+}
+
+// ---- HTML フォールバックパース ----
 
 function parseYahooHtml(html: string): Listing[] {
   const $ = cheerio.load(html);
   const listings: Listing[] = [];
   const seenIds = new Set<string>();
 
-  // 商品リンクを起点に探す: ヤフオクの商品 URL パターン
-  // /auction/X123456789 (X は 1 文字以上の英字)
   const productLinks = $('a[href*="/auction/"]');
   console.log("[yahoo-scrape] product link candidates:", productLinks.length);
 
@@ -92,75 +267,40 @@ function parseYahooHtml(html: string): Listing[] {
     const id = idMatch[1];
     if (seenIds.has(id)) return;
 
-    // タイトルを取得 (リンクのテキスト or 親要素から)
     let title = $link.text().trim();
-    if (!title || title.length < 3) {
-      title = $link.attr("title")?.trim() ?? "";
-    }
-    if (!title || title.length < 3) {
-      // 画像 alt から拾う
+    if (!title || title.length < 3) title = $link.attr("title")?.trim() ?? "";
+    if (!title || title.length < 3)
       title = $link.find("img").attr("alt")?.trim() ?? "";
-    }
     if (!title || title.length < 3) return;
 
-    // 商品カード本体: リンクから親をたどって最も近い li / article / div
     const $card = $link.closest(
       "li, article, [class*='Product'], [class*='Item']",
     );
     if (!$card.length) return;
 
-    // 価格: ¥ や 円 を含むテキスト
     let price = 0;
     $card.find("*").each((_, el) => {
       const text = $(el).text();
       const m = text.match(/[¥￥]\s?([\d,]+)|([\d,]+)\s?円/);
       if (m) {
         const num = Number((m[1] ?? m[2]).replace(/,/g, ""));
-        if (num > 0 && num < 100_000_000) {
-          if (price === 0 || num < price) {
-            // 最も小さい有効値を取得 (ヘッダの "0円〜" を除外する目的)
-            if (num >= 100) {
-              price = num;
-            }
-          }
+        if (num >= 100 && num < 100_000_000) {
+          if (price === 0 || num < price) price = num;
         }
       }
     });
     if (price === 0) return;
 
-    // サムネイル
-    const thumbnail = $card.find("img").first().attr("src") ?? undefined;
-
     const cardText = $card.text();
-
-    // 終了日時: <time datetime="..."> を優先、なければテキストから抽出
     let endedAt = "";
     const timeEl = $card.find("time[datetime]").first();
     const datetimeAttr = timeEl.attr("datetime");
     if (datetimeAttr) {
       const d = new Date(datetimeAttr);
-      if (!Number.isNaN(d.getTime())) {
-        endedAt = d.toISOString();
-      }
-    }
-    if (!endedAt) {
-      // 全ての日付候補を取り、有効そうな (過去 1 年以内) ものを採用
-      const candidates = extractDateCandidates(cardText);
-      const valid = candidates
-        .filter((c) => {
-          const ms = c.getTime();
-          const now = Date.now();
-          return ms <= now && ms >= now - 365 * 86400000;
-        })
-        .sort((a, b) => b.getTime() - a.getTime()); // 新しい順
-      if (valid[0]) {
-        endedAt = valid[0].toISOString();
-      } else {
-        endedAt = ""; // パース失敗時は空 → UI 側で「不明」表示
-      }
+      if (!Number.isNaN(d.getTime())) endedAt = d.toISOString();
     }
 
-    // 入札数 (例: "1件", "5入札")
+    const thumbnail = $card.find("img").first().attr("src") ?? undefined;
     const bidMatch = cardText.match(/(\d+)\s*(?:入札|件入札|bid)/);
     const bidCount = bidMatch ? Number(bidMatch[1]) : undefined;
 
@@ -171,66 +311,14 @@ function parseYahooHtml(html: string): Listing[] {
       price,
       endedAt,
       thumbnail,
-      url: href.startsWith("http") ? href : `https://auctions.yahoo.co.jp${href}`,
+      url: href.startsWith("http")
+        ? href
+        : `https://auctions.yahoo.co.jp${href}`,
       bidCount,
     });
   });
 
   return listings;
-}
-
-// テキスト全体から日付候補を全件抽出 (JST 想定)
-function extractDateCandidates(text: string): Date[] {
-  const results: Date[] = [];
-
-  // パターン 1: 2025/11/22 22:30 や 2025-11-22 等 (年付き)
-  const re1 = /(\d{4})[\/\-年](\d{1,2})[\/\-月](\d{1,2})日?\s*(?:(\d{1,2})[:時](\d{1,2}))?/g;
-  let m: RegExpExecArray | null;
-  while ((m = re1.exec(text))) {
-    const d = makeJstDate(
-      Number(m[1]),
-      Number(m[2]),
-      Number(m[3]),
-      Number(m[4] ?? 0),
-      Number(m[5] ?? 0),
-    );
-    if (d) results.push(d);
-  }
-
-  // パターン 2: 11/22 や 11月22日 (年なし → 直近の同月日として推測)
-  const re2 = /(?<!\d)(\d{1,2})[\/月](\d{1,2})日?\s*(?:(\d{1,2})[:時](\d{1,2}))?/g;
-  while ((m = re2.exec(text))) {
-    const month = Number(m[1]);
-    const day = Number(m[2]);
-    if (month < 1 || month > 12 || day < 1 || day > 31) continue;
-    const now = new Date();
-    const candidates = [
-      makeJstDate(now.getUTCFullYear(), month, day, Number(m[3] ?? 0), Number(m[4] ?? 0)),
-      makeJstDate(now.getUTCFullYear() - 1, month, day, Number(m[3] ?? 0), Number(m[4] ?? 0)),
-    ];
-    for (const d of candidates) {
-      if (d) results.push(d);
-    }
-  }
-
-  return results;
-}
-
-function makeJstDate(
-  year: number,
-  month: number,
-  day: number,
-  hour: number,
-  minute: number,
-): Date | null {
-  if (year < 2000 || year > 2100) return null;
-  if (month < 1 || month > 12) return null;
-  if (day < 1 || day > 31) return null;
-  // JST (UTC+9) として解釈し UTC に変換
-  const jstMs = Date.UTC(year, month - 1, day, hour, minute) - 9 * 60 * 60 * 1000;
-  const d = new Date(jstMs);
-  if (Number.isNaN(d.getTime())) return null;
-  return d;
 }
 
 function summarize(
