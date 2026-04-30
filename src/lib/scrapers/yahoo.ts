@@ -189,6 +189,7 @@ function mapAuctionItem(o: AuctionItemLike): Listing | null {
     num(o.soldPrice) ??
     num(o.currentPrice) ??
     num(o.price) ??
+    num(o.buyNowPrice) ??
     0;
   if (priceVal <= 0) return null;
 
@@ -201,86 +202,42 @@ function mapAuctionItem(o: AuctionItemLike): Listing | null {
     "";
 
   const thumbnail =
+    str(o.imageUrl) ||
     str(o.thumbnailUrl) ||
     str(o.thumbnail) ||
-    str(o.imageUrl) ||
     str(o.image) ||
     pickFromImagesArray(o) ||
     undefined;
 
   const bidCount = num(o.bidCount) ?? num(o.bids) ?? undefined;
 
+  // フリマ商品か通常オークションかで URL を出し分け
+  const isFleamarket = o.isFleamarketItem === true;
   const url =
     str(o.url) ||
     str(o.auctionUrl) ||
-    `https://page.auctions.yahoo.co.jp/jp/auction/${id}`;
+    (isFleamarket
+      ? `https://paypayfleamarket.yahoo.co.jp/item/${id}`
+      : `https://page.auctions.yahoo.co.jp/jp/auction/${id}`);
 
-  // ---- 追加フィールド ----
+  // 状態 (itemCondition: "USED20" 等のコード)
+  const condition = mapItemCondition(str(o.itemCondition)) || undefined;
 
-  // 状態 (condition): condition.name, conditionName, itemCondition, status など
-  const condition =
-    pickNested(o, ["condition", "name"]) ||
-    pickNested(o, ["itemCondition", "name"]) ||
-    pickNested(o, ["statusInfo", "name"]) ||
-    str(o.conditionName) ||
-    str(o.itemConditionName) ||
-    str(o.condition) ||
-    undefined;
-
-  // 商品説明 (description)
-  const description =
-    str(o.description) ||
-    str(o.detail) ||
-    str(o.itemDescription) ||
-    str(o.descriptionText) ||
-    pickNested(o, ["description", "text"]) ||
-    undefined;
-
-  // 出品者名 (sellerName)
+  // 出品者名 (seller.displayName。Yahoo がマスクして "********" を返すことあり)
+  const sellerNameRaw = pickNested(o, ["seller", "displayName"]);
   const sellerName =
-    pickNested(o, ["seller", "displayName"]) ||
-    pickNested(o, ["seller", "name"]) ||
-    pickNested(o, ["sellerInfo", "displayName"]) ||
-    pickNested(o, ["sellerInfo", "name"]) ||
-    str(o.sellerName) ||
-    undefined;
+    sellerNameRaw && sellerNameRaw !== "********" ? sellerNameRaw : undefined;
 
-  // 配送 (shipping): "free" | "paid" | "pickup"
-  const shippingRaw =
-    pickNested(o, ["shipping", "payer"]) ||
-    pickNested(o, ["shippingInfo", "payer"]) ||
-    str(o.shippingPayer) ||
-    str(o.shipping) ||
-    "";
-  let shipping: "free" | "paid" | "pickup" | undefined = undefined;
-  if (typeof shippingRaw === "string" && shippingRaw) {
-    const lower = shippingRaw.toLowerCase();
-    if (lower.includes("free") || shippingRaw.includes("無料") || shippingRaw.includes("出品者")) {
-      shipping = "free";
-    } else if (lower.includes("buy") || lower.includes("paid") || shippingRaw.includes("落札者")) {
-      shipping = "paid";
-    } else if (lower.includes("pickup") || shippingRaw.includes("引取")) {
-      shipping = "pickup";
-    }
-  }
+  // 送料 (isFreeShipping / hasShippingFee)
+  let shipping: "free" | "paid" | "pickup" | undefined;
+  if (o.isFreeShipping === true) shipping = "free";
+  else if (o.hasShippingFee === true) shipping = "paid";
 
-  // 配送情報 (shippingInfo)
-  const shippingInfo =
-    pickNested(o, ["shipping", "method"]) ||
-    pickNested(o, ["shipping", "description"]) ||
-    pickNested(o, ["shippingInfo", "method"]) ||
-    pickNested(o, ["shippingInfo", "description"]) ||
-    str(o.shippingMethod) ||
-    undefined;
+  // 所在地 (prefectureCode: "13" → "東京都")
+  const location = mapPrefecture(str(o.prefectureCode)) || undefined;
 
-  // 所在地 (location)
-  const location =
-    pickNested(o, ["location", "name"]) ||
-    pickNested(o, ["shippingFromArea", "name"]) ||
-    str(o.location) ||
-    str(o.locationName) ||
-    str(o.shippingFromArea) ||
-    undefined;
+  // 商品説明: 検索結果データには含まれないため undefined
+  // (将来的に個別商品ページの追加 fetch で取得する場合は別実装)
 
   return {
     id,
@@ -291,12 +248,79 @@ function mapAuctionItem(o: AuctionItemLike): Listing | null {
     url,
     bidCount,
     condition,
-    description,
     sellerName,
     shipping,
-    shippingInfo,
     location,
   };
+}
+
+// itemCondition コード → 日本語表記
+function mapItemCondition(code: string): string {
+  const map: Record<string, string> = {
+    NEW: "新品",
+    USED00: "未使用",
+    USED10: "未使用に近い",
+    USED20: "目立った傷や汚れなし",
+    USED30: "やや傷や汚れあり",
+    USED40: "傷や汚れあり",
+    USED50: "全体的に状態が悪い",
+    JUNK: "ジャンク",
+  };
+  return map[code] ?? "";
+}
+
+// prefectureCode → 都道府県名
+function mapPrefecture(code: string): string {
+  const map: Record<string, string> = {
+    "01": "北海道",
+    "02": "青森県",
+    "03": "岩手県",
+    "04": "宮城県",
+    "05": "秋田県",
+    "06": "山形県",
+    "07": "福島県",
+    "08": "茨城県",
+    "09": "栃木県",
+    "10": "群馬県",
+    "11": "埼玉県",
+    "12": "千葉県",
+    "13": "東京都",
+    "14": "神奈川県",
+    "15": "新潟県",
+    "16": "富山県",
+    "17": "石川県",
+    "18": "福井県",
+    "19": "山梨県",
+    "20": "長野県",
+    "21": "岐阜県",
+    "22": "静岡県",
+    "23": "愛知県",
+    "24": "三重県",
+    "25": "滋賀県",
+    "26": "京都府",
+    "27": "大阪府",
+    "28": "兵庫県",
+    "29": "奈良県",
+    "30": "和歌山県",
+    "31": "鳥取県",
+    "32": "島根県",
+    "33": "岡山県",
+    "34": "広島県",
+    "35": "山口県",
+    "36": "徳島県",
+    "37": "香川県",
+    "38": "愛媛県",
+    "39": "高知県",
+    "40": "福岡県",
+    "41": "佐賀県",
+    "42": "長崎県",
+    "43": "熊本県",
+    "44": "大分県",
+    "45": "宮崎県",
+    "46": "鹿児島県",
+    "47": "沖縄県",
+  };
+  return map[code] ?? "";
 }
 
 function pickNested(o: AuctionItemLike, path: string[]): string | undefined {
