@@ -104,9 +104,10 @@ function parseFromNextData(html: string): Listing[] | null {
       "[yahoo-scrape] sample item keys:",
       Object.keys(items[0]).join(","),
     );
+    // 全フィールドの調査ログ (1500 文字まで)
     console.log(
-      "[yahoo-scrape] sample item:",
-      JSON.stringify(items[0]).slice(0, 500),
+      "[yahoo-scrape] sample item full:",
+      JSON.stringify(items[0]).slice(0, 1500),
     );
   }
 
@@ -204,6 +205,7 @@ function mapAuctionItem(o: AuctionItemLike): Listing | null {
     str(o.thumbnail) ||
     str(o.imageUrl) ||
     str(o.image) ||
+    pickFromImagesArray(o) ||
     undefined;
 
   const bidCount = num(o.bidCount) ?? num(o.bids) ?? undefined;
@@ -213,6 +215,73 @@ function mapAuctionItem(o: AuctionItemLike): Listing | null {
     str(o.auctionUrl) ||
     `https://page.auctions.yahoo.co.jp/jp/auction/${id}`;
 
+  // ---- 追加フィールド ----
+
+  // 状態 (condition): condition.name, conditionName, itemCondition, status など
+  const condition =
+    pickNested(o, ["condition", "name"]) ||
+    pickNested(o, ["itemCondition", "name"]) ||
+    pickNested(o, ["statusInfo", "name"]) ||
+    str(o.conditionName) ||
+    str(o.itemConditionName) ||
+    str(o.condition) ||
+    undefined;
+
+  // 商品説明 (description)
+  const description =
+    str(o.description) ||
+    str(o.detail) ||
+    str(o.itemDescription) ||
+    str(o.descriptionText) ||
+    pickNested(o, ["description", "text"]) ||
+    undefined;
+
+  // 出品者名 (sellerName)
+  const sellerName =
+    pickNested(o, ["seller", "displayName"]) ||
+    pickNested(o, ["seller", "name"]) ||
+    pickNested(o, ["sellerInfo", "displayName"]) ||
+    pickNested(o, ["sellerInfo", "name"]) ||
+    str(o.sellerName) ||
+    undefined;
+
+  // 配送 (shipping): "free" | "paid" | "pickup"
+  const shippingRaw =
+    pickNested(o, ["shipping", "payer"]) ||
+    pickNested(o, ["shippingInfo", "payer"]) ||
+    str(o.shippingPayer) ||
+    str(o.shipping) ||
+    "";
+  let shipping: "free" | "paid" | "pickup" | undefined = undefined;
+  if (typeof shippingRaw === "string" && shippingRaw) {
+    const lower = shippingRaw.toLowerCase();
+    if (lower.includes("free") || shippingRaw.includes("無料") || shippingRaw.includes("出品者")) {
+      shipping = "free";
+    } else if (lower.includes("buy") || lower.includes("paid") || shippingRaw.includes("落札者")) {
+      shipping = "paid";
+    } else if (lower.includes("pickup") || shippingRaw.includes("引取")) {
+      shipping = "pickup";
+    }
+  }
+
+  // 配送情報 (shippingInfo)
+  const shippingInfo =
+    pickNested(o, ["shipping", "method"]) ||
+    pickNested(o, ["shipping", "description"]) ||
+    pickNested(o, ["shippingInfo", "method"]) ||
+    pickNested(o, ["shippingInfo", "description"]) ||
+    str(o.shippingMethod) ||
+    undefined;
+
+  // 所在地 (location)
+  const location =
+    pickNested(o, ["location", "name"]) ||
+    pickNested(o, ["shippingFromArea", "name"]) ||
+    str(o.location) ||
+    str(o.locationName) ||
+    str(o.shippingFromArea) ||
+    undefined;
+
   return {
     id,
     title,
@@ -221,7 +290,40 @@ function mapAuctionItem(o: AuctionItemLike): Listing | null {
     thumbnail,
     url,
     bidCount,
+    condition,
+    description,
+    sellerName,
+    shipping,
+    shippingInfo,
+    location,
   };
+}
+
+function pickNested(o: AuctionItemLike, path: string[]): string | undefined {
+  let cur: unknown = o;
+  for (const k of path) {
+    if (!cur || typeof cur !== "object") return undefined;
+    cur = (cur as Record<string, unknown>)[k];
+  }
+  return typeof cur === "string" && cur ? cur : undefined;
+}
+
+function pickFromImagesArray(o: AuctionItemLike): string | undefined {
+  const images = o.images;
+  if (Array.isArray(images) && images.length > 0) {
+    const first = images[0];
+    if (typeof first === "string") return first;
+    if (first && typeof first === "object") {
+      const u = (first as Record<string, unknown>).url;
+      if (typeof u === "string") return u;
+    }
+  }
+  const photos = o.photos;
+  if (Array.isArray(photos) && photos.length > 0) {
+    const first = photos[0];
+    if (typeof first === "string") return first;
+  }
+  return undefined;
 }
 
 function str(v: unknown): string {
