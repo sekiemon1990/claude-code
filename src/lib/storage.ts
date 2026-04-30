@@ -126,7 +126,9 @@ export function useMemoValue(searchKey: string): string {
     queryKey,
     queryFn: () => fetchSearchMemo(searchKey),
     enabled: !!searchKey,
-    initialData: "",
+    placeholderData: "",
+    staleTime: 0,
+    refetchOnMount: "always",
   });
   useCacheInvalidation("search_memo", searchKey, queryKey);
   return data ?? "";
@@ -138,7 +140,9 @@ export function usePinnedValue(searchKey: string): boolean {
     queryKey,
     queryFn: () => fetchSearchPin(searchKey),
     enabled: !!searchKey,
-    initialData: false,
+    placeholderData: false,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
   useCacheInvalidation("search_pin", searchKey, queryKey);
   return data ?? false;
@@ -177,7 +181,9 @@ export function useListingMemoValue(ref: string): string {
     queryKey,
     queryFn: () => fetchListingMemo(ref),
     enabled: !!ref,
-    initialData: "",
+    placeholderData: "",
+    staleTime: 0,
+    refetchOnMount: "always",
   });
   useCacheInvalidation("listing_memo", ref, queryKey);
   return data ?? "";
@@ -189,7 +195,9 @@ export function useListingPinnedValue(ref: string): boolean {
     queryKey,
     queryFn: () => fetchListingPin(ref),
     enabled: !!ref,
-    initialData: false,
+    placeholderData: false,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
   useCacheInvalidation("listing_pin", ref, queryKey);
   return data ?? false;
@@ -228,7 +236,9 @@ export function useListingViews(): ListingViewSnapshot[] {
   const { data } = useQuery({
     queryKey,
     queryFn: () => fetchListingViews(),
-    initialData: [],
+    placeholderData: [],
+    staleTime: 0,
+    refetchOnMount: "always",
   });
   useCacheInvalidation("listing_views", "all", queryKey);
   return data ?? [];
@@ -287,7 +297,9 @@ export function useSavedAdvices(): SavedAdvice[] {
   const { data } = useQuery({
     queryKey,
     queryFn: () => fetchSavedAdvices(),
-    initialData: [],
+    placeholderData: [],
+    staleTime: 0,
+    refetchOnMount: "always",
   });
   useCacheInvalidation("saved_advices", "all", queryKey);
   return data ?? [];
