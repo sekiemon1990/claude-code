@@ -34,6 +34,8 @@ import {
   type ShippingFilter,
 } from "@/components/SearchFormFields";
 import { MOCK_RESULT } from "@/lib/mock-data";
+import { useQuery } from "@tanstack/react-query";
+import type { SourceResult } from "@/lib/types";
 import {
   formatYen,
   formatCount,
@@ -98,7 +100,6 @@ function median(nums: number[]): number {
 function ResultInner({ resultId }: { resultId: string }) {
   const params = useSearchParams();
   const router = useRouter();
-  const result = MOCK_RESULT;
 
   const sourcesParam = params.get("sources");
   const requestedSources = useMemo<SourceKey[]>(
@@ -109,10 +110,62 @@ function ResultInner({ resultId }: { resultId: string }) {
     [sourcesParam]
   );
 
-  const keyword = params.get("keyword") ?? result.query.keyword;
-  const period = params.get("period") ?? result.query.period;
+  const keyword = params.get("keyword") ?? MOCK_RESULT.query.keyword;
+  const period = params.get("period") ?? MOCK_RESULT.query.period;
   const mockMode = params.get("mock");
+  const excludesParam = params.get("excludes") ?? "";
   const searchKey = searchKeyFromKeyword(keyword);
+
+  // ---- 実スクレイピング (現在は Yahoo オークションのみ) ----
+  const yahooEnabled =
+    requestedSources.includes("yahoo_auction") &&
+    mockMode !== "force" &&
+    !!keyword.trim();
+
+  const yahooQuery = useQuery({
+    queryKey: ["scrape_yahoo", keyword, excludesParam],
+    queryFn: async (): Promise<SourceResult> => {
+      const res = await fetch("/api/scrape/yahoo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keyword, excludes: excludesParam || undefined }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error ?? "ヤフオク取得に失敗");
+      }
+      const data = (await res.json()) as { result: SourceResult };
+      return data.result;
+    },
+    enabled: yahooEnabled,
+    staleTime: 5 * 60_000, // 5分間キャッシュ
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+
+  const result = useMemo(() => {
+    // mock モードまたは無効ならモックそのまま
+    if (mockMode === "force" || !yahooEnabled) return MOCK_RESULT;
+    // Yahoo の本物データが取れていれば差し替え
+    if (yahooQuery.data) {
+      return {
+        ...MOCK_RESULT,
+        query: { ...MOCK_RESULT.query, keyword },
+        sources: MOCK_RESULT.sources.map((s) =>
+          s.source === "yahoo_auction" ? yahooQuery.data : s,
+        ),
+      };
+    }
+    return MOCK_RESULT;
+  }, [yahooQuery.data, mockMode, yahooEnabled, keyword]);
+
+  const yahooError = yahooQuery.isError
+    ? yahooQuery.error instanceof Error
+      ? yahooQuery.error.message
+      : "ヤフオク取得に失敗"
+    : null;
+  const yahooLoading = yahooQuery.isLoading || yahooQuery.isFetching;
 
   const memo = useMemoValue(searchKey);
   const pinned = usePinnedValue(searchKey);
@@ -374,6 +427,18 @@ function ResultInner({ resultId }: { resultId: string }) {
         <div className="text-xs text-muted mt-1">
           検索: {keyword} ・ 直近{period === "all" ? "全期間" : `${period}日`}
         </div>
+        {yahooLoading && yahooEnabled && (
+          <div className="mt-2 text-xs text-primary flex items-center gap-1.5">
+            <span className="inline-block w-2 h-2 rounded-full bg-primary animate-pulse" />
+            ヤフオクから最新の落札相場を取得中...
+          </div>
+        )}
+        {yahooError && (
+          <div className="mt-2 text-xs text-warning flex items-start gap-1.5">
+            <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+            <span>ヤフオク取得失敗: {yahooError}（モックデータを表示中）</span>
+          </div>
+        )}
         <button
           type="button"
           onClick={() => setEditOpen(!editOpen)}
