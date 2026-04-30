@@ -34,6 +34,7 @@ export function useRecorder() {
   const elapsedBeforePauseRef = useRef(0);
   const stateRef = useRef<RecorderState>('idle');
   const pauseReasonRef = useRef<PauseReason>(null);
+  const stoppingRef = useRef(false);
 
   useEffect(() => {
     stateRef.current = state;
@@ -207,6 +208,10 @@ export function useRecorder() {
   }
 
   async function stop(): Promise<{ uri: string; durationMs: number } | null> {
+    // 二度呼び防止: 1回目の停止処理が完了するまで以降の呼び出しは null を返す
+    if (stoppingRef.current) return null;
+    stoppingRef.current = true;
+
     stopTicker();
     stopMeter();
     const finalDuration =
@@ -214,26 +219,37 @@ export function useRecorder() {
         ? elapsedBeforePauseRef.current + (Date.now() - startTimestampRef.current)
         : elapsedBeforePauseRef.current;
 
-    if (USE_FAKE_RECORDER) {
+    try {
+      if (USE_FAKE_RECORDER) {
+        return { uri: `demo://fake-recording-${Date.now()}.m4a`, durationMs: finalDuration };
+      }
+
+      const ref = recordingRef.current;
+      if (!ref) return null;
+
+      try {
+        await ref.stopAndUnloadAsync();
+      } catch (e) {
+        void logError('recording_failed', e, { phase: 'stop' });
+      }
+
+      let uri: string | null = null;
+      try {
+        uri = ref.getURI?.() ?? null;
+      } catch (e) {
+        void logError('recording_failed', e, { phase: 'getURI' });
+      }
+
+      if (!uri) return null;
+      return { uri, durationMs: finalDuration };
+    } finally {
+      // どの経路を通っても UI が「録音中」のまま固まらないようにする
+      recordingRef.current = null;
       setState('stopped');
       setDurationMs(finalDuration);
       setPauseReason(null);
-      return { uri: `demo://fake-recording-${Date.now()}.m4a`, durationMs: finalDuration };
+      stoppingRef.current = false;
     }
-
-    if (!recordingRef.current) return null;
-    try {
-      await recordingRef.current.stopAndUnloadAsync();
-    } catch (e) {
-      void logError('recording_failed', e, { phase: 'stop' });
-    }
-    const uri = recordingRef.current.getURI?.() ?? null;
-    recordingRef.current = null;
-    setState('stopped');
-    setDurationMs(finalDuration);
-    setPauseReason(null);
-    if (!uri) return null;
-    return { uri, durationMs: finalDuration };
   }
 
   function reset() {

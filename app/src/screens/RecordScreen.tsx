@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Alert, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { format } from 'date-fns';
@@ -150,6 +150,8 @@ function RecordScreenInner({ deal, onDone, onChangeDeal }: Props) {
   const recorder = useRecorder();
   const storage = useStorageStatus();
   const [saving, setSaving] = useState(false);
+  // setSaving は非同期反映なので、連打レース対策として同期 ref も併用する
+  const savingRef = useRef(false);
   const insets = useSafeAreaInsets();
 
   async function handleStart() {
@@ -164,15 +166,26 @@ function RecordScreenInner({ deal, onDone, onChangeDeal }: Props) {
   }
 
   async function handleStop() {
-    const result = await recorder.stop();
-    if (!result || !user) return;
-
-    const title = `${deal.customerName} ${format(new Date(deal.reservationAt), 'M/d HH:mm', {
-      locale: ja,
-    })}`;
-
+    // 同期ガード: 連打で2回目以降が走らないようにする
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
+
     try {
+      const result = await recorder.stop();
+
+      if (!result) {
+        // stop が null を返した = 録音ファイル取得失敗。UI はすでに 'stopped' に遷移済み。
+        Alert.alert('保存失敗', '録音ファイルの取得に失敗しました。もう一度録音し直してください。');
+        recorder.reset();
+        return;
+      }
+      if (!user) return;
+
+      const title = `${deal.customerName} ${format(new Date(deal.reservationAt), 'M/d HH:mm', {
+        locale: ja,
+      })}`;
+
       if (DEMO_MODE) {
         // デモ: 永続化・キューをスキップし、直接 demoStore に流し込む
         await createRecordingAndUpload({
@@ -203,6 +216,7 @@ function RecordScreenInner({ deal, onDone, onChangeDeal }: Props) {
       Alert.alert('保存失敗', e instanceof Error ? e.message : '不明なエラー');
       void logError('recording_failed', e, { dealId: deal.id });
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   }
