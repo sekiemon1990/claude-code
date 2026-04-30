@@ -102,20 +102,77 @@ export function useRecorder() {
     setMeterDb(-160);
   }
 
+  /**
+   * OS による割り込み（電話着信、他アプリ音声優先など）で録音が止まったときに呼ばれる。
+   * native 側はすでに pause 済みなので pauseAsync は呼ばず、UI 側の状態だけ整える。
+   */
+  function enterInterruption() {
+    if (stateRef.current !== 'recording') return;
+    if (pauseReasonRef.current === 'interruption') return; // すでに割り込み中
+    stopTicker();
+    stopMeter();
+    if (startTimestampRef.current != null) {
+      elapsedBeforePauseRef.current += Date.now() - startTimestampRef.current;
+      startTimestampRef.current = null;
+    }
+    setPauseReason('interruption');
+    setState('paused');
+  }
+
+  /**
+   * iOS の AVAudioSession がリセットされたケース（入力ソース消失など）。
+   * 録音セッションは復帰不能のため、エラー表示のうえ停止扱いにする。
+   */
+  function handleMediaServicesReset() {
+    if (stateRef.current === 'stopped' || stateRef.current === 'idle') return;
+    // stop() 実行中の status callback 連打でログ/エラーがスパムされないようにする
+    if (stoppingRef.current) return;
+    void logError('recording_failed', new Error('mediaServicesDidReset'), {
+      phase: 'media_services_reset',
+    });
+    setError('マイクが利用できなくなりました。もう一度録音を開始してください');
+    void stop();
+  }
+
   async function resumeFromInterruption() {
     if (stateRef.current !== 'paused') return;
     if (pauseReasonRef.current !== 'interruption') return;
+
+    if (USE_FAKE_RECORDER) {
+      startFakeMeter();
+      startTicker();
+      setPauseReason(null);
+      setState('recording');
+      return;
+    }
+
+    if (!recordingRef.current) {
+      // 復帰対象がない: 整理してユーザーに次のアクションを促す
+      setError('録音を再開できませんでした。もう一度録音を開始してください');
+      setPauseReason(null);
+      void stop();
+      return;
+    }
+
     try {
-      if (!USE_FAKE_RECORDER && recordingRef.current) {
-        await recordingRef.current.startAsync();
-      } else if (USE_FAKE_RECORDER) {
-        startFakeMeter();
-      }
+      // iOS: 割り込み中に AVAudioSession が deactivate されている可能性があるため、
+      // startAsync の前にセッションを再アクティブ化する
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { Audio } = require('expo-av');
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: true,
+      });
+      await recordingRef.current.startAsync();
       startTicker();
       setPauseReason(null);
       setState('recording');
     } catch (e) {
       void logError('recording_failed', e, { phase: 'resume_from_interruption' });
+      setError('録音を再開できませんでした。もう一度録音を開始してください');
+      setPauseReason(null);
+      void stop();
     }
   }
 
@@ -155,6 +212,23 @@ export function useRecorder() {
           if (status?.metering != null && typeof status.metering === 'number') {
             setMeterDb(status.metering);
           }
+          // iOS: 入力ソース消失等で AVAudioSession がリセットされた場合は復帰不能
+          if (status?.mediaServicesDidReset === true) {
+            handleMediaServicesReset();
+            return;
+          }
+          // OS による割り込み (電話着信等): native 側で録音が止まっているが
+          // ユーザー操作の pause ではないケースを検知して 'interruption' に遷移。
+          // stop() 実行中（stoppingRef）の遷移途中 status は除外する。
+          if (
+            stateRef.current === 'recording' &&
+            pauseReasonRef.current !== 'user' &&
+            !stoppingRef.current &&
+            status?.isRecording === false &&
+            status?.isDoneRecording !== true
+          ) {
+            enterInterruption();
+          }
         },
         200,
       );
@@ -174,6 +248,9 @@ export function useRecorder() {
 
   async function pause() {
     if (state !== 'recording') return;
+    // status callback とのレース対策: pauseAsync を await する前に
+    // 同期で ref を更新し、割り込み判定 (pauseReason !== 'user') に弾かれるようにする
+    pauseReasonRef.current = 'user';
     if (!USE_FAKE_RECORDER && recordingRef.current) {
       try {
         await recordingRef.current.pauseAsync();
