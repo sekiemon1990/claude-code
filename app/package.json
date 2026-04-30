@@ -10,7 +10,8 @@
     "web": "expo start --web",
     "demo": "EXPO_PUBLIC_DEMO=true expo start --web",
     "prebuild": "expo prebuild",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "postinstall": "cd .. && patch-package"
   },
   "dependencies": {
     "@expo/metro-runtime": "~3.2.3",
@@ -50,6 +51,7 @@
     "@babel/core": "^7.24.0",
     "@types/react": "~18.2.79",
     "dotenv": "^16.4.5",
+    "patch-package": "^8.0.1",
     "typescript": "~5.3.3"
   }
 }
