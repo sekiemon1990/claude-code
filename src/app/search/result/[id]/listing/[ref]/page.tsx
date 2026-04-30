@@ -51,13 +51,13 @@ function parseRef(ref: string): { source: SourceKey; lid: string } | null {
 function DetailInner({ id, ref }: { id: string; ref: string }) {
   const params = useSearchParams();
   const parsed = parseRef(ref);
-  if (!parsed) return notFound();
 
-  const { source, lid } = parsed;
+  // ⚠️ React hooks のルール: return 文より前に全 hooks を呼ぶ必要あり
+  const source = parsed?.source ?? ("yahoo_auction" as SourceKey);
+  const lid = parsed?.lid ?? "";
   const fromKeyword = params.get("keyword") ?? undefined;
   const fromExcludes = params.get("excludes") ?? "";
 
-  // 本物のスクレイピング結果から該当 listing を探す (yahoo のみ)
   const yahooQuery = useQuery({
     queryKey: ["scrape_yahoo", fromKeyword ?? "", fromExcludes],
     queryFn: async (): Promise<SourceResult> => {
@@ -73,7 +73,7 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
       const data = (await res.json()) as { result: SourceResult };
       return data.result;
     },
-    enabled: source === "yahoo_auction" && !!fromKeyword,
+    enabled: !!parsed && source === "yahoo_auction" && !!fromKeyword,
     staleTime: 5 * 60_000,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
@@ -81,31 +81,16 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
 
   // 探索順: 本物のスクレイピング結果 → モック
   let baseListing: Listing | undefined;
-  if (source === "yahoo_auction" && yahooQuery.data) {
+  if (parsed && source === "yahoo_auction" && yahooQuery.data) {
     baseListing = yahooQuery.data.listings.find((l) => l.id === lid);
   }
-  if (!baseListing) {
+  if (!baseListing && parsed) {
     const sourceData = MOCK_RESULT.sources.find((s) => s.source === source);
     baseListing = sourceData?.listings.find((l) => l.id === lid);
   }
 
-  // データ取得中のローディング
-  if (
-    !baseListing &&
-    source === "yahoo_auction" &&
-    fromKeyword &&
-    (yahooQuery.isLoading || yahooQuery.isFetching)
-  ) {
-    return (
-      <div className="pt-12 text-center text-muted text-sm">
-        商品情報を取得中...
-      </div>
-    );
-  }
-  if (!baseListing) return notFound();
-
   // 個別商品ページから詳細データ (description, images 等) を追加 fetch
-  const isFleamarket = baseListing.url?.includes("paypayfleamarket") ?? false;
+  const isFleamarket = baseListing?.url?.includes("paypayfleamarket") ?? false;
   const detailQuery = useQuery({
     queryKey: ["yahoo_item", source, lid, isFleamarket],
     queryFn: async () => {
@@ -129,12 +114,39 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
       };
       return data.detail;
     },
-    enabled: source === "yahoo_auction" && !!baseListing,
-    staleTime: 30 * 60_000, // 30 分
+    enabled: !!baseListing && source === "yahoo_auction",
+    staleTime: 30 * 60_000,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     retry: 1,
   });
+
+  const [activeImage, setActiveImage] = useState(0);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [memoEditing, setMemoEditing] = useState(false);
+  const [memoDraft, setMemoDraft] = useState<string | null>(null);
+
+  const listingRef = `${source}-${lid}`;
+  const pinned = useListingPinnedValue(listingRef);
+  const memo = useListingMemoValue(listingRef);
+
+  // 全 hooks を呼んだあとで早期リターン
+  if (!parsed) return notFound();
+
+  // データ取得中のローディング
+  if (
+    !baseListing &&
+    source === "yahoo_auction" &&
+    fromKeyword &&
+    (yahooQuery.isLoading || yahooQuery.isFetching)
+  ) {
+    return (
+      <div className="pt-12 text-center text-muted text-sm">
+        商品情報を取得中...
+      </div>
+    );
+  }
+  if (!baseListing) return notFound();
 
   // 詳細データを基本データにマージ (詳細データ優先)
   const listing: Listing = {
@@ -155,15 +167,6 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
       : listing.thumbnail
         ? [listing.thumbnail]
         : [];
-
-  const [activeImage, setActiveImage] = useState(0);
-  const [lightboxOpen, setLightboxOpen] = useState(false);
-
-  const listingRef = `${source}-${lid}`;
-  const pinned = useListingPinnedValue(listingRef);
-  const memo = useListingMemoValue(listingRef);
-  const [memoEditing, setMemoEditing] = useState(false);
-  const [memoDraft, setMemoDraft] = useState<string | null>(null);
 
   useEffect(() => {
     recordListingView({
