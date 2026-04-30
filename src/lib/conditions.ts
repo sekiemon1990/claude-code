@@ -56,7 +56,7 @@ export const CONDITION_META: Record<ConditionRank, ConditionMeta> = {
 
 export function classifyCondition(condition?: string): ConditionRank {
   if (!condition) return "unknown";
-  if (/(新品同様|未使用に近い|新品)/.test(condition)) return "S";
+  if (/(新品同様|未使用に近い|新品|^未使用$|未使用品)/.test(condition)) return "S";
   if (/(ジャンク|状態が悪い|破損|難あり|欠品)/.test(condition)) return "D";
   if (/(訳あり|傷や汚れあり|傷・汚れあり|ひどい)/.test(condition)) {
     if (!/(やや)/.test(condition)) return "C";

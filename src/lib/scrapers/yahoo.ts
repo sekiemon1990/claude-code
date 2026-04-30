@@ -254,7 +254,7 @@ function mapAuctionItem(o: AuctionItemLike): Listing | null {
   };
 }
 
-// itemCondition コード → 日本語表記
+// itemCondition コード → 日本語表記 (PayPay フリマは日本語直接の場合あり)
 function mapItemCondition(code: string): string {
   const map: Record<string, string> = {
     NEW: "新品",
@@ -266,7 +266,15 @@ function mapItemCondition(code: string): string {
     USED50: "全体的に状態が悪い",
     JUNK: "ジャンク",
   };
-  return map[code] ?? "";
+  if (map[code]) return map[code];
+  // PayPay フリマ等で日本語そのまま入っているケースをそのまま返す
+  if (
+    code &&
+    /(新品|未使用|目立った|傷や汚れ|全体的|ジャンク|中古)/.test(code)
+  ) {
+    return code;
+  }
+  return "";
 }
 
 // prefectureCode → 都道府県名
