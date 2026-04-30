@@ -44,6 +44,12 @@ function pad2(n: number): string {
   return n.toString().padStart(2, "0");
 }
 
+function isValidIso(iso: string): boolean {
+  if (!iso || typeof iso !== "string") return false;
+  const t = new Date(iso).getTime();
+  return Number.isFinite(t);
+}
+
 // JST (UTC+9) のローカル時刻成分を取得 (タイムゾーン非依存)
 function jstParts(iso: string): {
   year: number;
@@ -64,12 +70,14 @@ function jstParts(iso: string): {
 
 // 決定的 (SSR/CSR で同じ結果) な JST 日付フォーマット
 export function formatJSTDate(iso: string): string {
+  if (!isValidIso(iso)) return "—";
   const p = jstParts(iso);
   return `${p.year}/${pad2(p.month)}/${pad2(p.day)}`;
 }
 
 // 決定的な JST 日時フォーマット
 export function formatJSTDateTime(iso: string): string {
+  if (!isValidIso(iso)) return "—";
   const p = jstParts(iso);
   return `${p.year}/${pad2(p.month)}/${pad2(p.day)} ${pad2(p.hour)}:${pad2(p.minute)}`;
 }
@@ -78,6 +86,7 @@ export function formatJSTDateTime(iso: string): string {
 // サーバ/クライアントで結果が異なりハイドレーション不一致になる。
 // → 必ず client 側の <RelativeDate> 経由で呼ぶこと。
 export function formatRelativeDate(iso: string): string {
+  if (!isValidIso(iso)) return "—";
   const date = new Date(iso);
   const now = new Date();
   const diff = Math.floor((now.getTime() - date.getTime()) / 1000);

@@ -59,6 +59,14 @@ export async function scrapeYahooAuction(
       html.slice(sampleStart, sampleStart + 800),
     );
   }
+  // 商品 URL 周辺のサンプル (日付フォーマット診断用)
+  const auctionLinkIdx = html.indexOf("/auction/");
+  if (auctionLinkIdx > -1) {
+    console.log(
+      "[yahoo-scrape] auction link context:",
+      html.slice(Math.max(0, auctionLinkIdx - 200), auctionLinkIdx + 800),
+    );
+  }
 
   const listings = parseYahooHtml(html);
   console.log("[yahoo-scrape] parsed listings:", listings.length);
