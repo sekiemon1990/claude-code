@@ -80,18 +80,18 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
   });
 
   // 探索順: 本物のスクレイピング結果 → モック
-  let listing: Listing | undefined;
+  let baseListing: Listing | undefined;
   if (source === "yahoo_auction" && yahooQuery.data) {
-    listing = yahooQuery.data.listings.find((l) => l.id === lid);
+    baseListing = yahooQuery.data.listings.find((l) => l.id === lid);
   }
-  if (!listing) {
+  if (!baseListing) {
     const sourceData = MOCK_RESULT.sources.find((s) => s.source === source);
-    listing = sourceData?.listings.find((l) => l.id === lid);
+    baseListing = sourceData?.listings.find((l) => l.id === lid);
   }
 
   // データ取得中のローディング
   if (
-    !listing &&
+    !baseListing &&
     source === "yahoo_auction" &&
     fromKeyword &&
     (yahooQuery.isLoading || yahooQuery.isFetching)
@@ -102,7 +102,51 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
       </div>
     );
   }
-  if (!listing) return notFound();
+  if (!baseListing) return notFound();
+
+  // 個別商品ページから詳細データ (description, images 等) を追加 fetch
+  const isFleamarket = baseListing.url?.includes("paypayfleamarket") ?? false;
+  const detailQuery = useQuery({
+    queryKey: ["yahoo_item", source, lid, isFleamarket],
+    queryFn: async () => {
+      const res = await fetch("/api/scrape/yahoo-item", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: lid, isFleamarket }),
+      });
+      if (!res.ok) throw new Error("商品詳細取得失敗");
+      const data = (await res.json()) as {
+        detail: {
+          id: string;
+          description?: string;
+          images?: string[];
+          condition?: string;
+          sellerName?: string;
+          shipping?: "free" | "paid" | "pickup";
+          shippingInfo?: string;
+          location?: string;
+        };
+      };
+      return data.detail;
+    },
+    enabled: source === "yahoo_auction" && !!baseListing,
+    staleTime: 30 * 60_000, // 30 分
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+
+  // 詳細データを基本データにマージ (詳細データ優先)
+  const listing: Listing = {
+    ...baseListing,
+    description: detailQuery.data?.description ?? baseListing.description,
+    images: detailQuery.data?.images ?? baseListing.images,
+    condition: detailQuery.data?.condition ?? baseListing.condition,
+    sellerName: detailQuery.data?.sellerName ?? baseListing.sellerName,
+    shipping: detailQuery.data?.shipping ?? baseListing.shipping,
+    shippingInfo: detailQuery.data?.shippingInfo ?? baseListing.shippingInfo,
+    location: detailQuery.data?.location ?? baseListing.location,
+  };
 
   const meta = SOURCES.find((s) => s.key === source)!;
   const images =
