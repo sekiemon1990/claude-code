@@ -23,6 +23,8 @@ import { ImageLightbox } from "@/components/ImageLightbox";
 import { ConditionBadge } from "@/components/ConditionBadge";
 import { ShippingBadge } from "@/components/ShippingBadge";
 import { MOCK_RESULT } from "@/lib/mock-data";
+import { useQuery } from "@tanstack/react-query";
+import type { SourceResult, Listing } from "@/lib/types";
 import { formatYen, formatJSTDateTime } from "@/lib/utils";
 import { RelativeDate } from "@/components/RelativeDate";
 import { detectAccessories } from "@/lib/accessories";
@@ -52,8 +54,54 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
   if (!parsed) return notFound();
 
   const { source, lid } = parsed;
-  const sourceData = MOCK_RESULT.sources.find((s) => s.source === source);
-  const listing = sourceData?.listings.find((l) => l.id === lid);
+  const fromKeyword = params.get("keyword") ?? undefined;
+  const fromExcludes = params.get("excludes") ?? "";
+
+  // 本物のスクレイピング結果から該当 listing を探す (yahoo のみ)
+  const yahooQuery = useQuery({
+    queryKey: ["scrape_yahoo", fromKeyword ?? "", fromExcludes],
+    queryFn: async (): Promise<SourceResult> => {
+      const res = await fetch("/api/scrape/yahoo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          keyword: fromKeyword,
+          excludes: fromExcludes || undefined,
+        }),
+      });
+      if (!res.ok) throw new Error("ヤフオク取得失敗");
+      const data = (await res.json()) as { result: SourceResult };
+      return data.result;
+    },
+    enabled: source === "yahoo_auction" && !!fromKeyword,
+    staleTime: 5 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
+
+  // 探索順: 本物のスクレイピング結果 → モック
+  let listing: Listing | undefined;
+  if (source === "yahoo_auction" && yahooQuery.data) {
+    listing = yahooQuery.data.listings.find((l) => l.id === lid);
+  }
+  if (!listing) {
+    const sourceData = MOCK_RESULT.sources.find((s) => s.source === source);
+    listing = sourceData?.listings.find((l) => l.id === lid);
+  }
+
+  // データ取得中のローディング
+  if (
+    !listing &&
+    source === "yahoo_auction" &&
+    fromKeyword &&
+    (yahooQuery.isLoading || yahooQuery.isFetching)
+  ) {
+    return (
+      <div className="pt-12 text-center text-muted text-sm">
+        商品情報を取得中...
+      </div>
+    );
+  }
   if (!listing) return notFound();
 
   const meta = SOURCES.find((s) => s.key === source)!;
@@ -72,8 +120,6 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
   const memo = useListingMemoValue(listingRef);
   const [memoEditing, setMemoEditing] = useState(false);
   const [memoDraft, setMemoDraft] = useState<string | null>(null);
-
-  const fromKeyword = params.get("keyword") ?? undefined;
 
   useEffect(() => {
     recordListingView({

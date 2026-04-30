@@ -123,18 +123,37 @@ function parseYahooHtml(html: string): Listing[] {
     // サムネイル
     const thumbnail = $card.find("img").first().attr("src") ?? undefined;
 
-    // 終了日時
-    let endedAt = new Date().toISOString();
-    const text = $card.text();
-    const dateMatch =
-      text.match(/(\d{4})[\/年\-](\d{1,2})[\/月\-](\d{1,2})日?\s*(?:(\d{1,2}):(\d{1,2}))?/) ||
-      text.match(/(\d{1,2})\/(\d{1,2})\s*(?:(\d{1,2}):(\d{1,2}))?/);
-    if (dateMatch) {
-      endedAt = parseDateMatch(dateMatch);
+    const cardText = $card.text();
+
+    // 終了日時: <time datetime="..."> を優先、なければテキストから抽出
+    let endedAt = "";
+    const timeEl = $card.find("time[datetime]").first();
+    const datetimeAttr = timeEl.attr("datetime");
+    if (datetimeAttr) {
+      const d = new Date(datetimeAttr);
+      if (!Number.isNaN(d.getTime())) {
+        endedAt = d.toISOString();
+      }
+    }
+    if (!endedAt) {
+      // 全ての日付候補を取り、有効そうな (過去 1 年以内) ものを採用
+      const candidates = extractDateCandidates(cardText);
+      const valid = candidates
+        .filter((c) => {
+          const ms = c.getTime();
+          const now = Date.now();
+          return ms <= now && ms >= now - 365 * 86400000;
+        })
+        .sort((a, b) => b.getTime() - a.getTime()); // 新しい順
+      if (valid[0]) {
+        endedAt = valid[0].toISOString();
+      } else {
+        endedAt = ""; // パース失敗時は空 → UI 側で「不明」表示
+      }
     }
 
     // 入札数 (例: "1件", "5入札")
-    const bidMatch = text.match(/(\d+)\s*(?:入札|件入札|bid)/);
+    const bidMatch = cardText.match(/(\d+)\s*(?:入札|件入札|bid)/);
     const bidCount = bidMatch ? Number(bidMatch[1]) : undefined;
 
     seenIds.add(id);
@@ -152,31 +171,58 @@ function parseYahooHtml(html: string): Listing[] {
   return listings;
 }
 
-function parseDateMatch(match: RegExpMatchArray): string {
-  let year: number;
-  let month: number;
-  let day: number;
-  let hour = 0;
-  let minute = 0;
+// テキスト全体から日付候補を全件抽出 (JST 想定)
+function extractDateCandidates(text: string): Date[] {
+  const results: Date[] = [];
 
-  if (match[0].includes("年") || /\d{4}/.test(match[1])) {
-    year = Number(match[1]);
-    month = Number(match[2]);
-    day = Number(match[3]);
-    if (match[4]) hour = Number(match[4]);
-    if (match[5]) minute = Number(match[5]);
-  } else {
-    const now = new Date();
-    year = now.getUTCFullYear();
-    month = Number(match[1]);
-    day = Number(match[2]);
-    if (match[3]) hour = Number(match[3]);
-    if (match[4]) minute = Number(match[4]);
+  // パターン 1: 2025/11/22 22:30 や 2025-11-22 等 (年付き)
+  const re1 = /(\d{4})[\/\-年](\d{1,2})[\/\-月](\d{1,2})日?\s*(?:(\d{1,2})[:時](\d{1,2}))?/g;
+  let m: RegExpExecArray | null;
+  while ((m = re1.exec(text))) {
+    const d = makeJstDate(
+      Number(m[1]),
+      Number(m[2]),
+      Number(m[3]),
+      Number(m[4] ?? 0),
+      Number(m[5] ?? 0),
+    );
+    if (d) results.push(d);
   }
 
-  // JST → UTC へ変換
+  // パターン 2: 11/22 や 11月22日 (年なし → 直近の同月日として推測)
+  const re2 = /(?<!\d)(\d{1,2})[\/月](\d{1,2})日?\s*(?:(\d{1,2})[:時](\d{1,2}))?/g;
+  while ((m = re2.exec(text))) {
+    const month = Number(m[1]);
+    const day = Number(m[2]);
+    if (month < 1 || month > 12 || day < 1 || day > 31) continue;
+    const now = new Date();
+    const candidates = [
+      makeJstDate(now.getUTCFullYear(), month, day, Number(m[3] ?? 0), Number(m[4] ?? 0)),
+      makeJstDate(now.getUTCFullYear() - 1, month, day, Number(m[3] ?? 0), Number(m[4] ?? 0)),
+    ];
+    for (const d of candidates) {
+      if (d) results.push(d);
+    }
+  }
+
+  return results;
+}
+
+function makeJstDate(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute: number,
+): Date | null {
+  if (year < 2000 || year > 2100) return null;
+  if (month < 1 || month > 12) return null;
+  if (day < 1 || day > 31) return null;
+  // JST (UTC+9) として解釈し UTC に変換
   const jstMs = Date.UTC(year, month - 1, day, hour, minute) - 9 * 60 * 60 * 1000;
-  return new Date(jstMs).toISOString();
+  const d = new Date(jstMs);
+  if (Number.isNaN(d.getTime())) return null;
+  return d;
 }
 
 function summarize(

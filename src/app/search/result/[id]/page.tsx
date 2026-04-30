@@ -152,6 +152,7 @@ function ResultInner({ resultId }: { resultId: string }) {
       return {
         ...MOCK_RESULT,
         query: { ...MOCK_RESULT.query, keyword },
+        productGuess: keyword, // 本物データなのでキーワードをそのまま表示
         sources: MOCK_RESULT.sources.map((s) =>
           s.source === "yahoo_auction" ? yahooQuery.data : s,
         ),
