@@ -48,6 +48,7 @@ import {
   usePinnedValue,
   setListingPinned,
   useListingPinnedValue,
+  useListingMemoValue,
   haptic,
   saveScrollPosition,
   restoreScrollPosition,
@@ -1141,6 +1142,7 @@ function ListingCard({
   const router = useRouter();
   const ref = `${listing.source}-${listing.id}`;
   const pinned = useListingPinnedValue(ref);
+  const memo = useListingMemoValue(ref);
   const sourceMeta = SOURCES.find((s) => s.key === listing.source)!;
   const rank = classifyCondition(listing.condition);
 
@@ -1218,6 +1220,12 @@ function ListingCard({
                 <RelativeDate iso={listing.endedAt} />
               </span>
             </div>
+            {memo && (
+              <div className="flex items-center gap-1 mt-1 text-[10px] text-warning">
+                <StickyNote size={10} className="shrink-0" />
+                <span className="line-clamp-1">{memo}</span>
+              </div>
+            )}
           </div>
           <button
             type="button"
@@ -1323,6 +1331,17 @@ function ListingCard({
                 <RelativeDate iso={listing.endedAt} />
               </span>
             </div>
+            {memo && (
+              <div className="flex items-start gap-1.5 mt-2 p-2 rounded-md bg-warning/10 border border-warning/20">
+                <StickyNote
+                  size={11}
+                  className="text-warning mt-0.5 shrink-0"
+                />
+                <p className="text-[11px] text-foreground line-clamp-2 leading-relaxed">
+                  {memo}
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </Link>
