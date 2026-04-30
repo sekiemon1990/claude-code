@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Sparkles, Loader2, Star } from "lucide-react";
-import { classifyCondition } from "@/lib/conditions";
+import { Sparkles, Loader2, Star, AlertCircle } from "lucide-react";
 import {
   saveAdvice,
   removeSavedAdvice,
@@ -27,83 +26,54 @@ type Advice = {
   warnings: string[];
 };
 
-function generateAdvice(
+async function fetchAdvice(
   keyword: string,
   productGuess: string | undefined,
-  listings: FlatListing[]
-): Advice {
-  const prices = listings.map((l) => l.price).sort((a, b) => a - b);
-  const median = prices[Math.floor(prices.length / 2)] ?? 0;
-  const min = prices[0] ?? 0;
-  const max = prices[prices.length - 1] ?? 0;
-  const count = listings.length;
-
-  const spread = max - min;
-  const spreadRatio = median > 0 ? spread / median : 0;
-  const spreadDesc =
-    spreadRatio > 1.5
-      ? "非常に広い"
-      : spreadRatio > 0.8
-        ? "やや広め"
-        : "落ち着いた";
-
-  const counts = { S: 0, A: 0, B: 0, C: 0, D: 0 };
-  for (const l of listings) {
-    const r = classifyCondition(l.condition);
-    if (r !== "unknown") counts[r]++;
+  listings: FlatListing[],
+): Promise<Advice> {
+  const res = await fetch("/api/ai-advisor", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      keyword,
+      productGuess,
+      listings: listings.map((l) => ({
+        source: l.source,
+        title: l.title,
+        price: l.price,
+        condition: l.condition,
+        endedAt: l.endedAt,
+      })),
+    }),
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error ?? `AI 査定に失敗しました (${res.status})`);
   }
-  const dominant = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0];
-
-  const summary = `${productGuess ?? keyword}の中古市場を分析しました。直近の取引${count}件から、中央値は ¥${median.toLocaleString("ja-JP")}、価格幅は ¥${min.toLocaleString("ja-JP")} 〜 ¥${max.toLocaleString("ja-JP")} で${spreadDesc}分布です。${dominant ? `状態${dominant}クラスの出品が多く、` : ""}相対的に${spreadRatio > 1 ? "状態確認の重要度が高い" : "標準的な"}カテゴリです。`;
-
-  const recommendations = [
-    { rank: "状態S/A", rate: 75, price: Math.round((median * 75) / 100) },
-    { rank: "状態B", rate: 65, price: Math.round((median * 65) / 100) },
-    { rank: "状態C", rate: 50, price: Math.round((median * 50) / 100) },
-    { rank: "状態D", rate: 30, price: Math.round((median * 30) / 100) },
-  ];
-
-  const warnings: string[] = [];
-  if (count < 10) {
-    warnings.push(
-      `データ件数が${count}件と少ないため、相場の振れ幅が大きい可能性があります。期間を広げての確認を推奨します。`
-    );
-  }
-  if (spreadRatio > 1.2) {
-    warnings.push(
-      "価格幅が大きいため、状態（傷・付属品・年式）の確認を念入りに行ってください。同じ商品でも条件で大きく差が出ます。"
-    );
-  }
-  if (counts.D >= Math.ceil(count * 0.2)) {
-    warnings.push(
-      "ジャンク品が一定数出回っており、ジャンク扱いを除外した相場で判断する方が安全です。"
-    );
-  }
-  if (max > median * 2.5) {
-    warnings.push(
-      `最高値 ¥${max.toLocaleString("ja-JP")} はプレミア / 特殊条件の可能性があります。中央値ベースで査定することを推奨します。`
-    );
-  }
-  if (warnings.length === 0) {
-    warnings.push(
-      "サンプル数・分布ともに安定しています。中央値を基準にした査定で問題ありません。"
-    );
-  }
-
-  return { summary, recommendations, warnings };
+  const data = (await res.json()) as { advice: Advice };
+  return data.advice;
 }
 
 export function AiAdvisor({ keyword, productGuess, listings }: Props) {
   const [advice, setAdvice] = useState<Advice | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const searchKey = searchKeyFromKeyword(keyword);
   const saved = useAdviceSaved(searchKey);
 
   async function run() {
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 800));
-    setAdvice(generateAdvice(keyword, productGuess, listings));
-    setLoading(false);
+    setError(null);
+    try {
+      const result = await fetchAdvice(keyword, productGuess, listings);
+      setAdvice(result);
+    } catch (e) {
+      const message =
+        e instanceof Error ? e.message : "AI 査定に失敗しました";
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
   }
 
   function toggleSave() {
@@ -160,10 +130,10 @@ export function AiAdvisor({ keyword, productGuess, listings }: Props) {
         )}
       </div>
 
-      {!advice && !loading && (
+      {!advice && !loading && !error && (
         <>
           <p className="text-xs text-muted leading-relaxed mb-3">
-            検索結果からAIが相場分析と買取目安を提案します。
+            Claude AIが取引データを分析して、状態別の買取目安と注意点を提案します。
           </p>
           <button
             type="button"
@@ -171,7 +141,7 @@ export function AiAdvisor({ keyword, productGuess, listings }: Props) {
             className="w-full h-10 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 flex items-center justify-center gap-1.5"
           >
             <Sparkles size={14} />
-            アドバイスを取得
+            AI査定を取得
           </button>
         </>
       )}
@@ -179,7 +149,23 @@ export function AiAdvisor({ keyword, productGuess, listings }: Props) {
       {loading && (
         <div className="flex items-center justify-center py-6 gap-2 text-muted">
           <Loader2 size={16} className="animate-spin" />
-          <span className="text-sm">分析中...</span>
+          <span className="text-sm">Claudeが分析中...</span>
+        </div>
+      )}
+
+      {error && !loading && (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-start gap-2 text-danger">
+            <AlertCircle size={14} className="mt-0.5 shrink-0" />
+            <p className="text-xs leading-relaxed">{error}</p>
+          </div>
+          <button
+            type="button"
+            onClick={run}
+            className="w-full h-9 rounded-lg border border-border text-foreground text-sm hover:bg-surface-2"
+          >
+            再試行
+          </button>
         </div>
       )}
 
