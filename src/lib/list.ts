@@ -392,7 +392,7 @@ function tick(itemId: string): void {
     }
 
     if (!found.targetCompleteAt) {
-      const total = 1800 + Math.random() * 2600;
+      const total = Math.floor(1800 + Math.random() * 2600);
       await updateListItem(itemId, {
         targetCompleteAt: Date.now() + total,
         totalMs: total,
