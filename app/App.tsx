@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { Platform, ScrollView, Text, View } from 'react-native';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 // 注意: <StatusBar /> (expo-status-bar / RN StatusBar) は iOS 26+ で
@@ -341,13 +340,11 @@ export default function App() {
   }
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <AppErrorBoundary>
-        <SafeAreaProvider>
-          <AppContent />
-          <GlobalErrorBanner />
-        </SafeAreaProvider>
-      </AppErrorBoundary>
-    </GestureHandlerRootView>
+    <AppErrorBoundary>
+      <SafeAreaProvider>
+        <AppContent />
+        <GlobalErrorBanner />
+      </SafeAreaProvider>
+    </AppErrorBoundary>
   );
 }

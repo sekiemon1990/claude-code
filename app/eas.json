@@ -1,14 +1,14 @@
 {
   "cli": {
     "version": ">= 12.0.0",
-    "appVersionSource": "local"
+    "appVersionSource": "remote"
   },
   "build": {
     "development": {
       "developmentClient": true,
       "distribution": "internal",
       "ios": {
-        "simulator": true
+        "simulator": false
       },
       "env": {
         "APP_VARIANT": "development"
@@ -24,12 +24,17 @@
       }
     },
     "production": {
+      "autoIncrement": true,
+      "ios": {
+        "image": "latest"
+      },
       "env": {
         "APP_VARIANT": "production"
       }
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      }
   }
 }
