@@ -101,65 +101,79 @@ export async function createRecordingAndUpload(params: {
       updatedAt: firestore.FieldValue.serverTimestamp(),
     });
 
-  const extension = localUri.split('.').pop() ?? 'm4a';
-  const storagePath = `recordings/${ownerUid}/${docRef.id}/audio.${extension}`;
-  const storageRef = storage().ref(storagePath);
-
-  const fileInfo = await FileSystem.getInfoAsync(localUri);
-  if (!fileInfo.exists) {
-    throw new Error('録音ファイルが見つかりません');
-  }
-
-  // @react-native-firebase/storage はローカルファイルパスを直接受け取れる
-  const task = storageRef.putFile(localUri.replace(/^file:\/\//, ''));
-
-  let pausedByNetwork = false;
-  const netUnsub = NetInfo.addEventListener((state) => {
-    const online = !!state.isConnected && state.isInternetReachable !== false;
-    if (!online && !pausedByNetwork) {
-      try {
-        task.pause();
-        pausedByNetwork = true;
-      } catch {
-        // pause は冪等なはず
-      }
-    } else if (online && pausedByNetwork) {
-      try {
-        task.resume();
-        pausedByNetwork = false;
-      } catch {
-        // resume も冪等
-      }
-    }
-  });
-
+  // doc 作成より後で失敗した場合に Firestore にオーファン doc を残さないよう、
+  // 全処理を try/catch で囲み、失敗時は best-effort で doc を削除してから rethrow する。
+  // backgroundUpload 側のリトライ判定は元のエラーを見るため、必ず元エラーを投げ直す。
   try {
-    await new Promise<void>((resolve, reject) => {
-      task.on(
-        'state_changed',
-        (snap) => {
-          if (onProgress && snap) {
-            onProgress(Math.round((snap.bytesTransferred / snap.totalBytes) * 100));
-          }
-        },
-        reject,
-        () => resolve(),
-      );
+    const extension = localUri.split('.').pop() ?? 'm4a';
+    const storagePath = `recordings/${ownerUid}/${docRef.id}/audio.${extension}`;
+    const storageRef = storage().ref(storagePath);
+
+    const fileInfo = await FileSystem.getInfoAsync(localUri);
+    if (!fileInfo.exists) {
+      throw new Error('録音ファイルが見つかりません');
+    }
+
+    // @react-native-firebase/storage はローカルファイルパスを直接受け取れる
+    const task = storageRef.putFile(localUri.replace(/^file:\/\//, ''));
+
+    let pausedByNetwork = false;
+    const netUnsub = NetInfo.addEventListener((state) => {
+      const online = !!state.isConnected && state.isInternetReachable !== false;
+      if (!online && !pausedByNetwork) {
+        try {
+          task.pause();
+          pausedByNetwork = true;
+        } catch {
+          // pause は冪等なはず
+        }
+      } else if (online && pausedByNetwork) {
+        try {
+          task.resume();
+          pausedByNetwork = false;
+        } catch {
+          // resume も冪等
+        }
+      }
     });
-  } finally {
-    netUnsub();
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        task.on(
+          'state_changed',
+          (snap) => {
+            if (onProgress && snap) {
+              onProgress(Math.round((snap.bytesTransferred / snap.totalBytes) * 100));
+            }
+          },
+          reject,
+          () => resolve(),
+        );
+      });
+    } finally {
+      netUnsub();
+    }
+
+    const downloadUrl = await storageRef.getDownloadURL();
+
+    await docRef.update({
+      storagePath,
+      downloadUrl,
+      status: 'uploaded' satisfies RecordingStatus,
+      updatedAt: firestore.FieldValue.serverTimestamp(),
+    });
+
+    return { recordingId: docRef.id, downloadUrl, storagePath };
+  } catch (err) {
+    // オーファン doc を残さないため best-effort で削除。
+    // delete 自体が失敗しても元のエラーは握りつぶさず rethrow する。
+    try {
+      await docRef.delete();
+    } catch {
+      // 削除失敗時は無視（元のアップロードエラーが本質なのでそちらを優先）
+    }
+    throw err;
   }
-
-  const downloadUrl = await storageRef.getDownloadURL();
-
-  await docRef.update({
-    storagePath,
-    downloadUrl,
-    status: 'uploaded' satisfies RecordingStatus,
-    updatedAt: firestore.FieldValue.serverTimestamp(),
-  });
-
-  return { recordingId: docRef.id, downloadUrl, storagePath };
 }
 
 export async function deleteRecording(recording: Recording) {
