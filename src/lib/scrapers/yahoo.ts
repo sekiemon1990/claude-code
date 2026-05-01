@@ -19,16 +19,62 @@ export type YahooScrapeOptions = {
   limit?: number;
 };
 
+// 1 リクエストあたりの最大件数 (Yahoo の上限)
+const PER_PAGE = 100;
+// 並列取得する最大ページ数 (1000 件まで)
+const MAX_PAGES = 10;
+
 export async function scrapeYahooAuction(
   options: YahooScrapeOptions,
 ): Promise<SourceResult> {
-  const { keyword, excludes, limit = 50 } = options;
+  const { keyword, excludes } = options;
 
+  // 最初の 1 ページを取得して、結果が満杯 (PER_PAGE 件) なら追加ページも並列取得
+  const firstHtml = await fetchYahooPage(keyword, excludes, 1);
+  const firstListings = parsePageListings(firstHtml);
+  console.log("[yahoo-scrape] page 1 parsed:", firstListings.length);
+
+  let allListings = firstListings;
+
+  if (firstListings.length >= PER_PAGE) {
+    // 2 ページ目以降を並列で取得
+    const pagePromises: Promise<string>[] = [];
+    for (let p = 2; p <= MAX_PAGES; p++) {
+      const start = (p - 1) * PER_PAGE + 1;
+      pagePromises.push(fetchYahooPage(keyword, excludes, start));
+    }
+    const additionalHtmls = await Promise.all(pagePromises);
+    for (let i = 0; i < additionalHtmls.length; i++) {
+      const items = parsePageListings(additionalHtmls[i]);
+      console.log(`[yahoo-scrape] page ${i + 2} parsed:`, items.length);
+      if (items.length === 0) break;
+      allListings = allListings.concat(items);
+    }
+  }
+
+  // ID で重複排除 (同じ商品が複数ページに来ることは稀だが念のため)
+  const seen = new Set<string>();
+  const dedup: Listing[] = [];
+  for (const l of allListings) {
+    if (seen.has(l.id)) continue;
+    seen.add(l.id);
+    dedup.push(l);
+  }
+
+  console.log("[yahoo-scrape] total parsed:", dedup.length);
+  return summarize("yahoo_auction", dedup);
+}
+
+async function fetchYahooPage(
+  keyword: string,
+  excludes: string | undefined,
+  startPosition: number,
+): Promise<string> {
   const url = new URL(YAHOO_BASE);
   url.searchParams.set("p", keyword);
   url.searchParams.set("va", keyword);
-  url.searchParams.set("b", "1");
-  url.searchParams.set("n", String(Math.min(limit, 100)));
+  url.searchParams.set("b", String(startPosition));
+  url.searchParams.set("n", String(PER_PAGE));
   if (excludes && excludes.trim()) {
     url.searchParams.set("exflg", "1");
     url.searchParams.set("nq", excludes.trim());
@@ -45,30 +91,21 @@ export async function scrapeYahooAuction(
     cache: "no-store",
   });
 
-  console.log("[yahoo-scrape] status:", res.status, "url:", url.toString());
-
   if (!res.ok) {
-    throw new Error(`Yahoo オークション応答エラー: ${res.status}`);
-  }
-
-  const html = await res.text();
-  console.log("[yahoo-scrape] html size:", html.length);
-
-  // 1. __NEXT_DATA__ JSON から取得を試みる
-  const nextDataListings = parseFromNextData(html);
-  if (nextDataListings && nextDataListings.length > 0) {
-    console.log(
-      "[yahoo-scrape] parsed via __NEXT_DATA__:",
-      nextDataListings.length,
+    console.warn(
+      `[yahoo-scrape] page b=${startPosition} status:`,
+      res.status,
     );
-    return summarize("yahoo_auction", nextDataListings);
+    return "";
   }
+  return res.text();
+}
 
-  // 2. HTML 解析へフォールバック
-  console.log("[yahoo-scrape] falling back to HTML parse");
-  const listings = parseYahooHtml(html);
-  console.log("[yahoo-scrape] parsed via HTML:", listings.length);
-  return summarize("yahoo_auction", listings);
+function parsePageListings(html: string): Listing[] {
+  if (!html) return [];
+  const fromNext = parseFromNextData(html);
+  if (fromNext && fromNext.length > 0) return fromNext;
+  return parseYahooHtml(html);
 }
 
 // ---- __NEXT_DATA__ パース ----
