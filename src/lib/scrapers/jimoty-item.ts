@@ -379,16 +379,28 @@ export async function scrapeJimotyItem(
     const sellerIdMatch = sellerUrl?.match(/\/profiles\/([a-f0-9]+)/i);
     const sellerId = sellerIdMatch?.[1];
 
-    // セラーリンクの親〜祖父あたりから「評価」を含む要素を探す
-    const $sellerArea = $profileLink.closest(
-      "[class*='user'], [class*='User'], [class*='profile'], [class*='Profile'], section, article, div",
-    );
-    const areaText = $sellerArea.text().replace(/\s+/g, " ").slice(0, 1000);
+    // 「評価をもっと見る」リンク (= /profiles/{id}/evaluations) を起点に、
+    // その近くの祖先要素を取って評価サマリーを探す
+    // 「評価をもっと見る」リンクが起点。無ければ profileLink から祖先を遡る
+    const $evalLink = $(
+      `a[href^="/profiles/${sellerId ?? ""}/evaluations"]`,
+    ).first();
+    const $startNode = $evalLink.length ? $evalLink : $profileLink;
+    let $sellerArea = $startNode;
+    for (let i = 0; i < 6; i++) {
+      const $next = $sellerArea.parent();
+      if (!$next.length) break;
+      $sellerArea = $next;
+      // 評価関連テキストを含む十分大きい要素まで上昇
+      const txt = $sellerArea.text();
+      if (txt.length > 80 && /(良い|評価|本人確認)/.test(txt)) break;
+    }
+    const areaText = $sellerArea.text().replace(/\s+/g, " ").slice(0, 1500);
 
     // 診断: セラー周辺の HTML をログ出力 (要素構造を見る)
     console.log(
       "[jimoty-item] seller area HTML sample:",
-      ($sellerArea.html() ?? "").slice(0, 800),
+      ($sellerArea.html() ?? "").slice(0, 1500),
     );
     console.log("[jimoty-item] seller area text:", areaText);
 
@@ -397,10 +409,18 @@ export async function scrapeJimotyItem(
       areaText.match(/★\s*([\d.]+)/) ||
       areaText.match(/Good\s*([\d.]+\s*[％%])/i) ||
       areaText.match(/評価\s*\(?([\d,]+)件/) ||
-      areaText.match(/良い[\s:]*([\d]+)/) ||
+      areaText.match(/良い[\s:：(（]*([\d,]+)/) ||
       areaText.match(/([\d]+)\s*件の評価/);
     if (ratingMatch) {
-      sellerRating = ratingMatch[0].trim();
+      // 「良い X / 普通 Y / 悪い Z」形式で複合表示できるか試す
+      const goodM = areaText.match(/良い[\s:：(（]*([\d,]+)/);
+      const normalM = areaText.match(/普通[\s:：(（]*([\d,]+)/);
+      const badM = areaText.match(/悪い[\s:：(（]*([\d,]+)/);
+      const parts: string[] = [];
+      if (goodM) parts.push(`良い ${goodM[1].replace(/,/g, "")}`);
+      if (normalM) parts.push(`普通 ${normalM[1].replace(/,/g, "")}`);
+      if (badM) parts.push(`悪い ${badM[1].replace(/,/g, "")}`);
+      sellerRating = parts.length > 0 ? parts.join(" / ") : ratingMatch[0].trim();
       console.log("[jimoty-item] seller rating from article page:", sellerRating);
     }
 
@@ -408,7 +428,8 @@ export async function scrapeJimotyItem(
       console.log("[jimoty-item] seller id:", sellerId);
     }
 
-    // 記事ページに評価が無い場合、プロフィール evaluations ページから取得
+    // 記事ページに評価が無い場合、evaluations ページから取得
+    // 実際の HTML 形式: "評価 ： 115" (合計件数) + <img src=".../evaluation_{good|normal|bad}_ico..."> アイコン
     if (!sellerRating && sellerId) {
       try {
         const evalUrl = `https://jmty.jp/profiles/${sellerId}/evaluations`;
@@ -423,29 +444,58 @@ export async function scrapeJimotyItem(
         });
         if (evalRes.ok) {
           const evalHtml = await evalRes.text();
-          // 評価ページから「良い X件」「悪い Y件」「普通 Z件」等のパターンを探す
-          const goodCount = evalHtml.match(/良い[^<>]*?(\d+)\s*件/);
-          const badCount = evalHtml.match(/悪い[^<>]*?(\d+)\s*件/);
-          const totalCount = evalHtml.match(/合計[^<>]*?(\d+)\s*件/);
-          if (goodCount || badCount || totalCount) {
-            const parts: string[] = [];
-            if (goodCount) parts.push(`良い ${goodCount[1]}件`);
-            if (badCount) parts.push(`悪い ${badCount[1]}件`);
-            if (totalCount) parts.push(`合計 ${totalCount[1]}件`);
-            sellerRating = parts.join(" / ");
+          const $e = cheerio.load(evalHtml);
+
+          // 1) 合計件数: "評価 ： 115" / "評価:115"
+          const totalM = evalHtml.match(/評価\s*[：:]\s*(\d+)/);
+          const total = totalM ? Number(totalM[1]) : null;
+
+          // 2) アイコン src で評価種別をカウント (1 ページ分のみ)
+          const goodN = $e('img[src*="evaluation_good_ico"]').length;
+          const normalN = $e('img[src*="evaluation_normal_ico"]').length;
+          const badN = $e('img[src*="evaluation_bad_ico"]').length;
+          const onPage = goodN + normalN + badN;
+
+          if (total !== null) {
+            // 1 ページに全件収まっていれば内訳を出す
+            if (onPage > 0 && total === onPage) {
+              const parts: string[] = [];
+              if (goodN) parts.push(`良い ${goodN}`);
+              if (normalN) parts.push(`普通 ${normalN}`);
+              if (badN) parts.push(`悪い ${badN}`);
+              sellerRating = `評価 ${total}件 (${parts.join(" / ")})`;
+            } else if (onPage > 0) {
+              // ページネーションあり: 合計と「最近 N 件中」の内訳
+              const parts: string[] = [];
+              if (goodN) parts.push(`良い ${goodN}`);
+              if (normalN) parts.push(`普通 ${normalN}`);
+              if (badN) parts.push(`悪い ${badN}`);
+              sellerRating = `評価 ${total}件 (直近 ${onPage}件: ${parts.join(" / ")})`;
+            } else {
+              sellerRating = `評価 ${total}件`;
+            }
             console.log(
               "[jimoty-item] seller rating from evaluations page:",
               sellerRating,
             );
+          } else if (onPage > 0) {
+            const parts: string[] = [];
+            if (goodN) parts.push(`良い ${goodN}`);
+            if (normalN) parts.push(`普通 ${normalN}`);
+            if (badN) parts.push(`悪い ${badN}`);
+            sellerRating = parts.join(" / ");
+            console.log(
+              "[jimoty-item] seller rating via icon count only:",
+              sellerRating,
+            );
           } else {
-            // フォールバック: ページ内の評価関連テキストを 200 文字 dump
-            const evalIdx = evalHtml.search(/(評価|良い|悪い)/);
+            // 取れなかった場合の診断
+            const evalIdx = evalHtml.search(/評価/);
             if (evalIdx > -1) {
               console.log(
-                "[jimoty-item] evaluations sample:",
+                "[jimoty-item] evaluations '評価' context:",
                 evalHtml
-                  .slice(evalIdx, evalIdx + 300)
-                  .replace(/<[^>]+>/g, " ")
+                  .slice(Math.max(0, evalIdx - 50), evalIdx + 250)
                   .replace(/\s+/g, " "),
               );
             }
