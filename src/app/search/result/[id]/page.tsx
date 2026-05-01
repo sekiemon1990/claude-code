@@ -119,9 +119,13 @@ function ResultInner({ resultId }: { resultId: string }) {
   const excludesParam = params.get("excludes") ?? "";
   const searchKey = searchKeyFromKeyword(keyword);
 
-  // ---- 実スクレイピング (現在は Yahoo オークションのみ) ----
+  // ---- 実スクレイピング ----
   const yahooEnabled =
     requestedSources.includes("yahoo_auction") &&
+    mockMode !== "force" &&
+    !!keyword.trim();
+  const mercariEnabled =
+    requestedSources.includes("mercari") &&
     mockMode !== "force" &&
     !!keyword.trim();
 
@@ -141,28 +145,57 @@ function ResultInner({ resultId }: { resultId: string }) {
       return data.result;
     },
     enabled: yahooEnabled,
-    staleTime: 5 * 60_000, // 5分間キャッシュ
+    staleTime: 5 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+
+  const mercariQuery = useQuery({
+    queryKey: ["scrape_mercari", keyword, excludesParam],
+    queryFn: async (): Promise<SourceResult> => {
+      const res = await fetch("/api/scrape/mercari", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keyword, excludes: excludesParam || undefined }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error ?? "メルカリ取得に失敗");
+      }
+      const data = (await res.json()) as { result: SourceResult };
+      return data.result;
+    },
+    enabled: mercariEnabled,
+    staleTime: 5 * 60_000,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     retry: 1,
   });
 
   const result = useMemo(() => {
-    // mock モードまたは無効ならモックそのまま
-    if (mockMode === "force" || !yahooEnabled) return MOCK_RESULT;
-    // Yahoo の本物データが取れていれば差し替え
-    if (yahooQuery.data) {
-      return {
-        ...MOCK_RESULT,
-        query: { ...MOCK_RESULT.query, keyword },
-        productGuess: keyword, // 本物データなのでキーワードをそのまま表示
-        sources: MOCK_RESULT.sources.map((s) =>
-          s.source === "yahoo_auction" ? yahooQuery.data : s,
-        ),
-      };
+    // mock モードまたは何も実データ取得対象でなければモックそのまま
+    if (mockMode === "force" || (!yahooEnabled && !mercariEnabled)) {
+      return MOCK_RESULT;
     }
-    return MOCK_RESULT;
-  }, [yahooQuery.data, mockMode, yahooEnabled, keyword]);
+    return {
+      ...MOCK_RESULT,
+      query: { ...MOCK_RESULT.query, keyword },
+      productGuess: keyword,
+      sources: MOCK_RESULT.sources.map((s) => {
+        if (s.source === "yahoo_auction" && yahooQuery.data) return yahooQuery.data;
+        if (s.source === "mercari" && mercariQuery.data) return mercariQuery.data;
+        return s;
+      }),
+    };
+  }, [
+    yahooQuery.data,
+    mercariQuery.data,
+    mockMode,
+    yahooEnabled,
+    mercariEnabled,
+    keyword,
+  ]);
 
   const yahooError = yahooQuery.isError
     ? yahooQuery.error instanceof Error
@@ -170,6 +203,12 @@ function ResultInner({ resultId }: { resultId: string }) {
       : "ヤフオク取得に失敗"
     : null;
   const yahooLoading = yahooQuery.isLoading || yahooQuery.isFetching;
+  const mercariError = mercariQuery.isError
+    ? mercariQuery.error instanceof Error
+      ? mercariQuery.error.message
+      : "メルカリ取得に失敗"
+    : null;
+  const mercariLoading = mercariQuery.isLoading || mercariQuery.isFetching;
 
   const memo = useMemoValue(searchKey);
   const pinned = usePinnedValue(searchKey);
@@ -473,6 +512,18 @@ function ResultInner({ resultId }: { resultId: string }) {
           <div className="mt-2 text-xs text-warning flex items-start gap-1.5">
             <AlertTriangle size={12} className="mt-0.5 shrink-0" />
             <span>ヤフオク取得失敗: {yahooError}（モックデータを表示中）</span>
+          </div>
+        )}
+        {mercariLoading && mercariEnabled && (
+          <div className="mt-2 text-xs text-primary flex items-center gap-1.5">
+            <span className="inline-block w-2 h-2 rounded-full bg-primary animate-pulse" />
+            メルカリから売切相場を取得中...
+          </div>
+        )}
+        {mercariError && (
+          <div className="mt-2 text-xs text-warning flex items-start gap-1.5">
+            <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+            <span>メルカリ取得失敗: {mercariError}（モックデータを表示中）</span>
           </div>
         )}
         <button
