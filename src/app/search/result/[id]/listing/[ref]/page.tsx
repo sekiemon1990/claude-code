@@ -181,6 +181,41 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
     retry: 1,
   });
 
+  // メルカリ個別商品 API からの追加データ (description, 複数画像, 出品者等)
+  const mercariItemQuery = useQuery({
+    queryKey: ["mercari_item", source, lid],
+    queryFn: async () => {
+      const res = await fetch("/api/scrape/mercari-item", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: lid }),
+      });
+      if (!res.ok) throw new Error("商品詳細取得失敗");
+      const data = (await res.json()) as {
+        detail: {
+          id: string;
+          description?: string;
+          images?: string[];
+          price?: number;
+          condition?: string;
+          shipping?: "free" | "paid";
+          shippingInfo?: string;
+          shippingFromArea?: string;
+          sellerName?: string;
+          sellerUrl?: string;
+          sellerRating?: string;
+          likes?: number;
+        };
+      };
+      return data.detail;
+    },
+    enabled: source === "mercari" && !!lid,
+    staleTime: 30 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+
   // ジモティー個別商品ページからの追加データ (description, images, price 等)
   const jimotyItemQuery = useQuery({
     queryKey: ["jimoty_item", source, lid, baseListing?.url ?? ""],
@@ -261,6 +296,39 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
     );
   }
 
+  // baseListing が無い場合、mercari-item の結果からフォールバック
+  // (URL 直接アクセス・keyword 欠落時)
+  if (!baseListing && source === "mercari") {
+    const m = mercariItemQuery.data;
+    if (mercariItemQuery.isLoading || mercariItemQuery.isFetching) {
+      return (
+        <div className="pt-12 text-center text-muted text-sm">
+          商品情報を取得中...
+        </div>
+      );
+    }
+    if (m && m.images && m.images.length > 0) {
+      baseListing = {
+        id: lid,
+        title: "",
+        price: m.price ?? 0,
+        endedAt: "",
+        thumbnail: m.images[0],
+        url: `https://jp.mercari.com/item/${lid}`,
+        likes: m.likes,
+        condition: m.condition,
+        shipping: m.shipping,
+        shippingInfo: m.shippingInfo,
+        location: m.shippingFromArea,
+        description: m.description,
+        images: m.images,
+        sellerName: m.sellerName,
+        sellerUrl: m.sellerUrl,
+        sellerRating: m.sellerRating,
+      };
+    }
+  }
+
   // baseListing が無い場合、yahoo-item / jimoty-item の結果から最低限の
   // baseListing を組み立てるフォールバック (URL 直接アクセスや keyword 欠落時)
   if (!baseListing && source === "yahoo_auction") {
@@ -305,37 +373,57 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
     description:
       detailQuery.data?.description ??
       jimotyItemQuery.data?.description ??
+      mercariItemQuery.data?.description ??
       baseListing.description,
     images:
       detailQuery.data?.images ??
       jimotyItemQuery.data?.images ??
+      mercariItemQuery.data?.images ??
       baseListing.images,
-    condition: detailQuery.data?.condition ?? baseListing.condition,
+    condition:
+      detailQuery.data?.condition ??
+      mercariItemQuery.data?.condition ??
+      baseListing.condition,
     sellerName:
       detailQuery.data?.sellerName ??
       jimotyItemQuery.data?.sellerName ??
+      mercariItemQuery.data?.sellerName ??
       baseListing.sellerName,
     sellerUrl:
       detailQuery.data?.sellerUrl ??
       jimotyItemQuery.data?.sellerUrl ??
+      mercariItemQuery.data?.sellerUrl ??
       baseListing.sellerUrl,
     sellerRating:
       detailQuery.data?.sellerRating ??
       jimotyItemQuery.data?.sellerRating ??
+      mercariItemQuery.data?.sellerRating ??
       baseListing.sellerRating,
-    shipping: detailQuery.data?.shipping ?? baseListing.shipping,
-    shippingInfo: detailQuery.data?.shippingInfo ?? baseListing.shippingInfo,
+    shipping:
+      detailQuery.data?.shipping ??
+      mercariItemQuery.data?.shipping ??
+      baseListing.shipping,
+    shippingInfo:
+      detailQuery.data?.shippingInfo ??
+      mercariItemQuery.data?.shippingInfo ??
+      baseListing.shippingInfo,
     location:
       detailQuery.data?.location ??
       jimotyItemQuery.data?.location ??
+      mercariItemQuery.data?.shippingFromArea ??
       baseListing.location,
     price:
-      jimotyItemQuery.data?.price && jimotyItemQuery.data.price > 0
+      (jimotyItemQuery.data?.price && jimotyItemQuery.data.price > 0
         ? jimotyItemQuery.data.price
-        : baseListing.price,
+        : undefined) ??
+      (mercariItemQuery.data?.price && mercariItemQuery.data.price > 0
+        ? mercariItemQuery.data.price
+        : undefined) ??
+      baseListing.price,
     likes:
       detailQuery.data?.likes ??
       jimotyItemQuery.data?.likes ??
+      mercariItemQuery.data?.likes ??
       baseListing.likes,
   };
 
