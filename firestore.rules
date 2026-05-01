@@ -1,15 +1,25 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // 録音ドキュメントは所有者（作成した営業マン）のみ読み書き可能
+    // 録音ドキュメント
+    // - 作成: 自分の uid を ownerUid に焼き付けた create のみ。
+    //         Chatwork 通知フラグは create 時 null 必須 (悪意ある初期値で
+    //         通知発火を抑止する事故を防ぐ)。
+    // - 更新: 自分の uid のドキュメントのみ。chatworkNotifiedStartAt/EndAt は
+    //         クライアントから書換不可 (Admin SDK 経由は rules を bypass するので
+    //         notifyRecording* Function からは書ける)。
     match /recordings/{recordingId} {
       allow read: if request.auth != null
                   && resource.data.ownerUid == request.auth.uid;
       allow create: if request.auth != null
-                    && request.resource.data.ownerUid == request.auth.uid;
+                    && request.resource.data.ownerUid == request.auth.uid
+                    && request.resource.data.get('chatworkNotifiedStartAt', null) == null
+                    && request.resource.data.get('chatworkNotifiedEndAt', null) == null;
       allow update: if request.auth != null
                     && resource.data.ownerUid == request.auth.uid
-                    && request.resource.data.ownerUid == resource.data.ownerUid;
+                    && request.resource.data.ownerUid == resource.data.ownerUid
+                    && !('chatworkNotifiedStartAt' in request.resource.data.diff(resource.data).affectedKeys())
+                    && !('chatworkNotifiedEndAt' in request.resource.data.diff(resource.data).affectedKeys());
       allow delete: if request.auth != null
                     && resource.data.ownerUid == request.auth.uid;
     }
