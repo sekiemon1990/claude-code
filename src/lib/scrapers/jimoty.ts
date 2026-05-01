@@ -155,22 +155,57 @@ function parseJimotyHtml(html: string, limit: number): Listing[] {
     }
     if (!title || title.length < 3) return;
 
-    // カードとして親要素を探索
-    const $card = $link.closest("li, article, div");
+    // カードとして親要素を探索 (li 優先 → article → div)
+    let $card = $link.closest("li");
+    if (!$card.length) $card = $link.closest("article");
+    if (!$card.length) $card = $link.closest("div");
     if (!$card.length) return;
 
-    // 価格抽出: ¥/円 を含むテキスト
+    // card 内に価格パターンが無ければ、親を最大 3 段まで遡る
+    // (Jimoty レイアウトによっては <a> の親 div が画像だけ含み、
+    //  価格は同階層の別 div にある場合がある)
+    const PRICE_RE = /[¥￥]\s?[\d,]+|[\d,]+\s?円/;
+    for (let i = 0; i < 3; i++) {
+      if (PRICE_RE.test($card.text())) break;
+      const $parent = $card.parent();
+      if (!$parent.length) break;
+      // 親が body や main のような巨大要素になったら止める
+      if (
+        $parent.is("body, main, ul, [role='list']") ||
+        ($parent.find('a[href*="article-"]').length > 1 && i > 0)
+      )
+        break;
+      $card = $parent;
+    }
+
+    // 価格抽出: card 内のテキストから ¥X,XXX または X,XXX円 を探す
+    // 「最初に見つかったもっともらしい価格」を採用 (最小値方式は ¥0 誤検出を生む)
     const cardText = $card.text();
     let price = 0;
-    const priceMatches = cardText.matchAll(/[¥￥]\s?([\d,]+)|([\d,]+)\s?円/g);
-    for (const m of priceMatches) {
-      const n = Number((m[1] ?? m[2]).replace(/,/g, ""));
-      if (n >= 0 && n < 100_000_000) {
-        if (price === 0 || n < price) price = n;
-      }
+    const priceMatches = Array.from(
+      cardText.matchAll(/[¥￥]\s?([\d,]+)|([\d,]+)\s?円/g),
+    );
+    const candidates = priceMatches
+      .map((m) => Number((m[1] ?? m[2]).replace(/,/g, "")))
+      .filter((n) => Number.isFinite(n) && n >= 0 && n < 100_000_000);
+    if (candidates.length > 0) {
+      // 0 を除外した中の最初のものを採用 (0 は「全 30 件中 0 件」など別文脈の可能性)
+      const nonZero = candidates.filter((n) => n > 0);
+      price = nonZero[0] ?? candidates[0];
+    } else if (/あげます|差し上げ|無料|タダ/.test(cardText)) {
+      price = 0;
     }
-    // 「あげます」「無料」表記もあるので 0 円でも受け入れる
-    if (price < 0) return;
+
+    // 最初の 2 件だけ診断ログ
+    if (listings.length < 2) {
+      console.log(
+        `[jimoty-scrape] card[${listings.length}] tag=${$card.prop("tagName")}`,
+        "priceCandidates:",
+        candidates,
+        "cardTextSample:",
+        cardText.replace(/\s+/g, " ").slice(0, 200),
+      );
+    }
 
     // サムネイル
     const thumbnail = $card.find("img").first().attr("src") ?? undefined;
