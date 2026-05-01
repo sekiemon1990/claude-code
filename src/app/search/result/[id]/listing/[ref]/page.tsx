@@ -128,6 +128,12 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
       const data = (await res.json()) as {
         detail: {
           id: string;
+          title?: string;
+          price?: number;
+          endedAt?: string;
+          url?: string;
+          bidCount?: number;
+          thumbnail?: string;
           description?: string;
           images?: string[];
           condition?: string;
@@ -142,7 +148,9 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
       };
       return data.detail;
     },
-    enabled: !!baseListing && source === "yahoo_auction",
+    // baseListing が無い (= URL から直接アクセス、keyword 無し) でも動くよう
+    // source と lid だけで enable する
+    enabled: source === "yahoo_auction" && !!lid,
     staleTime: 30 * 60_000,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
@@ -226,6 +234,43 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
       </div>
     );
   }
+
+  // baseListing が無い場合、yahoo-item / jimoty-item の結果から最低限の
+  // baseListing を組み立てるフォールバック (URL 直接アクセスや keyword 欠落時)
+  if (!baseListing && source === "yahoo_auction") {
+    const d = detailQuery.data;
+    if (detailQuery.isLoading || detailQuery.isFetching) {
+      return (
+        <div className="pt-12 text-center text-muted text-sm">
+          商品情報を取得中...
+        </div>
+      );
+    }
+    if (d && d.title) {
+      baseListing = {
+        id: lid,
+        title: d.title,
+        price: d.price ?? 0,
+        endedAt: d.endedAt ?? "",
+        thumbnail: d.thumbnail,
+        url:
+          d.url ??
+          `https://auctions.yahoo.co.jp/jp/auction/${lid}`,
+        bidCount: d.bidCount,
+        likes: d.likes,
+        condition: d.condition,
+        sellerName: d.sellerName,
+        sellerUrl: d.sellerUrl,
+        sellerRating: d.sellerRating,
+        shipping: d.shipping,
+        shippingInfo: d.shippingInfo,
+        location: d.location,
+        description: d.description,
+        images: d.images,
+      };
+    }
+  }
+
   if (!baseListing) return notFound();
 
   // 詳細データを基本データにマージ (詳細データ優先)
