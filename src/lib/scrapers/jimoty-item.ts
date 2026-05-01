@@ -379,16 +379,28 @@ export async function scrapeJimotyItem(
     const sellerIdMatch = sellerUrl?.match(/\/profiles\/([a-f0-9]+)/i);
     const sellerId = sellerIdMatch?.[1];
 
-    // セラーリンクの親〜祖父あたりから「評価」を含む要素を探す
-    const $sellerArea = $profileLink.closest(
-      "[class*='user'], [class*='User'], [class*='profile'], [class*='Profile'], section, article, div",
-    );
-    const areaText = $sellerArea.text().replace(/\s+/g, " ").slice(0, 1000);
+    // 「評価をもっと見る」リンク (= /profiles/{id}/evaluations) を起点に、
+    // その近くの祖先要素を取って評価サマリーを探す
+    // 「評価をもっと見る」リンクが起点。無ければ profileLink から祖先を遡る
+    const $evalLink = $(
+      `a[href^="/profiles/${sellerId ?? ""}/evaluations"]`,
+    ).first();
+    const $startNode = $evalLink.length ? $evalLink : $profileLink;
+    let $sellerArea = $startNode;
+    for (let i = 0; i < 6; i++) {
+      const $next = $sellerArea.parent();
+      if (!$next.length) break;
+      $sellerArea = $next;
+      // 評価関連テキストを含む十分大きい要素まで上昇
+      const txt = $sellerArea.text();
+      if (txt.length > 80 && /(良い|評価|本人確認)/.test(txt)) break;
+    }
+    const areaText = $sellerArea.text().replace(/\s+/g, " ").slice(0, 1500);
 
     // 診断: セラー周辺の HTML をログ出力 (要素構造を見る)
     console.log(
       "[jimoty-item] seller area HTML sample:",
-      ($sellerArea.html() ?? "").slice(0, 800),
+      ($sellerArea.html() ?? "").slice(0, 1500),
     );
     console.log("[jimoty-item] seller area text:", areaText);
 
@@ -397,10 +409,18 @@ export async function scrapeJimotyItem(
       areaText.match(/★\s*([\d.]+)/) ||
       areaText.match(/Good\s*([\d.]+\s*[％%])/i) ||
       areaText.match(/評価\s*\(?([\d,]+)件/) ||
-      areaText.match(/良い[\s:]*([\d]+)/) ||
+      areaText.match(/良い[\s:：(（]*([\d,]+)/) ||
       areaText.match(/([\d]+)\s*件の評価/);
     if (ratingMatch) {
-      sellerRating = ratingMatch[0].trim();
+      // 「良い X / 普通 Y / 悪い Z」形式で複合表示できるか試す
+      const goodM = areaText.match(/良い[\s:：(（]*([\d,]+)/);
+      const normalM = areaText.match(/普通[\s:：(（]*([\d,]+)/);
+      const badM = areaText.match(/悪い[\s:：(（]*([\d,]+)/);
+      const parts: string[] = [];
+      if (goodM) parts.push(`良い ${goodM[1].replace(/,/g, "")}`);
+      if (normalM) parts.push(`普通 ${normalM[1].replace(/,/g, "")}`);
+      if (badM) parts.push(`悪い ${badM[1].replace(/,/g, "")}`);
+      sellerRating = parts.length > 0 ? parts.join(" / ") : ratingMatch[0].trim();
       console.log("[jimoty-item] seller rating from article page:", sellerRating);
     }
 
