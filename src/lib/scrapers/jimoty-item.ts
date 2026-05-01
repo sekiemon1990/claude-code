@@ -17,6 +17,35 @@ export type JimotyItemDetail = {
   location?: string;
 };
 
+// 改行を保持しつつ余分な空白を整える
+function preserveBreaks(text: string): string {
+  return text
+    // タブと連続空白は 1 個のスペースに
+    .replace(/[ \t　]+/g, " ")
+    // 連続改行 (3 つ以上) は 2 つに圧縮
+    .replace(/\n{3,}/g, "\n\n")
+    // 各行の先頭・末尾スペースを除去
+    .split("\n")
+    .map((line) => line.trim())
+    .join("\n")
+    // 先頭末尾の空行を除去
+    .trim();
+}
+
+// HTML から改行を保持してテキスト抽出 (<br>/<p>/<div> を改行に変換)
+function htmlToTextWithBreaks(htmlSnippet: string): string {
+  return htmlSnippet
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|li|h[1-6]|section|article)>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
+}
+
 export async function scrapeJimotyItem(
   fullUrl: string,
 ): Promise<JimotyItemDetail> {
@@ -69,9 +98,12 @@ export async function scrapeJimotyItem(
   ];
   for (const sel of candidates) {
     const $el = $(sel).first();
-    const text = $el.text().trim();
+    if (!$el.length) continue;
+    // HTML を取って <br>/<p> を改行に変換してから text 化する (改行保持)
+    const innerHtml = $el.html() ?? "";
+    const text = htmlToTextWithBreaks(innerHtml).trim();
     if (text && text.length > 30) {
-      description = text.replace(/\s+/g, " ").slice(0, 5000);
+      description = preserveBreaks(text).slice(0, 5000);
       console.log("[jimoty-item] description found via:", sel, "len:", text.length);
       break;
     }
@@ -87,14 +119,15 @@ export async function scrapeJimotyItem(
       const $el = $(el);
       // 子要素にも <p> や <div> があれば skip (重複カウント防止)
       if ($el.find("p, div").length > 5) return;
-      const t = $el.text().trim();
+      const innerHtml = $el.html() ?? "";
+      const t = htmlToTextWithBreaks(innerHtml).trim();
       if (t.length > longest.length && t.length < 10000) {
         longest = t;
         longestTag = (el as { tagName?: string; name?: string }).tagName || (el as { name?: string }).name || "";
       }
     });
     if (longest.length > 100) {
-      description = longest.replace(/\s+/g, " ").slice(0, 5000);
+      description = preserveBreaks(longest).slice(0, 5000);
       console.log(
         "[jimoty-item] description via longest text block tag:",
         longestTag,
@@ -190,13 +223,31 @@ export async function scrapeJimotyItem(
       }
     }
   }
-  // 「あげます」「無料」「0 円」表記なら 0 円扱い
+  // 「あげます」「差し上げ」「無料」表記なら 0 円扱い (誤マッチ防止のため "0円" 単体は使わない)
   if (price === undefined) {
-    const bodyText = $("body").text();
-    if (/(あげます|差し上げ|無料|￥0|¥0|0\s*円)/.test(bodyText)) {
+    // タイトルや特定の小範囲だけを見る (本文の「送料無料」等の誤マッチを避けるため)
+    const $main = $("main, article").first();
+    const scopedText = ($main.length ? $main.text() : $("body").text()).slice(
+      0,
+      3000,
+    );
+    if (/(差し上げます|あげます|お譲りします)/.test(scopedText)) {
       price = 0;
-      console.log("[jimoty-item] price = 0 (giveaway/free)");
+      console.log("[jimoty-item] price = 0 (giveaway phrase)");
     }
+  }
+  // 価格 selector 候補のテキストもログ出力 (診断用)
+  if (price === undefined) {
+    const priceProbe = $('[class*="price" i], [data-testid*="price" i]')
+      .map((_, el) => {
+        const $el = $(el);
+        const cls = $el.attr("class") ?? "";
+        const txt = $el.text().trim().slice(0, 60);
+        return `[${cls}] ${txt}`;
+      })
+      .get()
+      .slice(0, 10);
+    console.log("[jimoty-item] price probe:", priceProbe);
   }
 
   // 出品者
