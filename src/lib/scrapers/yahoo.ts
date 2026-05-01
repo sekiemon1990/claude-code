@@ -30,7 +30,16 @@ export async function scrapeYahooAuction(
   // 1 ページのみ取得 (高速・低負荷)
   const html = await fetchYahooPage(keyword, excludes, 1);
   const listings = parsePageListings(html);
-  const totalAvailable = parseTotalCount(html);
+  let totalAvailable = parseTotalCount(html);
+
+  // 取れなかったが 1 ページ目が満杯 (100件) なら「100件以上」とみなす
+  if (totalAvailable === undefined && listings.length >= PER_PAGE) {
+    totalAvailable = PER_PAGE;
+    console.log(
+      "[yahoo-scrape] totalCount unknown, but page is full → assume >=",
+      PER_PAGE,
+    );
+  }
 
   console.log("[yahoo-scrape] page 1 parsed:", listings.length);
   console.log("[yahoo-scrape] total available:", totalAvailable);
