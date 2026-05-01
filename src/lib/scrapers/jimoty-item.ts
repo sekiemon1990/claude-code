@@ -50,34 +50,52 @@ export async function scrapeJimotyItem(
 
   // 商品説明: メインの説明欄を探す
   let description: string | undefined;
-  // よくある class 名 / 構造を試す
+  // よくある class 名 / 構造を試す (実際の Jimoty レイアウトに合わせて)
   const candidates = [
+    ".p-article-body__description",
+    ".p-article__description",
+    "[data-testid='article-description']",
     ".article-text",
     ".article__description",
-    "[class*='description']",
-    "[class*='Description']",
-    ".jmty-article__text",
-    "[itemprop='description']",
     ".article-body",
     ".article-detail__text",
+    ".article-detail__description",
     ".article__body",
+    ".jmty-article__text",
+    "[itemprop='description']",
+    "[class*='description']",
+    "[class*='Description']",
+    "main p",
   ];
   for (const sel of candidates) {
-    const text = $(sel).first().text().trim();
-    if (text && text.length > 10) {
+    const $el = $(sel).first();
+    const text = $el.text().trim();
+    if (text && text.length > 30) {
       description = text.replace(/\s+/g, " ").slice(0, 5000);
-      console.log("[jimoty-item] description found via:", sel);
+      console.log("[jimoty-item] description found via:", sel, "len:", text.length);
       break;
     }
   }
-  // フォールバック: meta description
+  // フォールバック: 一番長い <p> テキストを採用 (最終手段)
+  if (!description) {
+    let longest = "";
+    $("p").each((_, el) => {
+      const t = $(el).text().trim();
+      if (t.length > longest.length) longest = t;
+    });
+    if (longest.length > 50) {
+      description = longest.replace(/\s+/g, " ").slice(0, 5000);
+      console.log("[jimoty-item] description via longest <p> len:", longest.length);
+    }
+  }
+  // 最後の保険: meta description (SEO 用で truncated されていることが多い)
   if (!description) {
     const metaDesc =
       $('meta[name="description"]').attr("content")?.trim() ||
       $('meta[property="og:description"]').attr("content")?.trim();
     if (metaDesc) {
       description = metaDesc;
-      console.log("[jimoty-item] description via meta");
+      console.log("[jimoty-item] description via meta (truncated SEO ver.)");
     }
   }
 
@@ -101,28 +119,59 @@ export async function scrapeJimotyItem(
   // 価格: 商品ページから抽出 (¥X,XXX 形式)
   let price: number | undefined;
   const priceCandidates = [
+    ".p-article-body__price",
+    "[data-testid='price']",
     ".article-price",
     ".article__price",
-    "[class*='price']",
     "[itemprop='price']",
+    "[class*='price']",
+    "[class*='Price']",
   ];
   for (const sel of priceCandidates) {
     const $el = $(sel).first();
+    if (!$el.length) continue;
+    // content 属性 (microdata)
+    const content = $el.attr("content");
+    if (content) {
+      const n = Number(content.replace(/[^\d]/g, ""));
+      if (Number.isFinite(n) && n >= 0) {
+        price = n;
+        console.log("[jimoty-item] price via content attr of:", sel);
+        break;
+      }
+    }
     const text = $el.text().replace(/\s+/g, "");
     const m = text.match(/[¥￥]\s?([\d,]+)|([\d,]+)\s?円/);
     if (m) {
       const n = Number((m[1] ?? m[2]).replace(/,/g, ""));
       if (Number.isFinite(n)) {
         price = n;
+        console.log("[jimoty-item] price via text of:", sel);
         break;
       }
     }
-    const content = $el.attr("content");
-    if (content) {
-      const n = Number(content.replace(/[^\d]/g, ""));
-      if (Number.isFinite(n) && n > 0) {
+  }
+  // フォールバック: og:price:amount (使われていれば)
+  if (price === undefined) {
+    const ogPrice =
+      $('meta[property="product:price:amount"]').attr("content") ||
+      $('meta[property="og:price:amount"]').attr("content");
+    if (ogPrice) {
+      const n = Number(ogPrice.replace(/[^\d]/g, ""));
+      if (Number.isFinite(n)) {
         price = n;
-        break;
+        console.log("[jimoty-item] price via og:price meta");
+      }
+    }
+  }
+  // 最後の保険: HTML 全体から ¥X,XXX を最初に出てくるものを採用
+  if (price === undefined) {
+    const m = html.match(/[¥￥]\s?([\d,]{1,9})(?!\d)/);
+    if (m) {
+      const n = Number(m[1].replace(/,/g, ""));
+      if (Number.isFinite(n)) {
+        price = n;
+        console.log("[jimoty-item] price via fallback regex");
       }
     }
   }
