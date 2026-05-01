@@ -13,7 +13,14 @@ import {
   Inbox,
   ChevronDown,
   Pencil,
+  WifiOff,
+  Wifi,
 } from "lucide-react";
+import {
+  useOfflineQueue,
+  removeFromOfflineQueue,
+  clearOfflineQueue,
+} from "@/lib/offline-queue";
 import { AppShell } from "@/components/AppShell";
 import { PlatformLogo } from "@/components/PlatformLogo";
 import { QuickAddBar } from "@/components/QuickAddBar";
@@ -25,6 +32,7 @@ import {
   cancelItem,
   clearCurrentList,
   saveCurrentAndCreateNew,
+  addItemToList,
   type ListItem,
 } from "@/lib/list";
 import { ListPicker } from "@/components/ListPicker";
@@ -65,6 +73,7 @@ export default function ListPage() {
   return (
     <AppShell title="査定リスト">
       <div className="flex flex-col gap-4">
+        <OfflineQueueBanner />
         <section>
           <div className="bg-surface border border-border rounded-xl flex items-stretch overflow-hidden">
             <button
@@ -440,6 +449,102 @@ function ConfirmDialog({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function OfflineQueueBanner() {
+  const { items, count, isOnline } = useOfflineQueue();
+
+  if (count === 0 && isOnline) return null;
+
+  if (count === 0 && !isOnline) {
+    return (
+      <div className="bg-warning/10 border border-warning/30 rounded-xl p-3 flex items-center gap-2 text-xs text-foreground">
+        <WifiOff size={14} className="text-warning shrink-0" />
+        <span>オフライン中: 検索を実行すると保留キューに追加されます</span>
+      </div>
+    );
+  }
+
+  async function runOne(id: string) {
+    const target = items.find((q) => q.id === id);
+    if (!target) return;
+    const added = await addItemToList(target.query);
+    if (added) {
+      removeFromOfflineQueue(id);
+      toast({ message: "保留検索を実行しました" });
+    } else {
+      toast({ message: "実行に失敗しました", variant: "error" });
+    }
+  }
+
+  return (
+    <div className="bg-surface border border-border rounded-xl p-3 flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          {isOnline ? (
+            <Wifi size={14} className="text-primary" />
+          ) : (
+            <WifiOff size={14} className="text-warning" />
+          )}
+          <span className="text-sm font-semibold text-foreground">
+            保留中の検索 {count} 件
+          </span>
+          {!isOnline && (
+            <span className="text-[10px] text-warning">オフライン</span>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            clearOfflineQueue();
+            toast({ message: "保留キューをクリアしました" });
+          }}
+          className="text-[11px] text-muted hover:text-foreground"
+        >
+          全て削除
+        </button>
+      </div>
+      <ul className="flex flex-col gap-1">
+        {items.slice(0, 6).map((q) => (
+          <li
+            key={q.id}
+            className="flex items-center gap-2 text-xs px-2 py-1.5 rounded-md bg-surface-2"
+          >
+            <span className="flex-1 truncate text-foreground">
+              {q.query.keyword}
+            </span>
+            {isOnline && (
+              <button
+                type="button"
+                onClick={() => runOne(q.id)}
+                className="text-[10px] text-primary hover:underline shrink-0"
+              >
+                今すぐ実行
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => removeFromOfflineQueue(q.id)}
+              aria-label="削除"
+              className="text-muted hover:text-foreground shrink-0"
+            >
+              <X size={12} />
+            </button>
+          </li>
+        ))}
+        {items.length > 6 && (
+          <li className="text-[10px] text-muted px-2">
+            ほか {items.length - 6} 件...
+          </li>
+        )}
+      </ul>
+      {isOnline && count > 0 && (
+        <p className="text-[10px] text-muted">
+          オンラインに戻ったので自動実行中...
+        </p>
+      )}
     </div>
   );
 }

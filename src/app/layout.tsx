@@ -5,6 +5,7 @@ import { Toaster } from "@/components/Toaster";
 import { Onboarding } from "@/components/Onboarding";
 import { QueryProvider } from "@/components/QueryProvider";
 import { PWAInit } from "@/components/PWAInit";
+import { OfflineQueueDrainer } from "@/components/OfflineQueueDrainer";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -73,6 +74,7 @@ export default function RootLayout({
           <Toaster />
           <Onboarding />
           <PWAInit />
+          <OfflineQueueDrainer />
         </QueryProvider>
       </body>
     </html>
