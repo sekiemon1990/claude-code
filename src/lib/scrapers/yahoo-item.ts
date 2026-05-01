@@ -21,6 +21,7 @@ export type YahooItemDetail = {
   shipping?: "free" | "paid" | "pickup";
   shippingInfo?: string;
   location?: string;
+  likes?: number;
 };
 
 export async function scrapeYahooItem(
@@ -105,6 +106,7 @@ export async function scrapeYahooItem(
     shipping: extractShipping(item),
     shippingInfo: extractShippingInfo(item),
     location: extractLocation(item),
+    likes: extractLikes(item),
   };
 
   console.log("[yahoo-item] mapped result:", {
@@ -291,6 +293,25 @@ function extractShipping(
 function extractShippingInfo(o: Record<string, unknown>): string | undefined {
   const ship = o.shipping as Record<string, unknown> | undefined;
   if (ship && typeof ship.method === "string") return ship.method;
+  return undefined;
+}
+
+function extractLikes(o: Record<string, unknown>): number | undefined {
+  const candidates = [
+    o.watchListNum,
+    o.watchListCount,
+    o.watchers,
+    o.watchCount,
+    o.numberOfWatches,
+    (o.watch as Record<string, unknown> | undefined)?.count,
+  ];
+  for (const c of candidates) {
+    if (typeof c === "number" && Number.isFinite(c)) return c;
+    if (typeof c === "string") {
+      const n = Number(c.replace(/[^\d]/g, ""));
+      if (Number.isFinite(n) && n >= 0) return n;
+    }
+  }
   return undefined;
 }
 
