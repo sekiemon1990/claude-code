@@ -4,6 +4,7 @@ import "./globals.css";
 import { Toaster } from "@/components/Toaster";
 import { Onboarding } from "@/components/Onboarding";
 import { QueryProvider } from "@/components/QueryProvider";
+import { PWAInit } from "@/components/PWAInit";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -71,6 +72,7 @@ export default function RootLayout({
           {children}
           <Toaster />
           <Onboarding />
+          <PWAInit />
         </QueryProvider>
       </body>
     </html>
