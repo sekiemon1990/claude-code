@@ -228,6 +228,17 @@ function parseJimotyHtml(html: string, limit: number): Listing[] {
       }
     }
 
+    // お気に入り登録数 (一覧カードでは「♡ 4」「お気に入り 4」等で表示される)
+    let likes: number | undefined;
+    const likesMatch =
+      cardText.match(/(\d+)\s*お気に入り/) ||
+      cardText.match(/お気に入り[^\d]{0,5}(\d+)/) ||
+      cardText.match(/[♡❤️]\s*(\d+)/);
+    if (likesMatch) {
+      const n = Number(likesMatch[1]);
+      if (Number.isFinite(n) && n >= 0 && n < 1_000_000) likes = n;
+    }
+
     seenIds.add(id);
     listings.push({
       id,
@@ -237,6 +248,7 @@ function parseJimotyHtml(html: string, limit: number): Listing[] {
       thumbnail,
       url: href.startsWith("http") ? href : `https://jmty.jp${href}`,
       location,
+      likes,
     });
   });
 

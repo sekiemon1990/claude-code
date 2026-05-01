@@ -17,6 +17,7 @@ export type JimotyItemDetail = {
   sellerUrl?: string;
   sellerRating?: string;
   location?: string;
+  likes?: number;
 };
 
 // 改行を保持しつつ余分な空白を整える
@@ -532,6 +533,19 @@ export async function scrapeJimotyItem(
     if (m) location = m[1];
   }
 
+  // お気に入り登録数 (記事ページのお気に入りボタンに「4 お気に入り登録」表記)
+  let likes: number | undefined;
+  const bodyText = $("body").text().replace(/\s+/g, " ");
+  const likesMatch =
+    bodyText.match(/(\d+)\s*お気に入り登録/) ||
+    bodyText.match(/お気に入り[^\d]{0,5}(\d+)/);
+  if (likesMatch) {
+    const n = Number(likesMatch[1]);
+    if (Number.isFinite(n) && n >= 0 && n < 1_000_000) {
+      likes = n;
+    }
+  }
+
   console.log("[jimoty-item] mapped:", {
     hasDescription: !!description,
     descLen: description?.length ?? 0,
@@ -541,6 +555,7 @@ export async function scrapeJimotyItem(
     sellerUrl,
     sellerRating,
     location,
+    likes,
   });
 
   return {
@@ -552,5 +567,6 @@ export async function scrapeJimotyItem(
     sellerUrl,
     sellerRating,
     location,
+    likes,
   };
 }

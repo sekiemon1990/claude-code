@@ -43,6 +43,7 @@ export type Listing = {
   images?: string[];
   url: string;
   bidCount?: number;
+  likes?: number;
   condition?: string;
   description?: string;
   sellerName?: string;
