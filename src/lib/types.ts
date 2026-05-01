@@ -59,6 +59,8 @@ export type SourceResult = {
   min: number;
   max: number;
   listings: Listing[];
+  // 媒体側に存在する総件数 (取得した listings.length は表示分のみ)
+  totalAvailable?: number;
 };
 
 export type SearchResult = {

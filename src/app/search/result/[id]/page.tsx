@@ -302,6 +302,26 @@ function ResultInner({ resultId }: { resultId: string }) {
     };
   }, [filteredListings]);
 
+  // 媒体側に存在する総件数 (取得した分とは別)
+  const totalAvailableSum = useMemo(() => {
+    return result.sources
+      .filter(
+        (s) =>
+          requestedSources.includes(s.source) &&
+          (filter === "all" || filter === s.source),
+      )
+      .reduce((sum, s) => sum + (s.totalAvailable ?? 0), 0);
+  }, [result.sources, requestedSources, filter]);
+  const fetchedSum = useMemo(() => {
+    return result.sources
+      .filter(
+        (s) =>
+          requestedSources.includes(s.source) &&
+          (filter === "all" || filter === s.source),
+      )
+      .reduce((sum, s) => sum + s.listings.length, 0);
+  }, [result.sources, requestedSources, filter]);
+
   const queryStr = new URLSearchParams(params.toString()).toString();
   const isEmpty = flatListings.length === 0;
   const hasNoMatch = !isEmpty && filteredListings.length === 0;
@@ -497,6 +517,12 @@ function ResultInner({ resultId }: { resultId: string }) {
                   ({formatCount(summary.totalCount)})
                 </span>
               </div>
+              {totalAvailableSum > 0 && totalAvailableSum > fetchedSum && (
+                <div className="mt-1 text-[11px] opacity-80">
+                  媒体側に {formatCount(totalAvailableSum)} 存在 (うち{" "}
+                  {fetchedSum}件取得)
+                </div>
+              )}
             </>
           ) : (
             <p className="text-sm opacity-90">
