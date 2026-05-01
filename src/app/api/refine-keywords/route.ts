@@ -48,6 +48,7 @@ const REFINE_SCHEMA = {
   properties: {
     suggestions: {
       type: "array",
+      description: "絞り込み候補 (3〜8 個)",
       items: {
         type: "object",
         properties: {
@@ -57,8 +58,6 @@ const REFINE_SCHEMA = {
         required: ["keyword", "reason"],
         additionalProperties: false,
       },
-      minItems: 3,
-      maxItems: 8,
     },
   },
   required: ["suggestions"],
