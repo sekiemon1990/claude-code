@@ -128,6 +128,10 @@ function ResultInner({ resultId }: { resultId: string }) {
     requestedSources.includes("mercari") &&
     mockMode !== "force" &&
     !!keyword.trim();
+  const jimotyEnabled =
+    requestedSources.includes("jimoty") &&
+    mockMode !== "force" &&
+    !!keyword.trim();
 
   const yahooQuery = useQuery({
     queryKey: ["scrape_yahoo", keyword, excludesParam],
@@ -173,9 +177,33 @@ function ResultInner({ resultId }: { resultId: string }) {
     retry: 1,
   });
 
+  const jimotyQuery = useQuery({
+    queryKey: ["scrape_jimoty", keyword, excludesParam],
+    queryFn: async (): Promise<SourceResult> => {
+      const res = await fetch("/api/scrape/jimoty", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keyword, excludes: excludesParam || undefined }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error ?? "ジモティー取得に失敗");
+      }
+      const data = (await res.json()) as { result: SourceResult };
+      return data.result;
+    },
+    enabled: jimotyEnabled,
+    staleTime: 5 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+
   const result = useMemo(() => {
-    // mock モードまたは何も実データ取得対象でなければモックそのまま
-    if (mockMode === "force" || (!yahooEnabled && !mercariEnabled)) {
+    if (
+      mockMode === "force" ||
+      (!yahooEnabled && !mercariEnabled && !jimotyEnabled)
+    ) {
       return MOCK_RESULT;
     }
     return {
@@ -185,15 +213,18 @@ function ResultInner({ resultId }: { resultId: string }) {
       sources: MOCK_RESULT.sources.map((s) => {
         if (s.source === "yahoo_auction" && yahooQuery.data) return yahooQuery.data;
         if (s.source === "mercari" && mercariQuery.data) return mercariQuery.data;
+        if (s.source === "jimoty" && jimotyQuery.data) return jimotyQuery.data;
         return s;
       }),
     };
   }, [
     yahooQuery.data,
     mercariQuery.data,
+    jimotyQuery.data,
     mockMode,
     yahooEnabled,
     mercariEnabled,
+    jimotyEnabled,
     keyword,
   ]);
 
@@ -209,6 +240,12 @@ function ResultInner({ resultId }: { resultId: string }) {
       : "メルカリ取得に失敗"
     : null;
   const mercariLoading = mercariQuery.isLoading || mercariQuery.isFetching;
+  const jimotyError = jimotyQuery.isError
+    ? jimotyQuery.error instanceof Error
+      ? jimotyQuery.error.message
+      : "ジモティー取得に失敗"
+    : null;
+  const jimotyLoading = jimotyQuery.isLoading || jimotyQuery.isFetching;
 
   const memo = useMemoValue(searchKey);
   const pinned = usePinnedValue(searchKey);
@@ -524,6 +561,18 @@ function ResultInner({ resultId }: { resultId: string }) {
           <div className="mt-2 text-xs text-warning flex items-start gap-1.5">
             <AlertTriangle size={12} className="mt-0.5 shrink-0" />
             <span>メルカリ取得失敗: {mercariError}（モックデータを表示中）</span>
+          </div>
+        )}
+        {jimotyLoading && jimotyEnabled && (
+          <div className="mt-2 text-xs text-primary flex items-center gap-1.5">
+            <span className="inline-block w-2 h-2 rounded-full bg-primary animate-pulse" />
+            ジモティーから出品中の相場を取得中...
+          </div>
+        )}
+        {jimotyError && (
+          <div className="mt-2 text-xs text-warning flex items-start gap-1.5">
+            <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+            <span>ジモティー取得失敗: {jimotyError}（モックデータを表示中）</span>
           </div>
         )}
         <button
