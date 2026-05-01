@@ -12,6 +12,12 @@ const USER_AGENT =
 
 export type YahooItemDetail = {
   id: string;
+  title?: string;
+  price?: number;
+  endedAt?: string;
+  url?: string;
+  bidCount?: number;
+  thumbnail?: string;
   description?: string;
   images?: string[];
   condition?: string;
@@ -95,8 +101,16 @@ export async function scrapeYahooItem(
     JSON.stringify(item).slice(0, 2000),
   );
 
-  const detail = {
+  const detail: YahooItemDetail = {
     id,
+    title: extractTitle(item),
+    price: extractPrice(item),
+    endedAt: extractEndedAt(item),
+    url: isFleamarket
+      ? `https://paypayfleamarket.yahoo.co.jp/item/${id}`
+      : `https://auctions.yahoo.co.jp/jp/auction/${id}`,
+    bidCount: extractBidCount(item),
+    thumbnail: extractThumbnail(item),
     description: extractDescription(item),
     images: extractImages(item),
     condition: extractCondition(item),
@@ -293,6 +307,76 @@ function extractShipping(
 function extractShippingInfo(o: Record<string, unknown>): string | undefined {
   const ship = o.shipping as Record<string, unknown> | undefined;
   if (ship && typeof ship.method === "string") return ship.method;
+  return undefined;
+}
+
+function extractTitle(o: Record<string, unknown>): string | undefined {
+  for (const key of ["title", "name", "auctionTitle", "itemName"]) {
+    const v = o[key];
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+  return undefined;
+}
+
+function extractPrice(o: Record<string, unknown>): number | undefined {
+  const candidates = [
+    o.price,
+    o.currentPrice,
+    o.startingPrice,
+    o.buyNowPrice,
+    (o.price as Record<string, unknown> | undefined)?.value,
+  ];
+  for (const c of candidates) {
+    if (typeof c === "number" && Number.isFinite(c) && c >= 0) return c;
+    if (typeof c === "string") {
+      const n = Number(c.replace(/[^\d.]/g, ""));
+      if (Number.isFinite(n) && n >= 0) return n;
+    }
+  }
+  return undefined;
+}
+
+function extractEndedAt(o: Record<string, unknown>): string | undefined {
+  const candidates = [o.endTime, o.endedAt, o.endDate, o.closeDate];
+  for (const c of candidates) {
+    if (typeof c === "string" && c) {
+      const d = new Date(c);
+      if (!Number.isNaN(d.getTime())) return d.toISOString();
+    }
+    if (typeof c === "number") {
+      const d = new Date(c);
+      if (!Number.isNaN(d.getTime())) return d.toISOString();
+    }
+  }
+  return undefined;
+}
+
+function extractBidCount(o: Record<string, unknown>): number | undefined {
+  const candidates = [o.bidCount, o.bids, o.numberOfBids];
+  for (const c of candidates) {
+    if (typeof c === "number" && Number.isFinite(c)) return c;
+    if (typeof c === "string") {
+      const n = Number(c.replace(/[^\d]/g, ""));
+      if (Number.isFinite(n)) return n;
+    }
+  }
+  return undefined;
+}
+
+function extractThumbnail(o: Record<string, unknown>): string | undefined {
+  // img 配列の最初の thumbnail
+  if (Array.isArray(o.img)) {
+    const first = o.img[0];
+    if (first && typeof first === "object") {
+      const t = (first as Record<string, unknown>).thumbnail;
+      if (typeof t === "string") return t;
+      const im = (first as Record<string, unknown>).image;
+      if (typeof im === "string") return im;
+    }
+    if (typeof first === "string") return first;
+  }
+  if (typeof o.thumbnailUrl === "string") return o.thumbnailUrl;
+  if (typeof o.imageUrl === "string") return o.imageUrl;
   return undefined;
 }
 
