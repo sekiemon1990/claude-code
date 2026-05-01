@@ -50,7 +50,8 @@ export async function POST(req: Request) {
 
   const prefix = (body.prefix ?? "").trim();
   if (!prefix || prefix.length < 2) {
-    return NextResponse.json({ candidates: [] });
+    // prefix が空・1 文字: prewarm のための即時応答
+    return NextResponse.json({ candidates: [], warmed: true });
   }
 
   const client = new Anthropic();
@@ -59,7 +60,7 @@ export async function POST(req: Request) {
     // Haiku 4.5: autocomplete のような高頻度・低レイテンシ用途に最適
     const response = await client.messages.create({
       model: "claude-haiku-4-5",
-      max_tokens: 600,
+      max_tokens: 300,
       system: [
         {
           type: "text",
