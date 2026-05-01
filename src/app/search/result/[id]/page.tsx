@@ -8,6 +8,7 @@ import {
   Sparkles,
   ExternalLink,
   Gavel,
+  Heart,
   Link2,
   Check,
   ArrowUpDown,
@@ -1538,6 +1539,12 @@ function ListingCard({
                 <span className="inline-flex items-center gap-1 text-xs text-muted">
                   <Gavel size={12} />
                   {listing.bidCount}件
+                </span>
+              )}
+              {listing.likes !== undefined && (
+                <span className="inline-flex items-center gap-1 text-xs text-muted">
+                  <Heart size={12} />
+                  {listing.likes}
                 </span>
               )}
             </div>

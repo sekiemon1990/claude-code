@@ -6,6 +6,7 @@ import { Suspense, use, useEffect, useState } from "react";
 import {
   ExternalLink,
   Gavel,
+  Heart,
   CalendarDays,
   User,
   Truck,
@@ -168,6 +169,7 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
           sellerUrl?: string;
           sellerRating?: string;
           location?: string;
+          likes?: number;
         };
       };
       return data.detail;
@@ -259,6 +261,7 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
       jimotyItemQuery.data?.price && jimotyItemQuery.data.price > 0
         ? jimotyItemQuery.data.price
         : baseListing.price,
+    likes: jimotyItemQuery.data?.likes ?? baseListing.likes,
   };
 
   const meta = SOURCES.find((s) => s.key === source)!;
@@ -367,6 +370,12 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
             <span className="inline-flex items-center gap-1 text-xs text-muted">
               <Gavel size={12} />
               入札{listing.bidCount}件
+            </span>
+          )}
+          {listing.likes !== undefined && (
+            <span className="inline-flex items-center gap-1 text-xs text-muted">
+              <Heart size={12} />
+              いいね{listing.likes}
             </span>
           )}
         </div>
