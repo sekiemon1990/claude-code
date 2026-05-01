@@ -14,6 +14,8 @@ export type JimotyItemDetail = {
   images?: string[];
   price?: number;
   sellerName?: string;
+  sellerUrl?: string;
+  sellerRating?: string;
   location?: string;
 };
 
@@ -332,20 +334,58 @@ export async function scrapeJimotyItem(
     console.log("[jimoty-item] price = 0 (giveaway URL)");
   }
 
-  // 出品者
+  // 出品者: プロフィールページへのリンクを起点に探す
+  // Jimoty のプロフィールページ URL パターン: /profile/users/XXX, /users/XXX, /user/XXX
   let sellerName: string | undefined;
-  const sellerCandidates = [
-    ".user-name",
-    "[class*='userName']",
-    "[class*='Username']",
-    "[class*='author']",
-  ];
-  for (const sel of sellerCandidates) {
-    const text = $(sel).first().text().trim();
-    if (text && text.length > 0 && text.length < 50) {
-      sellerName = text;
-      break;
-    }
+  let sellerUrl: string | undefined;
+  let sellerRating: string | undefined;
+
+  const $profileLink = $('a[href*="/profile/users/"], a[href*="/users/"], a[href*="/user/"]')
+    .filter((_, el) => {
+      const href = $(el).attr("href") ?? "";
+      // 商品 URL や guest_articles の絞り込み
+      return !href.includes("article-") && !href.includes("/categories/");
+    })
+    .first();
+
+  if ($profileLink.length) {
+    const href = $profileLink.attr("href") ?? "";
+    sellerUrl = href.startsWith("http") ? href : `https://jmty.jp${href}`;
+    const linkText = $profileLink.text().trim();
+    const imgAlt = $profileLink.find("img").attr("alt")?.trim();
+    sellerName = linkText && linkText.length < 50 ? linkText : imgAlt;
+    console.log(
+      "[jimoty-item] seller link found:",
+      sellerUrl,
+      "name:",
+      sellerName,
+    );
+  }
+
+  // 診断: 全プロフィールリンクを 5 件まで列挙 (取れなかった場合に確認用)
+  const profileProbe = $('a[href*="/profile"], a[href*="/users/"], a[href*="/user/"]')
+    .map((_, el) => {
+      const $el = $(el);
+      return `${$el.attr("href")} | "${$el.text().trim().slice(0, 40)}"`;
+    })
+    .get()
+    .slice(0, 8);
+  console.log("[jimoty-item] profile link probe:", profileProbe);
+
+  // 出品者の評価 (★4.5 や 評価98% パターン)
+  const bodyText = $("body").text();
+  const ratingMatch =
+    bodyText.match(/評価[\s:]*([\d.]+\s*[％%])/) ||
+    bodyText.match(/★\s*([\d.]+)/) ||
+    bodyText.match(/Good\s*([\d.]+\s*[％%])/i);
+  if (ratingMatch) {
+    sellerRating = ratingMatch[1].trim();
+    console.log("[jimoty-item] seller rating:", sellerRating);
+  }
+  // 評価件数 (XXX件) も併記
+  const reviewCountMatch = bodyText.match(/評価[^()]*\(\s*([\d,]+)\s*件\s*\)/);
+  if (reviewCountMatch && sellerRating) {
+    sellerRating = `${sellerRating} (${reviewCountMatch[1]}件)`;
   }
 
   // 所在地
@@ -377,6 +417,8 @@ export async function scrapeJimotyItem(
     imageCount: images.length,
     price,
     sellerName,
+    sellerUrl,
+    sellerRating,
     location,
   });
 
@@ -386,6 +428,8 @@ export async function scrapeJimotyItem(
     images: images.length > 0 ? images : undefined,
     price,
     sellerName,
+    sellerUrl,
+    sellerRating,
     location,
   };
 }

@@ -46,6 +46,8 @@ export type Listing = {
   condition?: string;
   description?: string;
   sellerName?: string;
+  sellerUrl?: string;
+  sellerRating?: string;
   shipping?: ShippingType;
   shippingInfo?: string;
   location?: string;

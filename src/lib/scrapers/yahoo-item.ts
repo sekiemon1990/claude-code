@@ -16,6 +16,8 @@ export type YahooItemDetail = {
   images?: string[];
   condition?: string;
   sellerName?: string;
+  sellerUrl?: string;
+  sellerRating?: string;
   shipping?: "free" | "paid" | "pickup";
   shippingInfo?: string;
   location?: string;
@@ -98,6 +100,8 @@ export async function scrapeYahooItem(
     images: extractImages(item),
     condition: extractCondition(item),
     sellerName: extractSellerName(item),
+    sellerUrl: extractSellerUrl(item),
+    sellerRating: extractSellerRating(item),
     shipping: extractShipping(item),
     shippingInfo: extractShippingInfo(item),
     location: extractLocation(item),
@@ -233,6 +237,37 @@ function extractCondition(o: Record<string, unknown>): string | undefined {
     JUNK: "ジャンク",
   };
   return map[code] ?? code;
+}
+
+function extractSellerUrl(o: Record<string, unknown>): string | undefined {
+  const seller = o.seller as Record<string, unknown> | undefined;
+  if (!seller) return undefined;
+  const aucUserId =
+    (typeof seller.aucUserId === "string" ? seller.aucUserId : "") ||
+    (typeof seller.userId === "string" ? seller.userId : "");
+  if (aucUserId) {
+    return `https://auctions.yahoo.co.jp/seller/${aucUserId}?user_type=c`;
+  }
+  if (typeof seller.listUrl === "string") return seller.listUrl;
+  return undefined;
+}
+
+function extractSellerRating(o: Record<string, unknown>): string | undefined {
+  const seller = o.seller as Record<string, unknown> | undefined;
+  if (!seller) return undefined;
+  const rating = seller.rating as Record<string, unknown> | undefined;
+  if (rating) {
+    const goodRating =
+      typeof rating.goodRating === "string" ? rating.goodRating : "";
+    const summary =
+      typeof rating.summary === "number" ? rating.summary : null;
+    if (goodRating) {
+      if (summary !== null) return `${goodRating} (${summary}件)`;
+      return goodRating;
+    }
+  }
+  if (typeof seller.goodRating === "string") return seller.goodRating;
+  return undefined;
 }
 
 function extractSellerName(o: Record<string, unknown>): string | undefined {
