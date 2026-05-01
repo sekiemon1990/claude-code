@@ -384,17 +384,76 @@ export async function scrapeJimotyItem(
       "[class*='user'], [class*='User'], [class*='profile'], [class*='Profile'], section, article, div",
     );
     const areaText = $sellerArea.text().replace(/\s+/g, " ").slice(0, 1000);
+
+    // 診断: セラー周辺の HTML をログ出力 (要素構造を見る)
+    console.log(
+      "[jimoty-item] seller area HTML sample:",
+      ($sellerArea.html() ?? "").slice(0, 800),
+    );
+    console.log("[jimoty-item] seller area text:", areaText);
+
     const ratingMatch =
       areaText.match(/評価[\s:：]*([\d.]+\s*[％%])/) ||
       areaText.match(/★\s*([\d.]+)/) ||
       areaText.match(/Good\s*([\d.]+\s*[％%])/i) ||
-      areaText.match(/評価\s*\(?([\d,]+)件/);
+      areaText.match(/評価\s*\(?([\d,]+)件/) ||
+      areaText.match(/良い[\s:]*([\d]+)/) ||
+      areaText.match(/([\d]+)\s*件の評価/);
     if (ratingMatch) {
       sellerRating = ratingMatch[0].trim();
-      console.log("[jimoty-item] seller rating:", sellerRating);
+      console.log("[jimoty-item] seller rating from article page:", sellerRating);
     }
+
     if (sellerId) {
       console.log("[jimoty-item] seller id:", sellerId);
+    }
+
+    // 記事ページに評価が無い場合、プロフィール evaluations ページから取得
+    if (!sellerRating && sellerId) {
+      try {
+        const evalUrl = `https://jmty.jp/profiles/${sellerId}/evaluations`;
+        console.log("[jimoty-item] fetching evaluations page:", evalUrl);
+        const evalRes = await fetch(evalUrl, {
+          headers: {
+            "User-Agent": USER_AGENT,
+            "Accept-Language": "ja,en-US;q=0.9,en;q=0.8",
+            Accept: "text/html,application/xhtml+xml",
+          },
+          cache: "no-store",
+        });
+        if (evalRes.ok) {
+          const evalHtml = await evalRes.text();
+          // 評価ページから「良い X件」「悪い Y件」「普通 Z件」等のパターンを探す
+          const goodCount = evalHtml.match(/良い[^<>]*?(\d+)\s*件/);
+          const badCount = evalHtml.match(/悪い[^<>]*?(\d+)\s*件/);
+          const totalCount = evalHtml.match(/合計[^<>]*?(\d+)\s*件/);
+          if (goodCount || badCount || totalCount) {
+            const parts: string[] = [];
+            if (goodCount) parts.push(`良い ${goodCount[1]}件`);
+            if (badCount) parts.push(`悪い ${badCount[1]}件`);
+            if (totalCount) parts.push(`合計 ${totalCount[1]}件`);
+            sellerRating = parts.join(" / ");
+            console.log(
+              "[jimoty-item] seller rating from evaluations page:",
+              sellerRating,
+            );
+          } else {
+            // フォールバック: ページ内の評価関連テキストを 200 文字 dump
+            const evalIdx = evalHtml.search(/(評価|良い|悪い)/);
+            if (evalIdx > -1) {
+              console.log(
+                "[jimoty-item] evaluations sample:",
+                evalHtml
+                  .slice(evalIdx, evalIdx + 300)
+                  .replace(/<[^>]+>/g, " ")
+                  .replace(/\s+/g, " "),
+              );
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("[jimoty-item] evaluations fetch failed:", e);
+      }
     }
   }
 
