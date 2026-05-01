@@ -131,6 +131,8 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
           images?: string[];
           condition?: string;
           sellerName?: string;
+          sellerUrl?: string;
+          sellerRating?: string;
           shipping?: "free" | "paid" | "pickup";
           shippingInfo?: string;
           location?: string;
