@@ -228,9 +228,9 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      {/* 画像エリア */}
-      <section>
+    <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)] lg:gap-6 lg:items-start">
+      {/* 画像エリア (PC では左カラム sticky) */}
+      <section className="lg:sticky lg:top-20">
         {images.length > 0 ? (
           <ImageGallery
             images={images}
@@ -245,6 +245,8 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
         )}
       </section>
 
+      {/* 情報エリア (PC では右カラム) */}
+      <div className="flex flex-col gap-4 min-w-0">
       {/* タイトル / 価格 */}
       <section className="bg-surface border border-border rounded-xl p-4">
         <div className="flex items-start justify-between gap-2 mb-2">
@@ -468,6 +470,7 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
           最新の情報は媒体のページでご確認ください。
         </p>
       </section>
+      </div> {/* /情報エリア */}
 
       {lightboxOpen && images[activeImage] && (
         <ImageLightbox
