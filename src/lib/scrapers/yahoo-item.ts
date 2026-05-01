@@ -470,11 +470,37 @@ function pickArr(v: unknown): unknown[] | null {
 }
 
 function stripHtml(s: string): string {
-  return cleanText(s.replace(/<[^>]*>/g, " "));
+  // <br>, <p>, <div> 等を改行に変換してから残タグを除去
+  const withBreaks = s
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|li|h[1-6]|section|article|tr)>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
+  return preserveBreaks(withBreaks);
 }
 
 function cleanText(s: string): string {
-  return s.replace(/\s+/g, " ").trim();
+  // 改行を保持しつつ余分な空白を整える
+  return preserveBreaks(s);
+}
+
+// 改行を保持しつつ各行のトリム + 連続改行の圧縮
+function preserveBreaks(text: string): string {
+  return text
+    .replace(/\r\n/g, "\n")
+    .replace(/[ \t　]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .split("\n")
+    .map((line) => line.trim())
+    .join("\n")
+    .trim();
 }
 
 export type { Listing };
