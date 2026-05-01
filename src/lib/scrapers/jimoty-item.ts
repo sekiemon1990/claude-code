@@ -77,6 +77,11 @@ function findJsonLdPrice(node: unknown, depth = 0): number | undefined {
 // HTML から改行を保持してテキスト抽出 (<br>/<p>/<div> を改行に変換)
 function htmlToTextWithBreaks(htmlSnippet: string): string {
   return htmlSnippet
+    // script/style/noscript ブロックを中身ごと除去
+    // (Google Tag Manager のスクリプト等が本文に混入するのを防ぐ)
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, "")
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/(p|div|li|h[1-6]|section|article)>/gi, "\n")
     .replace(/<[^>]+>/g, "")
@@ -118,6 +123,11 @@ export async function scrapeJimotyItem(
   console.log("[jimoty-item] html size:", html.length);
 
   const $ = cheerio.load(html);
+
+  // script/style/noscript/iframe を除外しておく
+  // (商品説明探索で Google Tag Manager のスクリプト内容を本文として
+  //  誤検出することがあるため)
+  $("script, style, noscript, iframe").remove();
 
   // 商品説明: メインの説明欄を探す
   let description: string | undefined;
@@ -404,24 +414,16 @@ export async function scrapeJimotyItem(
     );
     console.log("[jimoty-item] seller area text:", areaText);
 
-    const ratingMatch =
-      areaText.match(/評価[\s:：]*([\d.]+\s*[％%])/) ||
-      areaText.match(/★\s*([\d.]+)/) ||
-      areaText.match(/Good\s*([\d.]+\s*[％%])/i) ||
-      areaText.match(/評価\s*\(?([\d,]+)件/) ||
-      areaText.match(/良い[\s:：(（]*([\d,]+)/) ||
-      areaText.match(/([\d]+)\s*件の評価/);
-    if (ratingMatch) {
-      // 「良い X / 普通 Y / 悪い Z」形式で複合表示できるか試す
-      const goodM = areaText.match(/良い[\s:：(（]*([\d,]+)/);
-      const normalM = areaText.match(/普通[\s:：(（]*([\d,]+)/);
-      const badM = areaText.match(/悪い[\s:：(（]*([\d,]+)/);
-      const parts: string[] = [];
-      if (goodM) parts.push(`良い ${goodM[1].replace(/,/g, "")}`);
-      if (normalM) parts.push(`普通 ${normalM[1].replace(/,/g, "")}`);
-      if (badM) parts.push(`悪い ${badM[1].replace(/,/g, "")}`);
-      sellerRating = parts.length > 0 ? parts.join(" / ") : ratingMatch[0].trim();
-      console.log("[jimoty-item] seller rating from article page:", sellerRating);
+    // 1) 最優先: 「★ 5.0 (115)」のような平均評価＋件数表記
+    //    記事ページの出品者欄に表示されているのでここから直接取れる
+    const starMatch =
+      areaText.match(/★\s*([\d.]+)\s*[(（]\s*([\d,]+)\s*[)）]/) ||
+      areaText.match(/([\d]\.[\d])\s*[(（]\s*([\d,]+)\s*[)）]/);
+    if (starMatch) {
+      const stars = starMatch[1];
+      const count = starMatch[2].replace(/,/g, "");
+      sellerRating = `★ ${stars} (${count}件)`;
+      console.log("[jimoty-item] seller rating via star+count:", sellerRating);
     }
 
     if (sellerId) {
