@@ -29,7 +29,7 @@ export async function POST(req: Request) {
     const result = await scrapeYahooAuction({
       keyword: body.keyword.trim(),
       excludes: body.excludes,
-      limit: body.limit,
+      limit: body.limit ?? 30,
     });
     return NextResponse.json({ result });
   } catch (e) {

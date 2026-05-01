@@ -25,23 +25,25 @@ const PER_PAGE = 100;
 export async function scrapeYahooAuction(
   options: YahooScrapeOptions,
 ): Promise<SourceResult> {
-  const { keyword, excludes } = options;
+  const { keyword, excludes, limit = 30 } = options;
 
-  // 1 ページのみ取得 (高速・低負荷)
-  const html = await fetchYahooPage(keyword, excludes, 1);
+  // 表示に必要な件数のみ取得 (Yahoo の上限 100 まで)
+  const fetchCount = Math.min(Math.max(limit, 10), 100);
+
+  const html = await fetchYahooPage(keyword, excludes, 1, fetchCount);
   const listings = parsePageListings(html);
   let totalAvailable = parseTotalCount(html);
 
-  // 取れなかったが 1 ページ目が満杯 (100件) なら「100件以上」とみなす
-  if (totalAvailable === undefined && listings.length >= PER_PAGE) {
-    totalAvailable = PER_PAGE;
+  // 取れなかったが 1 ページ目が満杯なら「fetchCount 件以上」とみなす
+  if (totalAvailable === undefined && listings.length >= fetchCount) {
+    totalAvailable = fetchCount;
     console.log(
       "[yahoo-scrape] totalCount unknown, but page is full → assume >=",
-      PER_PAGE,
+      fetchCount,
     );
   }
 
-  console.log("[yahoo-scrape] page 1 parsed:", listings.length);
+  console.log("[yahoo-scrape] fetched:", listings.length, "/", fetchCount);
   console.log("[yahoo-scrape] total available:", totalAvailable);
 
   return summarize("yahoo_auction", listings, totalAvailable);
@@ -51,12 +53,13 @@ async function fetchYahooPage(
   keyword: string,
   excludes: string | undefined,
   startPosition: number,
+  pageSize: number = PER_PAGE,
 ): Promise<string> {
   const url = new URL(YAHOO_BASE);
   url.searchParams.set("p", keyword);
   url.searchParams.set("va", keyword);
   url.searchParams.set("b", String(startPosition));
-  url.searchParams.set("n", String(PER_PAGE));
+  url.searchParams.set("n", String(Math.min(pageSize, PER_PAGE)));
   if (excludes && excludes.trim()) {
     url.searchParams.set("exflg", "1");
     url.searchParams.set("nq", excludes.trim());
