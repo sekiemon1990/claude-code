@@ -76,16 +76,31 @@ export async function scrapeJimotyItem(
       break;
     }
   }
-  // フォールバック: 一番長い <p> テキストを採用 (最終手段)
-  if (!description) {
+  // フォールバック: 最も長いテキストブロックを採用 (<p> / <div> / <section>)
+  if (!description || description.length < 100) {
     let longest = "";
-    $("p").each((_, el) => {
-      const t = $(el).text().trim();
-      if (t.length > longest.length) longest = t;
+    let longestTag = "";
+    // article / main の中の <div> / <p> / <section> を全部見る
+    const $main = $("main, article, .main, [role='main']").first();
+    const $scope = $main.length ? $main : $("body");
+    $scope.find("p, div, section").each((_, el) => {
+      const $el = $(el);
+      // 子要素にも <p> や <div> があれば skip (重複カウント防止)
+      if ($el.find("p, div").length > 5) return;
+      const t = $el.text().trim();
+      if (t.length > longest.length && t.length < 10000) {
+        longest = t;
+        longestTag = (el as { tagName?: string; name?: string }).tagName || (el as { name?: string }).name || "";
+      }
     });
-    if (longest.length > 50) {
+    if (longest.length > 100) {
       description = longest.replace(/\s+/g, " ").slice(0, 5000);
-      console.log("[jimoty-item] description via longest <p> len:", longest.length);
+      console.log(
+        "[jimoty-item] description via longest text block tag:",
+        longestTag,
+        "len:",
+        longest.length,
+      );
     }
   }
   // 最後の保険: meta description (SEO 用で truncated されていることが多い)
@@ -173,6 +188,14 @@ export async function scrapeJimotyItem(
         price = n;
         console.log("[jimoty-item] price via fallback regex");
       }
+    }
+  }
+  // 「あげます」「無料」「0 円」表記なら 0 円扱い
+  if (price === undefined) {
+    const bodyText = $("body").text();
+    if (/(あげます|差し上げ|無料|￥0|¥0|0\s*円)/.test(bodyText)) {
+      price = 0;
+      console.log("[jimoty-item] price = 0 (giveaway/free)");
     }
   }
 
