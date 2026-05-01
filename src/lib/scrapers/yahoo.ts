@@ -81,21 +81,73 @@ function parsePageListings(html: string): Listing[] {
   return parseYahooHtml(html);
 }
 
-// __NEXT_DATA__ から総件数を抽出する
+// __NEXT_DATA__ または HTML テキストから総件数を抽出する
 function parseTotalCount(html: string): number | undefined {
   if (!html) return undefined;
+
+  // 戦略 1: __NEXT_DATA__ JSON 内を探す
   const match = html.match(
     /<script\s+id="__NEXT_DATA__"\s+type="application\/json">([\s\S]*?)<\/script>/,
   );
-  if (!match) return undefined;
-  let data: unknown;
-  try {
-    data = JSON.parse(match[1]);
-  } catch {
-    return undefined;
+  if (match) {
+    try {
+      const data = JSON.parse(match[1]);
+      // 構造診断ログ
+      const propsAny = (data as { props?: unknown }).props;
+      if (propsAny && typeof propsAny === "object") {
+        const pageProps = (propsAny as { pageProps?: unknown }).pageProps;
+        if (pageProps && typeof pageProps === "object") {
+          console.log(
+            "[yahoo-scrape] pageProps keys:",
+            Object.keys(pageProps as object).join(","),
+          );
+        }
+      }
+      const total = findTotalCount(data);
+      if (total !== undefined) {
+        console.log("[yahoo-scrape] totalCount from __NEXT_DATA__:", total);
+        return total;
+      }
+    } catch {
+      // ignore
+    }
   }
-  const total = findTotalCount(data);
-  return total;
+
+  // 戦略 2: __NEXT_DATA__ JSON 文字列に対する正規表現
+  if (match) {
+    const re = /"(?:totalNumOfPages|totalNumber|totalCount|totalHits|hitCount|numFound|searchHitNum|searchHitsNum|hits|count|totalNum|total)"\s*:\s*(\d+)/g;
+    let m: RegExpExecArray | null;
+    let candidate: number | undefined;
+    while ((m = re.exec(match[1]))) {
+      const n = Number(m[1]);
+      if (Number.isFinite(n) && n > (candidate ?? 0)) candidate = n;
+    }
+    if (candidate !== undefined) {
+      console.log("[yahoo-scrape] totalCount via regex:", candidate);
+      return candidate;
+    }
+  }
+
+  // 戦略 3: HTML 表記の "○○件中" パターン
+  // 例: "1,234件中 1～100件目" や "1,234 件"
+  const htmlPatterns = [
+    /([\d,]+)\s*件中/,
+    /全\s*([\d,]+)\s*件/,
+    /([\d,]+)\s*件/,
+  ];
+  for (const re of htmlPatterns) {
+    const m = html.match(re);
+    if (m) {
+      const n = Number(m[1].replace(/,/g, ""));
+      if (Number.isFinite(n) && n > 0) {
+        console.log(`[yahoo-scrape] totalCount via HTML regex (${re}):`, n);
+        return n;
+      }
+    }
+  }
+
+  console.log("[yahoo-scrape] totalCount not found");
+  return undefined;
 }
 
 // 再帰的に "totalCount" / "total" / "totalHits" 等を探索
