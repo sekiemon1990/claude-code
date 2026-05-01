@@ -408,12 +408,13 @@ export async function scrapeJimotyItem(
       console.log("[jimoty-item] seller id:", sellerId);
     }
 
-    // 記事ページに評価が無い場合、プロフィール evaluations ページから取得
+    // 記事ページに評価が無い場合、プロフィール TOP ページから取得
+    // (evaluations ページよりも summary が見やすい)
     if (!sellerRating && sellerId) {
       try {
-        const evalUrl = `https://jmty.jp/profiles/${sellerId}/evaluations`;
-        console.log("[jimoty-item] fetching evaluations page:", evalUrl);
-        const evalRes = await fetch(evalUrl, {
+        const profileUrl = `https://jmty.jp/profiles/${sellerId}`;
+        console.log("[jimoty-item] fetching profile page:", profileUrl);
+        const profRes = await fetch(profileUrl, {
           headers: {
             "User-Agent": USER_AGENT,
             "Accept-Language": "ja,en-US;q=0.9,en;q=0.8",
@@ -421,38 +422,89 @@ export async function scrapeJimotyItem(
           },
           cache: "no-store",
         });
-        if (evalRes.ok) {
-          const evalHtml = await evalRes.text();
-          // 評価ページから「良い X件」「悪い Y件」「普通 Z件」等のパターンを探す
-          const goodCount = evalHtml.match(/良い[^<>]*?(\d+)\s*件/);
-          const badCount = evalHtml.match(/悪い[^<>]*?(\d+)\s*件/);
-          const totalCount = evalHtml.match(/合計[^<>]*?(\d+)\s*件/);
-          if (goodCount || badCount || totalCount) {
+        if (profRes.ok) {
+          const profHtml = await profRes.text();
+          const $p = cheerio.load(profHtml);
+
+          // 1) 「良い」「普通」「悪い」を含む要素から数字を取る (タブ/サマリー想定)
+          const counts: Record<string, string> = {};
+          $p("*").each((_, el) => {
+            const $el = $p(el);
+            // 子要素を含まない (または極小) 葉ノードに限定
+            if ($el.children().length > 3) return;
+            const t = $el.text().replace(/\s+/g, " ").trim();
+            if (!t || t.length > 30) return;
+            for (const label of ["良い", "普通", "悪い"]) {
+              if (counts[label]) continue;
+              if (t.includes(label)) {
+                // "良い 12" / "良い(12)" / "良い：12" / "良い 12件"
+                const m = t.match(
+                  new RegExp(`${label}[\\s:：(（]*([\\d,]+)`),
+                );
+                if (m) counts[label] = m[1].replace(/,/g, "");
+              }
+            }
+          });
+          if (Object.keys(counts).length > 0) {
             const parts: string[] = [];
-            if (goodCount) parts.push(`良い ${goodCount[1]}件`);
-            if (badCount) parts.push(`悪い ${badCount[1]}件`);
-            if (totalCount) parts.push(`合計 ${totalCount[1]}件`);
+            if (counts["良い"]) parts.push(`良い ${counts["良い"]}`);
+            if (counts["普通"]) parts.push(`普通 ${counts["普通"]}`);
+            if (counts["悪い"]) parts.push(`悪い ${counts["悪い"]}`);
             sellerRating = parts.join(" / ");
             console.log(
-              "[jimoty-item] seller rating from evaluations page:",
+              "[jimoty-item] seller rating via cheerio leaf scan:",
               sellerRating,
             );
-          } else {
-            // フォールバック: ページ内の評価関連テキストを 200 文字 dump
-            const evalIdx = evalHtml.search(/(評価|良い|悪い)/);
-            if (evalIdx > -1) {
+          }
+
+          // 2) フォールバック: HTML 全体の正規表現
+          if (!sellerRating) {
+            const goodM =
+              profHtml.match(/良い[\s\S]{0,40}?>?\s*([\d,]+)\s*件?/) ||
+              profHtml.match(/良い[\s:：(（]*([\d,]+)/);
+            const normalM =
+              profHtml.match(/普通[\s\S]{0,40}?>?\s*([\d,]+)\s*件?/) ||
+              profHtml.match(/普通[\s:：(（]*([\d,]+)/);
+            const badM =
+              profHtml.match(/悪い[\s\S]{0,40}?>?\s*([\d,]+)\s*件?/) ||
+              profHtml.match(/悪い[\s:：(（]*([\d,]+)/);
+            const parts: string[] = [];
+            if (goodM) parts.push(`良い ${goodM[1].replace(/,/g, "")}`);
+            if (normalM) parts.push(`普通 ${normalM[1].replace(/,/g, "")}`);
+            if (badM) parts.push(`悪い ${badM[1].replace(/,/g, "")}`);
+            if (parts.length > 0) {
+              sellerRating = parts.join(" / ");
               console.log(
-                "[jimoty-item] evaluations sample:",
-                evalHtml
-                  .slice(evalIdx, evalIdx + 300)
-                  .replace(/<[^>]+>/g, " ")
+                "[jimoty-item] seller rating via profile regex:",
+                sellerRating,
+              );
+            }
+          }
+
+          // 3) 診断ダンプ: 「良い」を含む要素の周辺 HTML
+          if (!sellerRating) {
+            const goodIdx = profHtml.indexOf("良い");
+            const badIdx = profHtml.indexOf("悪い");
+            if (goodIdx > -1) {
+              console.log(
+                "[jimoty-item] profile '良い' context:",
+                profHtml
+                  .slice(Math.max(0, goodIdx - 80), goodIdx + 200)
+                  .replace(/\s+/g, " "),
+              );
+            }
+            if (badIdx > -1) {
+              console.log(
+                "[jimoty-item] profile '悪い' context:",
+                profHtml
+                  .slice(Math.max(0, badIdx - 80), badIdx + 200)
                   .replace(/\s+/g, " "),
               );
             }
           }
         }
       } catch (e) {
-        console.warn("[jimoty-item] evaluations fetch failed:", e);
+        console.warn("[jimoty-item] profile fetch failed:", e);
       }
     }
   }
