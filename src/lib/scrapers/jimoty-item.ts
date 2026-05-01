@@ -428,13 +428,13 @@ export async function scrapeJimotyItem(
       console.log("[jimoty-item] seller id:", sellerId);
     }
 
-    // 記事ページに評価が無い場合、プロフィール TOP ページから取得
-    // (evaluations ページよりも summary が見やすい)
+    // 記事ページに評価が無い場合、evaluations ページから取得
+    // 実際の HTML 形式: "評価 ： 115" (合計件数) + <img src=".../evaluation_{good|normal|bad}_ico..."> アイコン
     if (!sellerRating && sellerId) {
       try {
-        const profileUrl = `https://jmty.jp/profiles/${sellerId}`;
-        console.log("[jimoty-item] fetching profile page:", profileUrl);
-        const profRes = await fetch(profileUrl, {
+        const evalUrl = `https://jmty.jp/profiles/${sellerId}/evaluations`;
+        console.log("[jimoty-item] fetching evaluations page:", evalUrl);
+        const evalRes = await fetch(evalUrl, {
           headers: {
             "User-Agent": USER_AGENT,
             "Accept-Language": "ja,en-US;q=0.9,en;q=0.8",
@@ -442,89 +442,67 @@ export async function scrapeJimotyItem(
           },
           cache: "no-store",
         });
-        if (profRes.ok) {
-          const profHtml = await profRes.text();
-          const $p = cheerio.load(profHtml);
+        if (evalRes.ok) {
+          const evalHtml = await evalRes.text();
+          const $e = cheerio.load(evalHtml);
 
-          // 1) 「良い」「普通」「悪い」を含む要素から数字を取る (タブ/サマリー想定)
-          const counts: Record<string, string> = {};
-          $p("*").each((_, el) => {
-            const $el = $p(el);
-            // 子要素を含まない (または極小) 葉ノードに限定
-            if ($el.children().length > 3) return;
-            const t = $el.text().replace(/\s+/g, " ").trim();
-            if (!t || t.length > 30) return;
-            for (const label of ["良い", "普通", "悪い"]) {
-              if (counts[label]) continue;
-              if (t.includes(label)) {
-                // "良い 12" / "良い(12)" / "良い：12" / "良い 12件"
-                const m = t.match(
-                  new RegExp(`${label}[\\s:：(（]*([\\d,]+)`),
-                );
-                if (m) counts[label] = m[1].replace(/,/g, "");
-              }
+          // 1) 合計件数: "評価 ： 115" / "評価:115"
+          const totalM = evalHtml.match(/評価\s*[：:]\s*(\d+)/);
+          const total = totalM ? Number(totalM[1]) : null;
+
+          // 2) アイコン src で評価種別をカウント (1 ページ分のみ)
+          const goodN = $e('img[src*="evaluation_good_ico"]').length;
+          const normalN = $e('img[src*="evaluation_normal_ico"]').length;
+          const badN = $e('img[src*="evaluation_bad_ico"]').length;
+          const onPage = goodN + normalN + badN;
+
+          if (total !== null) {
+            // 1 ページに全件収まっていれば内訳を出す
+            if (onPage > 0 && total === onPage) {
+              const parts: string[] = [];
+              if (goodN) parts.push(`良い ${goodN}`);
+              if (normalN) parts.push(`普通 ${normalN}`);
+              if (badN) parts.push(`悪い ${badN}`);
+              sellerRating = `評価 ${total}件 (${parts.join(" / ")})`;
+            } else if (onPage > 0) {
+              // ページネーションあり: 合計と「最近 N 件中」の内訳
+              const parts: string[] = [];
+              if (goodN) parts.push(`良い ${goodN}`);
+              if (normalN) parts.push(`普通 ${normalN}`);
+              if (badN) parts.push(`悪い ${badN}`);
+              sellerRating = `評価 ${total}件 (直近 ${onPage}件: ${parts.join(" / ")})`;
+            } else {
+              sellerRating = `評価 ${total}件`;
             }
-          });
-          if (Object.keys(counts).length > 0) {
-            const parts: string[] = [];
-            if (counts["良い"]) parts.push(`良い ${counts["良い"]}`);
-            if (counts["普通"]) parts.push(`普通 ${counts["普通"]}`);
-            if (counts["悪い"]) parts.push(`悪い ${counts["悪い"]}`);
-            sellerRating = parts.join(" / ");
             console.log(
-              "[jimoty-item] seller rating via cheerio leaf scan:",
+              "[jimoty-item] seller rating from evaluations page:",
               sellerRating,
             );
-          }
-
-          // 2) フォールバック: HTML 全体の正規表現
-          if (!sellerRating) {
-            const goodM =
-              profHtml.match(/良い[\s\S]{0,40}?>?\s*([\d,]+)\s*件?/) ||
-              profHtml.match(/良い[\s:：(（]*([\d,]+)/);
-            const normalM =
-              profHtml.match(/普通[\s\S]{0,40}?>?\s*([\d,]+)\s*件?/) ||
-              profHtml.match(/普通[\s:：(（]*([\d,]+)/);
-            const badM =
-              profHtml.match(/悪い[\s\S]{0,40}?>?\s*([\d,]+)\s*件?/) ||
-              profHtml.match(/悪い[\s:：(（]*([\d,]+)/);
+          } else if (onPage > 0) {
             const parts: string[] = [];
-            if (goodM) parts.push(`良い ${goodM[1].replace(/,/g, "")}`);
-            if (normalM) parts.push(`普通 ${normalM[1].replace(/,/g, "")}`);
-            if (badM) parts.push(`悪い ${badM[1].replace(/,/g, "")}`);
-            if (parts.length > 0) {
-              sellerRating = parts.join(" / ");
+            if (goodN) parts.push(`良い ${goodN}`);
+            if (normalN) parts.push(`普通 ${normalN}`);
+            if (badN) parts.push(`悪い ${badN}`);
+            sellerRating = parts.join(" / ");
+            console.log(
+              "[jimoty-item] seller rating via icon count only:",
+              sellerRating,
+            );
+          } else {
+            // 取れなかった場合の診断
+            const evalIdx = evalHtml.search(/評価/);
+            if (evalIdx > -1) {
               console.log(
-                "[jimoty-item] seller rating via profile regex:",
-                sellerRating,
-              );
-            }
-          }
-
-          // 3) 診断ダンプ: 「良い」を含む要素の周辺 HTML
-          if (!sellerRating) {
-            const goodIdx = profHtml.indexOf("良い");
-            const badIdx = profHtml.indexOf("悪い");
-            if (goodIdx > -1) {
-              console.log(
-                "[jimoty-item] profile '良い' context:",
-                profHtml
-                  .slice(Math.max(0, goodIdx - 80), goodIdx + 200)
-                  .replace(/\s+/g, " "),
-              );
-            }
-            if (badIdx > -1) {
-              console.log(
-                "[jimoty-item] profile '悪い' context:",
-                profHtml
-                  .slice(Math.max(0, badIdx - 80), badIdx + 200)
+                "[jimoty-item] evaluations '評価' context:",
+                evalHtml
+                  .slice(Math.max(0, evalIdx - 50), evalIdx + 250)
                   .replace(/\s+/g, " "),
               );
             }
           }
         }
       } catch (e) {
-        console.warn("[jimoty-item] profile fetch failed:", e);
+        console.warn("[jimoty-item] evaluations fetch failed:", e);
       }
     }
   }
