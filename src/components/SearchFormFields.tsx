@@ -1,8 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useRef, useState } from "react";
-import { Search, Check, ClipboardPaste, History as HistoryIcon } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Search,
+  Check,
+  ClipboardPaste,
+  History as HistoryIcon,
+  Sparkles,
+} from "lucide-react";
 import { PlatformLogo } from "@/components/PlatformLogo";
 import { SOURCES, type SourceKey } from "@/lib/types";
 import { CONDITION_RANKS, CONDITION_META, type ConditionRank } from "@/lib/conditions";
@@ -51,7 +57,8 @@ export function SearchFormFields({
   const [keywordFocused, setKeywordFocused] = useState(false);
   const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const suggestions = useMemo(() => {
+  // 履歴ベースの候補 (空欄時 = 最近の検索、入力時 = 履歴部分一致)
+  const historySuggestions = useMemo(() => {
     const q = keyword.trim().toLowerCase();
     const all = MOCK_HISTORY.map((h) => h.keyword);
     const filtered = q
@@ -59,6 +66,72 @@ export function SearchFormFields({
       : all;
     return filtered.slice(0, 6);
   }, [keyword]);
+
+  // AI オートコンプリート (入力 2 文字以上で 350ms デバウンス後にリクエスト)
+  const [aiCandidates, setAiCandidates] = useState<string[]>([]);
+  const [aiLoading, setAiLoading] = useState(false);
+  const aiCacheRef = useRef<Map<string, string[]>>(new Map());
+  const aiAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    const trimmed = keyword.trim();
+    // 空欄 / 1 文字なら AI 候補は出さない
+    if (trimmed.length < 2) {
+      setAiCandidates([]);
+      setAiLoading(false);
+      aiAbortRef.current?.abort();
+      return;
+    }
+    // キャッシュヒット
+    const cached = aiCacheRef.current.get(trimmed);
+    if (cached) {
+      setAiCandidates(cached);
+      setAiLoading(false);
+      return;
+    }
+
+    setAiLoading(true);
+    const controller = new AbortController();
+    aiAbortRef.current?.abort();
+    aiAbortRef.current = controller;
+
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch("/api/keyword-suggest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prefix: trimmed }),
+          signal: controller.signal,
+        });
+        if (!res.ok) {
+          setAiCandidates([]);
+          setAiLoading(false);
+          return;
+        }
+        const data = (await res.json()) as { candidates?: string[] };
+        const list = (data.candidates ?? []).slice(0, 8);
+        aiCacheRef.current.set(trimmed, list);
+        if (!controller.signal.aborted) {
+          setAiCandidates(list);
+          setAiLoading(false);
+        }
+      } catch {
+        if (!controller.signal.aborted) {
+          setAiCandidates([]);
+          setAiLoading(false);
+        }
+      }
+    }, 350);
+
+    return () => {
+      clearTimeout(t);
+      controller.abort();
+    };
+  }, [keyword]);
+
+  // 表示用の統合候補 (履歴と AI を重複排除しつつ統合)
+  const showAi = aiCandidates.length > 0;
+  const showHistory = historySuggestions.length > 0;
 
   async function handlePasteFromClipboard() {
     try {
@@ -148,29 +221,71 @@ export function SearchFormFields({
             autoComplete="off"
             className="w-full h-12 px-4 rounded-lg bg-surface border border-border text-foreground placeholder:text-muted focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           />
-          {keywordFocused && suggestions.length > 0 && (
-            <div className="absolute z-20 left-0 right-0 mt-1 bg-surface border border-border rounded-lg shadow-lg max-h-72 overflow-y-auto">
-              <div className="px-3 py-1.5 text-[10px] text-muted bg-surface-2 sticky top-0 border-b border-border">
-                {keyword.trim() ? "履歴から候補" : "最近の検索"}
-              </div>
-              {suggestions.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => {
-                    setKeyword(s);
-                    setKeywordFocused(false);
-                  }}
-                  className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-foreground hover:bg-surface-2 text-left"
-                >
-                  <HistoryIcon
-                    size={14}
-                    className="text-muted shrink-0"
-                  />
-                  <span className="truncate">{s}</span>
-                </button>
-              ))}
+          {keywordFocused && (showAi || showHistory || aiLoading) && (
+            <div className="absolute z-20 left-0 right-0 mt-1 bg-surface border border-border rounded-lg shadow-lg max-h-96 overflow-y-auto">
+              {/* AI 候補 (入力中のみ) */}
+              {showAi && (
+                <>
+                  <div className="px-3 py-1.5 text-[10px] text-muted bg-surface-2 sticky top-0 border-b border-border flex items-center gap-1">
+                    <Sparkles size={11} className="text-primary" />
+                    <span>AI 候補</span>
+                    {aiLoading && (
+                      <span className="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                    )}
+                  </div>
+                  {aiCandidates.map((c) => (
+                    <button
+                      key={`ai-${c}`}
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        setKeyword(c);
+                        setKeywordFocused(false);
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-foreground hover:bg-surface-2 text-left"
+                    >
+                      <Sparkles size={14} className="text-primary shrink-0" />
+                      <span className="truncate">{c}</span>
+                    </button>
+                  ))}
+                </>
+              )}
+
+              {/* AI 取得中で AI 候補がまだ無い時のスケルトン */}
+              {!showAi && aiLoading && keyword.trim().length >= 2 && (
+                <div className="px-3 py-3 text-xs text-muted flex items-center gap-2">
+                  <Sparkles size={12} className="text-primary" />
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                  AI 候補を生成中...
+                </div>
+              )}
+
+              {/* 履歴ベースの候補 */}
+              {showHistory && (
+                <>
+                  <div className="px-3 py-1.5 text-[10px] text-muted bg-surface-2 sticky top-0 border-b border-border">
+                    {keyword.trim() ? "履歴から候補" : "最近の検索"}
+                  </div>
+                  {historySuggestions.map((s) => (
+                    <button
+                      key={`h-${s}`}
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        setKeyword(s);
+                        setKeywordFocused(false);
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-foreground hover:bg-surface-2 text-left"
+                    >
+                      <HistoryIcon
+                        size={14}
+                        className="text-muted shrink-0"
+                      />
+                      <span className="truncate">{s}</span>
+                    </button>
+                  ))}
+                </>
+              )}
             </div>
           )}
         </div>
