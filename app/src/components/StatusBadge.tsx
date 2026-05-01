@@ -4,6 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import type { RecordingStatus } from '@/types';
 
 const LABELS: Record<RecordingStatus, string> = {
+  recording: '録音中',
   uploading: 'アップロード中',
   uploaded: '待機中',
   transcribing: '文字起こし中',
@@ -14,6 +15,7 @@ const LABELS: Record<RecordingStatus, string> = {
 };
 
 const COLORS: Record<RecordingStatus, { bg: string; fg: string }> = {
+  recording: { bg: '#FEE2E2', fg: '#991B1B' },
   uploading: { bg: '#E0F2FE', fg: '#075985' },
   uploaded: { bg: '#E0F2FE', fg: '#075985' },
   transcribing: { bg: '#FEF3C7', fg: '#92400E' },

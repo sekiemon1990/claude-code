@@ -6,6 +6,9 @@ import { processRecording } from './processRecording';
 
 admin.initializeApp();
 
+export { notifyRecordingStart } from './notifyRecordingStart';
+export { notifyRecordingEnd } from './notifyRecordingEnd';
+
 /**
  * 録音ドキュメントのステータスが `uploaded` に変わったら、
  * 文字起こし → 議事録生成のパイプラインを走らせる。

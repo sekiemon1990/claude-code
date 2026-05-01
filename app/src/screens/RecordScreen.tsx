@@ -1,6 +1,16 @@
-import React, { useRef, useState } from 'react';
-import { Alert, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  Alert,
+  BackHandler,
+  Linking,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
 
@@ -9,13 +19,26 @@ import { useAuth } from '@/hooks/useAuth';
 import { useStorageStatus, formatBytes } from '@/hooks/useStorageStatus';
 import { persistRecording } from '@/services/audioStorage';
 import { enqueueRecording } from '@/services/uploadQueue';
-import { createRecordingAndUpload } from '@/services/recordings';
+import {
+  createDemoRecording,
+  createRecordingDocOnStart,
+  markRecordingFailed,
+  markRecordingStopped,
+} from '@/services/recordings';
 import { getDealUrl, toSnapshot } from '@/services/crm';
 import { logError } from '@/services/errorLog';
 import { AudioMeter } from '@/components/AudioMeter';
 import { DEMO_MODE } from '@/demo';
 import type { Deal } from '@/types';
-import * as Crypto from 'expo-crypto';
+
+function resolveAssessorName(user: { displayName: string | null; email: string | null }): string {
+  if (user.displayName && user.displayName.trim()) return user.displayName.trim();
+  if (user.email) {
+    const local = user.email.split('@')[0];
+    if (local) return local;
+  }
+  return '担当者不明';
+}
 
 function formatDuration(ms: number): string {
   const totalSec = Math.floor(ms / 1000);
@@ -149,12 +172,31 @@ function RecordScreenInner({ deal, onDone, onChangeDeal }: Props) {
   const { user } = useAuth();
   const recorder = useRecorder();
   const storage = useStorageStatus();
+  const navigation = useNavigation();
   const [saving, setSaving] = useState(false);
-  // setSaving は非同期反映なので、連打レース対策として同期 ref も併用する
+  const [starting, setStarting] = useState(false);
+  // 非同期反映の連打レース対策として同期 ref も併用する
   const savingRef = useRef(false);
+  const startingRef = useRef(false);
+  // 録音開始時に発番される Firestore recordings/{id} の ID を保持。
+  // 録音停止時の doc update / キュー投入で使用する。
+  const recordingIdRef = useRef<string | null>(null);
   const insets = useSafeAreaInsets();
 
+  // 録音中・停止保存中はバックナビゲーションを禁止する。
+  // iOS のスワイプバック (gestureEnabled) と Android の物理 BACK の両方を塞ぐ。
+  const isRecording = recorder.state === 'recording';
+  const isPaused = recorder.state === 'paused';
+  const isLocked = starting || saving || isRecording || isPaused;
+
+  useEffect(() => {
+    navigation.setOptions({ gestureEnabled: !isLocked });
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => isLocked);
+    return () => sub.remove();
+  }, [navigation, isLocked]);
+
   async function handleStart() {
+    if (startingRef.current || savingRef.current) return;
     if (storage.level === 'critical') {
       Alert.alert(
         'ストレージ残量が不足しています',
@@ -162,7 +204,41 @@ function RecordScreenInner({ deal, onDone, onChangeDeal }: Props) {
       );
       return;
     }
-    await recorder.start();
+    startingRef.current = true;
+    setStarting(true);
+    try {
+      await recorder.start();
+      if (DEMO_MODE) {
+        // デモは Firestore doc を一切作らない (Chatwork 通知も飛ばない)
+        return;
+      }
+      if (!user) return;
+      const assessorName = resolveAssessorName(user);
+      const title = `${deal.customerName} ${format(new Date(deal.reservationAt), 'M/d HH:mm', {
+        locale: ja,
+      })}`;
+      const { recordingId } = await createRecordingDocOnStart({
+        ownerUid: user.uid,
+        dealId: deal.id,
+        dealSnapshot: toSnapshot(deal),
+        title,
+        assessorName,
+      });
+      recordingIdRef.current = recordingId;
+    } catch (e) {
+      // doc 作成失敗時は録音を巻き戻す
+      try {
+        await recorder.stop();
+      } catch {
+        // 二次エラーは握りつぶす
+      }
+      recorder.reset();
+      Alert.alert('録音開始失敗', e instanceof Error ? e.message : '不明なエラー');
+      void logError('recording_failed', e, { dealId: deal.id, phase: 'start' });
+    } finally {
+      startingRef.current = false;
+      setStarting(false);
+    }
   }
 
   async function handleStop() {
@@ -176,6 +252,14 @@ function RecordScreenInner({ deal, onDone, onChangeDeal }: Props) {
 
       if (!result) {
         // stop が null を返した = 録音ファイル取得失敗。UI はすでに 'stopped' に遷移済み。
+        // 既に Firestore doc が作られている場合 (非DEMO) は failed に倒す。
+        if (!DEMO_MODE && recordingIdRef.current) {
+          await markRecordingFailed({
+            recordingId: recordingIdRef.current,
+            errorMessage: '録音ファイルの取得に失敗しました',
+          });
+          recordingIdRef.current = null;
+        }
         Alert.alert('保存失敗', '録音ファイルの取得に失敗しました。もう一度録音し直してください。');
         recorder.reset();
         return;
@@ -187,20 +271,28 @@ function RecordScreenInner({ deal, onDone, onChangeDeal }: Props) {
       })}`;
 
       if (DEMO_MODE) {
-        // デモ: 永続化・キューをスキップし、直接 demoStore に流し込む
-        await createRecordingAndUpload({
+        // デモ: 永続化・キューをスキップし、直接 demoStore に流し込む。Firestore は触らない。
+        await createDemoRecording({
           ownerUid: user.uid,
-          dealId: deal.id,
           dealSnapshot: toSnapshot(deal),
           title,
-          localUri: result.uri,
           durationMs: result.durationMs,
         });
       } else {
-        const queueId = Crypto.randomUUID();
-        const persistedUri = await persistRecording(result.uri, queueId);
-
+        const recordingId = recordingIdRef.current;
+        if (!recordingId) {
+          // 通常はあり得ない (handleStart で必ず発番される)。安全側で停止。
+          throw new Error('録音セッションが見つかりません。録音を最初からやり直してください。');
+        }
+        // 録音 doc を 'recording' → 'uploading' に遷移させる。
+        // この瞬間に notifyRecordingEnd Function が発火する。
+        await markRecordingStopped({
+          recordingId,
+          durationMs: result.durationMs,
+        });
+        const persistedUri = await persistRecording(result.uri, recordingId);
         await enqueueRecording({
+          recordingId,
           ownerUid: user.uid,
           dealId: deal.id,
           dealSnapshot: toSnapshot(deal),
@@ -208,6 +300,7 @@ function RecordScreenInner({ deal, onDone, onChangeDeal }: Props) {
           localUri: persistedUri,
           durationMs: result.durationMs,
         });
+        recordingIdRef.current = null;
       }
 
       recorder.reset();
@@ -222,8 +315,6 @@ function RecordScreenInner({ deal, onDone, onChangeDeal }: Props) {
   }
 
   const isIdle = recorder.state === 'idle';
-  const isRecording = recorder.state === 'recording';
-  const isPaused = recorder.state === 'paused';
 
   return (
     <View style={[styles.container, { paddingTop: Math.max(insets.top, Platform.OS === 'ios' ? 60 : 20) }]}>
@@ -276,11 +367,11 @@ function RecordScreenInner({ deal, onDone, onChangeDeal }: Props) {
       <View style={styles.controls}>
         {isIdle || recorder.state === 'stopped' ? (
           <Pressable
-            style={[styles.mainBtn, styles.startBtn, saving && styles.disabled]}
-            disabled={saving}
+            style={[styles.mainBtn, styles.startBtn, (saving || starting) && styles.disabled]}
+            disabled={saving || starting}
             onPress={handleStart}
           >
-            <Text style={styles.mainBtnText}>録音開始</Text>
+            <Text style={styles.mainBtnText}>{starting ? '開始中...' : '録音開始'}</Text>
           </Pressable>
         ) : null}
 

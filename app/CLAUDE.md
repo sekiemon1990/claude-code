@@ -70,3 +70,23 @@ These are real constraints; do not "clean them up" without testing on iOS 26:
 ## Error visibility
 
 `App.tsx` installs a global `ErrorUtils.setGlobalHandler` plus an `AppErrorBoundary`. JS errors render an in-app red banner (`GlobalErrorBanner`) rather than a black screen. `src/services/errorLog.ts` is the canonical place to send/structure error events; prefer `logError(...)` over bare `console.error` in feature code.
+
+## Status flow with Chatwork notification (added 2026-05)
+
+The `recordings/{id}` lifecycle now begins **at recording start**, not at upload time:
+
+1. `RecordScreen.handleStart` calls `recorder.start()` then `createRecordingDocOnStart()` (`src/services/recordings.ts`). The doc is created with `status: 'recording'`, `recordingStartedAt` (client `Timestamp.fromDate(new Date())`, **not** `serverTimestamp`), `assessorName` (from Auth `displayName` with `email@-prefix` → `'担当者不明'` fallback), and null `chatworkNotifiedStartAt/EndAt`.
+2. `RecordScreen.handleStop` calls `markRecordingStopped()` to transition `'recording' → 'uploading'` with `recordingEndedAt` (also client time) and `durationMs` (from the recorder, not `end - start` — pause/resume makes those diverge). The same call enqueues to `uploadQueue` with the now-known `recordingId`.
+3. `uploadRecordingToCompletion(recordingId, ...)` performs the actual Storage upload against the existing doc. **P0-2 changed**: failure now updates the doc to `'failed'` rather than deleting it (delete would orphan an already-sent Chatwork start notification). If the doc was deleted out from under us, we throw `RecordingDocNotFoundError` and `backgroundUpload` drops the queue item.
+4. The existing `onRecordingUploaded` Cloud Function still fires only on `'uploading' → 'uploaded'`, so it is unaffected by the new `'recording'` prefix state.
+
+Chatwork notifications are Cloud Functions in `functions/src/`:
+- `notifyRecordingStart` — `onDocumentCreated`, filters `after.status === 'recording'`, idempotent on `chatworkNotifiedStartAt`.
+- `notifyRecordingEnd` — `onDocumentUpdated`, filters `before.status === 'recording' && after.status === 'uploading'`, idempotent on `chatworkNotifiedEndAt`.
+- Both use `retry: true` and accept `CHATWORK_API_TOKEN`, `CHATWORK_ROOM_ID_GLOBAL` secrets. The Chatwork POST has a 10 s timeout. If the POST succeeds but the flag update fails, we **do not throw** (would cause double-post on retry) — we log `[CHATWORK] post succeeded but flag update failed` for grep-based detection.
+
+Demo mode (`DEMO_MODE`) skips Firestore doc creation entirely (`createDemoRecording` writes only to `demoStore`), so Chatwork notifications never fire in demo. This is intentional.
+
+`RecordScreen` also blocks back navigation while `starting || saving || isRecording || isPaused` — both iOS swipe-back (`gestureEnabled`) and Android hardware back (`BackHandler`) are intercepted. `handleStart` has its own `startingRef` sync gate to prevent rapid-tap from creating multiple docs.
+
+`status: 'recording'` rows are rendered specially in `RecordingListScreen`: no Detail navigation, no playback, only a delete button — these only appear when the app was killed mid-recording. There is **no** auto-cleanup TTL function; manual deletion is the MVP recovery path.

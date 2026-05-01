@@ -7,7 +7,10 @@ import {
   removeQueueItem,
   updateQueueItem,
 } from '@/services/uploadQueue';
-import { createRecordingAndUpload } from '@/services/recordings';
+import {
+  RecordingDocNotFoundError,
+  uploadRecordingToCompletion,
+} from '@/services/recordings';
 import { logError } from '@/services/errorLog';
 import { DEMO_MODE } from '@/demo';
 
@@ -96,18 +99,24 @@ export async function drainUploadQueue(options: {
     options.onProgress?.(target.queueId, 0);
 
     try {
-      await createRecordingAndUpload({
+      await uploadRecordingToCompletion({
+        recordingId: target.recordingId,
         ownerUid: target.ownerUid,
-        dealId: target.dealId,
-        dealSnapshot: target.dealSnapshot,
-        title: target.title,
         localUri: target.localUri,
-        durationMs: target.durationMs,
-        onProgress: (percent) => options.onProgress?.(target.queueId, percent),
+        onProgress: (percent: number) => options.onProgress?.(target.queueId, percent),
       });
       await removeQueueItem(ownerUid, target.queueId);
       uploaded += 1;
     } catch (err) {
+      // 録音 doc がユーザー操作で削除済みの場合: リトライしてもサルベージ不能なのでキューから除外。
+      // ローカルファイルも removeQueueItem 内で破棄される。
+      if (err instanceof RecordingDocNotFoundError) {
+        // eslint-disable-next-line no-console
+        console.warn('[UPLOAD] doc not found, dropping queue item:', target.recordingId);
+        await removeQueueItem(ownerUid, target.queueId);
+        skipped += 1;
+        continue;
+      }
       const nextAttempts = target.attempts + 1;
       await updateQueueItem(ownerUid, target.queueId, {
         status: 'failed',

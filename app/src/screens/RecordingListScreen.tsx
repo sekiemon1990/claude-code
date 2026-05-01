@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Alert,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -16,7 +17,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '@/hooks/useAuth';
 import { useUploadQueue } from '@/hooks/useUploadQueue';
 import { useStorageStatus, formatBytes } from '@/hooks/useStorageStatus';
-import { subscribeToRecordings } from '@/services/recordings';
+import { deleteRecording, subscribeToRecordings } from '@/services/recordings';
 import { removeQueueItem, type QueuedRecording } from '@/services/uploadQueue';
 import { StatusBadge } from '@/components/StatusBadge';
 import { ProgressBar } from '@/components/ProgressBar';
@@ -146,6 +147,30 @@ export function RecordingListScreen({
     if (!user) return;
     await removeQueueItem(user.uid, item.queueId);
     await refresh();
+  }
+
+  // status='recording' のままリストに残った doc は、アプリが録音中に kill された
+  // 等の理由で取り残されたもの。MVP では中断検知の自動遷移を行わないため、
+  // ユーザーが手動で削除できるようにする。再生・編集系の操作は出さない。
+  function handleDeleteRecordingState(rec: Recording) {
+    Alert.alert(
+      '録音を削除',
+      '録音中状態のまま残っている記録です。削除しますか？',
+      [
+        { text: 'キャンセル', style: 'cancel' },
+        {
+          text: '削除',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteRecording(rec);
+            } catch (e) {
+              Alert.alert('削除失敗', e instanceof Error ? e.message : '不明なエラー');
+            }
+          },
+        },
+      ],
+    );
   }
 
   // ダッシュボード + 各種バナーを FlatList の ListHeaderComponent に
@@ -403,6 +428,35 @@ export function RecordingListScreen({
             );
           }
           const rec = row.item;
+          // 'recording' は録音中で音声ファイルがまだ無い (アプリ kill 等の取り残し)。
+          // 詳細画面 (再生・議事録・CRM 投稿) は無意味なので開かせず、削除のみ可能にする。
+          if (rec.status === 'recording') {
+            return (
+              <View key={`c:${rec.id}`} style={styles.row}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.customerName} numberOfLines={1}>
+                    {rec.dealSnapshot?.customerName ?? rec.title}
+                  </Text>
+                  {rec.dealSnapshot ? (
+                    <Text style={styles.reservation}>
+                      予約:{' '}
+                      {format(new Date(rec.dealSnapshot.reservationAt), 'M/d (E) HH:mm', {
+                        locale: ja,
+                      })}
+                    </Text>
+                  ) : null}
+                  <View style={{ marginTop: 6 }}>
+                    <StatusBadge status={rec.status} />
+                  </View>
+                  <View style={styles.rowActions}>
+                    <Pressable onPress={() => handleDeleteRecordingState(rec)}>
+                      <Text style={styles.discard}>削除</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+            );
+          }
           const processing = isPipelineProcessing(rec.status);
           const percent = pipelinePercent(rec.status);
           return (

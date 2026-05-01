@@ -1,6 +1,7 @@
 import type { FirestoreTimestamp as Timestamp } from '@/config/firebase';
 
 export type RecordingStatus =
+  | 'recording'
   | 'uploading'
   | 'uploaded'
   | 'transcribing'
@@ -57,6 +58,13 @@ export type Recording = {
   minutes?: Minutes;
   createdAt: Timestamp;
   updatedAt: Timestamp;
+  // Chatwork 通知 / 録音ライフサイクル用フィールド (2026-05 追加)。
+  // 既存ドキュメントは 'recording' を経由しないため全て optional。
+  assessorName?: string;
+  recordingStartedAt?: Timestamp;
+  recordingEndedAt?: Timestamp | null;
+  chatworkNotifiedStartAt?: Timestamp | null;
+  chatworkNotifiedEndAt?: Timestamp | null;
 };
 
 export type Minutes = {

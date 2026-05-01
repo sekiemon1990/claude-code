@@ -9,6 +9,8 @@ export type QueuedRecordingStatus = 'pending' | 'uploading' | 'failed';
 
 export type QueuedRecording = {
   queueId: string;
+  /** Firestore recordings/{id} の ID。録音開始時に作成された doc に対応。 */
+  recordingId: string;
   ownerUid: string;
   dealId: string;
   dealSnapshot: DealSnapshot;
@@ -60,6 +62,7 @@ export async function listQueue(ownerUid: string): Promise<QueuedRecording[]> {
 }
 
 export async function enqueueRecording(params: {
+  recordingId: string;
   ownerUid: string;
   dealId: string;
   dealSnapshot: DealSnapshot;
@@ -69,6 +72,7 @@ export async function enqueueRecording(params: {
 }): Promise<QueuedRecording> {
   const item: QueuedRecording = {
     queueId: Crypto.randomUUID(),
+    recordingId: params.recordingId,
     ownerUid: params.ownerUid,
     dealId: params.dealId,
     dealSnapshot: params.dealSnapshot,
