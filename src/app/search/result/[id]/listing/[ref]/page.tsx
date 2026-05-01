@@ -79,10 +79,34 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
     refetchOnWindowFocus: false,
   });
 
+  const jimotyQuery = useQuery({
+    queryKey: ["scrape_jimoty", fromKeyword ?? "", fromExcludes],
+    queryFn: async (): Promise<SourceResult> => {
+      const res = await fetch("/api/scrape/jimoty", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          keyword: fromKeyword,
+          excludes: fromExcludes || undefined,
+        }),
+      });
+      if (!res.ok) throw new Error("ジモティー取得失敗");
+      const data = (await res.json()) as { result: SourceResult };
+      return data.result;
+    },
+    enabled: !!parsed && source === "jimoty" && !!fromKeyword,
+    staleTime: 5 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
+
   // 探索順: 本物のスクレイピング結果 → モック
   let baseListing: Listing | undefined;
   if (parsed && source === "yahoo_auction" && yahooQuery.data) {
     baseListing = yahooQuery.data.listings.find((l) => l.id === lid);
+  }
+  if (parsed && source === "jimoty" && jimotyQuery.data) {
+    baseListing = jimotyQuery.data.listings.find((l) => l.id === lid);
   }
   if (!baseListing && parsed) {
     const sourceData = MOCK_RESULT.sources.find((s) => s.source === source);
@@ -154,12 +178,11 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
   if (!parsed) return notFound();
 
   // データ取得中のローディング
-  if (
-    !baseListing &&
-    source === "yahoo_auction" &&
-    fromKeyword &&
-    (yahooQuery.isLoading || yahooQuery.isFetching)
-  ) {
+  const isFetchingSource =
+    (source === "yahoo_auction" &&
+      (yahooQuery.isLoading || yahooQuery.isFetching)) ||
+    (source === "jimoty" && (jimotyQuery.isLoading || jimotyQuery.isFetching));
+  if (!baseListing && fromKeyword && isFetchingSource) {
     return (
       <div className="pt-12 text-center text-muted text-sm">
         商品情報を取得中...

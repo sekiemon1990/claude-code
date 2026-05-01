@@ -25,8 +25,12 @@ export async function scrapeJimoty(
 ): Promise<SourceResult> {
   const { keyword, excludes, limit = 30 } = options;
 
+  // ジモティーは /jp/<keyword>/all/ や /all?keyword=... など複数パターンあり
+  // まず /jp/<keyword>/sale-all/ (売ります) を優先で試す
   const url = new URL(JMTY_BASE);
   url.searchParams.set("keyword", keyword);
+  // 「売ります」カテゴリに絞る (個人売買での価格相場が見たいため)
+  url.searchParams.set("category_group", "j-sale");
 
   const res = await fetch(url.toString(), {
     headers: {
@@ -49,12 +53,27 @@ export async function scrapeJimoty(
   console.log("[jimoty-scrape] html size:", html.length);
 
   // 構造プローブ
-  const itemLinkCount = (html.match(/\/(?:all|car|jobs|community)\/article-/g) ?? []).length;
+  const allArticleLinks = (html.match(/article-[a-z0-9_]+/gi) ?? []).length;
+  const saleArticleLinks = (html.match(/\/sale\/article-[a-z0-9_]+/gi) ?? []).length;
+  const itemUrls = Array.from(
+    new Set((html.match(/\/[a-z_]+\/(?:sale\/)?article-[a-z0-9_]+/gi) ?? []).slice(0, 5)),
+  );
   console.log("[jimoty-scrape] structure probe:", {
-    itemLinkCount,
+    allArticleLinks,
+    saleArticleLinks,
+    sampleUrls: itemUrls,
     hasNextData: html.includes('id="__NEXT_DATA__"'),
     hasJsonLd: html.includes('type="application/ld+json"'),
   });
+
+  // 検索結果ヘッダー周辺の HTML サンプル (キーワードがヒットしているか確認)
+  const headerIdx = html.search(/(検索結果|該当|件中|件以上)/);
+  if (headerIdx > -1) {
+    console.log(
+      "[jimoty-scrape] header context:",
+      html.slice(Math.max(0, headerIdx - 100), headerIdx + 300),
+    );
+  }
 
   // パース
   const listings = parseJimotyHtml(html, limit);
@@ -62,6 +81,12 @@ export async function scrapeJimoty(
 
   console.log("[jimoty-scrape] parsed:", listings.length);
   console.log("[jimoty-scrape] total available:", totalAvailable);
+  if (listings[0]) {
+    console.log(
+      "[jimoty-scrape] sample listing:",
+      JSON.stringify(listings[0]).slice(0, 300),
+    );
+  }
 
   // excludes が指定されていればクライアント側でフィルタ
   let filtered = listings;
