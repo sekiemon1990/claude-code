@@ -130,6 +130,26 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
   const pinned = useListingPinnedValue(listingRef);
   const memo = useListingMemoValue(listingRef);
 
+  // 閲覧履歴の記録 (baseListing が無い時はスキップ)
+  useEffect(() => {
+    if (!baseListing) return;
+    recordListingView({
+      ref: listingRef,
+      source,
+      title: baseListing.title,
+      price: baseListing.price,
+      thumbnail: baseListing.thumbnail,
+      endedAt: baseListing.endedAt,
+      condition: baseListing.condition,
+      fromKeyword,
+    });
+  }, [
+    baseListing,
+    listingRef,
+    source,
+    fromKeyword,
+  ]);
+
   // 全 hooks を呼んだあとで早期リターン
   if (!parsed) return notFound();
 
@@ -167,28 +187,6 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
       : listing.thumbnail
         ? [listing.thumbnail]
         : [];
-
-  useEffect(() => {
-    recordListingView({
-      ref: listingRef,
-      source,
-      title: listing.title,
-      price: listing.price,
-      thumbnail: listing.thumbnail,
-      endedAt: listing.endedAt,
-      condition: listing.condition,
-      fromKeyword,
-    });
-  }, [
-    listingRef,
-    source,
-    listing.title,
-    listing.price,
-    listing.thumbnail,
-    listing.endedAt,
-    listing.condition,
-    fromKeyword,
-  ]);
 
   function startMemoEdit() {
     setMemoDraft(memo);
