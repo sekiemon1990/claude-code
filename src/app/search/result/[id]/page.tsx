@@ -878,7 +878,13 @@ function ResultInner({ resultId }: { resultId: string }) {
             ヒント: カードをダブルタップで査定メモを追加できます
           </div>
 
-          <div className="flex flex-col gap-2">
+          <div
+            className={
+              compact
+                ? "flex flex-col gap-2 md:grid md:grid-cols-2 lg:grid-cols-3"
+                : "flex flex-col gap-2 md:grid md:grid-cols-2 lg:grid-cols-3"
+            }
+          >
             {visibleListings.map((l) => (
               <ListingCard
                 key={`${l.source}-${l.id}`}

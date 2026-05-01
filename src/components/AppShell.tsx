@@ -24,7 +24,7 @@ export function AppShell({
   return (
     <div className="min-h-screen w-full bg-background flex flex-col">
       <header className="sticky top-0 z-30 bg-surface border-b border-border">
-        <div className="mx-auto max-w-md w-full px-4 h-14 flex items-center justify-between">
+        <div className="mx-auto max-w-md md:max-w-3xl lg:max-w-5xl w-full px-4 h-14 flex items-center justify-between">
           {back ? (
             <Link
               href={back.href}
@@ -49,6 +49,35 @@ export function AppShell({
               {title}
             </span>
           )}
+          {/* PC 用の上部ナビ (md+ で表示) */}
+          {showNav && !back && (
+            <nav className="hidden md:flex items-center gap-1">
+              <TopNavItem
+                href="/search"
+                icon={<Search size={16} />}
+                label="検索"
+                matchPrefix="/search"
+              />
+              <TopNavItem
+                href="/list"
+                icon={<ListChecks size={16} />}
+                label="リスト"
+                matchPrefix="/list"
+              />
+              <TopNavItem
+                href="/history"
+                icon={<History size={16} />}
+                label="履歴"
+                matchPrefix="/history"
+              />
+              <TopNavItem
+                href="/settings"
+                icon={<SettingsIcon size={16} />}
+                label="設定"
+                matchPrefix="/settings"
+              />
+            </nav>
+          )}
           <div className="flex items-center gap-1">
             {rightSlot}
             <ThemeToggle />
@@ -58,12 +87,12 @@ export function AppShell({
 
       <ListBar />
 
-      <main className="flex-1 mx-auto max-w-md w-full px-4 py-4 pb-24">
+      <main className="flex-1 mx-auto max-w-md md:max-w-3xl lg:max-w-5xl w-full px-4 py-4 pb-24 md:pb-8">
         {children}
       </main>
 
       {showNav && (
-        <nav className="fixed bottom-0 inset-x-0 z-30 bg-surface border-t border-border">
+        <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-surface border-t border-border">
           <div className="mx-auto max-w-md w-full grid grid-cols-4">
             <NavItem
               href="/search"
@@ -127,6 +156,35 @@ function NavItem({
       )}
       <span className="mb-0.5">{icon}</span>
       <span>{label}</span>
+    </Link>
+  );
+}
+
+function TopNavItem({
+  href,
+  icon,
+  label,
+  matchPrefix,
+}: {
+  href: string;
+  icon: React.ReactNode;
+  label: string;
+  matchPrefix: string;
+}) {
+  const pathname = usePathname();
+  const active = pathname?.startsWith(matchPrefix) ?? false;
+
+  return (
+    <Link
+      href={href}
+      className={
+        active
+          ? "inline-flex items-center gap-1.5 px-3 h-9 rounded-md text-sm font-semibold text-primary bg-primary/10"
+          : "inline-flex items-center gap-1.5 px-3 h-9 rounded-md text-sm text-muted hover:text-foreground hover:bg-surface-2"
+      }
+    >
+      {icon}
+      {label}
     </Link>
   );
 }
