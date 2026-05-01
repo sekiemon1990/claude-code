@@ -25,11 +25,11 @@ export async function scrapeJimoty(
 ): Promise<SourceResult> {
   const { keyword, excludes, limit = 30 } = options;
 
-  // ジモティー検索 URL: /all/sale-all?keyword=... が「売ります」全カテゴリの検索
-  const url = new URL("https://jmty.jp/all/sale-all");
-  url.searchParams.set("keyword", keyword);
+  // Jimoty の検索 URL 形式は path-based: /all/sale-all/g-{keyword} (g- は keyword)
+  const encodedKeyword = encodeURIComponent(keyword);
+  const url = `https://jmty.jp/all/sale-all/g-${encodedKeyword}`;
 
-  const res = await fetch(url.toString(), {
+  const res = await fetch(url, {
     headers: {
       "User-Agent": USER_AGENT,
       "Accept-Language": "ja,en-US;q=0.9,en;q=0.8",
@@ -38,9 +38,10 @@ export async function scrapeJimoty(
       "Cache-Control": "no-cache",
     },
     cache: "no-store",
+    redirect: "follow",
   });
 
-  console.log("[jimoty-scrape] status:", res.status, "url:", url.toString());
+  console.log("[jimoty-scrape] status:", res.status, "url:", url, "final:", res.url);
 
   if (!res.ok) {
     throw new Error(`ジモティー応答エラー: ${res.status}`);
@@ -64,7 +65,6 @@ export async function scrapeJimoty(
 
   // 構造プローブ
   const allArticleLinks = (html.match(/article-[a-z0-9_]+/gi) ?? []).length;
-  // /[prefecture]/sale-[cat]/article-XXX 形式を探す (実際の Jimoty URL)
   const prefArticleLinks = (
     html.match(/\/[a-z_]+\/sale-[a-z_]+\/article-[a-z0-9_]+/gi) ?? []
   ).length;
@@ -84,11 +84,14 @@ export async function scrapeJimoty(
     hasJsonLd: html.includes('type="application/ld+json"'),
   });
 
-  // パース
-  const listings = parseJimotyHtml(html, limit);
+  // パース: 検索結果以外 (?from=pr 等のおすすめリンク) を除外する
+  const listings = parseJimotyHtml(html, limit).filter((l) => {
+    // ?from=pr のような promoted リンクを除外
+    return !l.url.includes("?from=pr") && !l.url.includes("&from=pr");
+  });
   const totalAvailable = parseTotalCount(html);
 
-  console.log("[jimoty-scrape] parsed:", listings.length);
+  console.log("[jimoty-scrape] parsed (excl. promoted):", listings.length);
   console.log("[jimoty-scrape] total available:", totalAvailable);
   if (listings[0]) {
     console.log(
