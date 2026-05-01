@@ -42,6 +42,7 @@ import {
   buildPlatformSearchUrl,
 } from "@/lib/utils";
 import { RelativeDate } from "@/components/RelativeDate";
+import { RefineKeywordSuggestions } from "@/components/RefineKeywordSuggestions";
 import {
   searchKeyFromKeyword,
   setMemo,
@@ -601,6 +602,17 @@ function ResultInner({ resultId }: { resultId: string }) {
             ）からデータが取得できませんでした。表示は他の媒体のみの結果です。
           </p>
         </section>
+      )}
+
+      {/* 絞り込みキーワード提案 (件数が多すぎる時) */}
+      {!isEmpty && totalAvailableSum > 100 && totalAvailableSum > fetchedSum && (
+        <RefineKeywordSuggestions
+          resultId={resultId}
+          keyword={keyword}
+          totalAvailable={totalAvailableSum}
+          sampleTitles={flatListings.slice(0, 30).map((l) => l.title)}
+          baseQueryParams={params}
+        />
       )}
 
       {/* 査定ツールパネル（AI / 計算機 / 提案を統合） */}
