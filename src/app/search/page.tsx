@@ -8,11 +8,13 @@ import { AppShell } from "@/components/AppShell";
 import {
   SearchFormFields,
   type Period,
+  PERIOD_OPTIONS,
+  DEFAULT_PERIOD,
 } from "@/components/SearchFormFields";
 import { SOURCES, type SourceKey } from "@/lib/types";
 import { useLastResultUrl } from "@/lib/storage";
 
-const VALID_PERIODS: Period[] = ["30", "90", "all"];
+const VALID_PERIODS: Period[] = PERIOD_OPTIONS.map((p) => p.v);
 const VALID_SOURCES: SourceKey[] = SOURCES.map((s) => s.key);
 
 function SearchContent() {
@@ -28,7 +30,7 @@ function SearchContent() {
     period:
       periodParam && VALID_PERIODS.includes(periodParam as Period)
         ? (periodParam as Period)
-        : ("30" as Period),
+        : DEFAULT_PERIOD,
     sources: sourcesParam
       ? (sourcesParam.split(",").filter((s) =>
           VALID_SOURCES.includes(s as SourceKey)

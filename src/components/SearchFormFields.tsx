@@ -14,8 +14,31 @@ import { SOURCES, type SourceKey } from "@/lib/types";
 import { CONDITION_RANKS, CONDITION_META, type ConditionRank } from "@/lib/conditions";
 import { MOCK_HISTORY } from "@/lib/mock-data";
 import { findDictionaryMatches } from "@/lib/keyword-dictionary";
+import {
+  recordSearchKeyword,
+  fetchUserKeywordSuggestions,
+} from "@/lib/api/search-keywords";
 
-export type Period = "30" | "90" | "all";
+export type Period = "7" | "30" | "60" | "90" | "180" | "365" | "all";
+
+// UI 上の選択肢 (順序固定)
+export const PERIOD_OPTIONS: { v: Period; label: string }[] = [
+  { v: "7", label: "1週間" },
+  { v: "30", label: "1ヶ月" },
+  { v: "60", label: "2ヶ月" },
+  { v: "90", label: "3ヶ月" },
+  { v: "180", label: "半年" },
+  { v: "365", label: "1年" },
+  { v: "all", label: "全期間" },
+];
+
+// デフォルト期間
+export const DEFAULT_PERIOD: Period = "90";
+
+// 期間表示ラベル取得
+export function getPeriodLabel(period: Period): string {
+  return PERIOD_OPTIONS.find((p) => p.v === period)?.label ?? `${period}日`;
+}
 export type ShippingFilter = "any" | "free" | "paid";
 export type ConditionRankNonUnknown = Exclude<ConditionRank, "unknown">;
 
@@ -43,7 +66,7 @@ export function SearchFormFields({
 
   const [keyword, setKeyword] = useState(initial?.keyword ?? "");
   const [excludes, setExcludes] = useState(initial?.excludes ?? "");
-  const [period, setPeriod] = useState<Period>(initial?.period ?? "30");
+  const [period, setPeriod] = useState<Period>(initial?.period ?? DEFAULT_PERIOD);
   const [selectedSources, setSelectedSources] = useState<SourceKey[]>(
     initial?.sources && initial.sources.length > 0
       ? initial.sources
@@ -73,6 +96,23 @@ export function SearchFormFields({
     const trimmed = keyword.trim();
     if (trimmed.length < 1) return [];
     return findDictionaryMatches(trimmed, 6);
+  }, [keyword]);
+
+  // ユーザー個人の検索履歴 (Supabase ベース)
+  const [userHistoryCandidates, setUserHistoryCandidates] = useState<string[]>([]);
+
+  useEffect(() => {
+    let canceled = false;
+    fetchUserKeywordSuggestions(keyword, 5)
+      .then((list) => {
+        if (!canceled) setUserHistoryCandidates(list);
+      })
+      .catch(() => {
+        if (!canceled) setUserHistoryCandidates([]);
+      });
+    return () => {
+      canceled = true;
+    };
   }, [keyword]);
 
   // AI オートコンプリート (入力 2 文字以上で 150ms デバウンス後にリクエスト)
@@ -148,10 +188,11 @@ export function SearchFormFields({
     });
   }, []);
 
-  // 表示用の統合候補 (履歴と AI を重複排除しつつ統合)
+  // 表示用の統合候補
   const showAi = aiCandidates.length > 0;
   const showHistory = historySuggestions.length > 0;
   const showDictionary = dictionaryCandidates.length > 0 && !showAi;
+  const showUserHistory = userHistoryCandidates.length > 0;
 
   async function handlePasteFromClipboard() {
     try {
@@ -197,6 +238,8 @@ export function SearchFormFields({
     e.preventDefault();
     if (!keyword.trim()) return;
     if (selectedSources.length === 0) return;
+    // バックグラウンドで検索キーワード履歴に記録 (失敗しても続行)
+    recordSearchKeyword(keyword).catch(() => {});
     router.push(`/search/loading?${buildParams().toString()}`);
     onAfterSubmit?.();
   }
@@ -242,8 +285,37 @@ export function SearchFormFields({
             className="w-full h-12 px-4 rounded-lg bg-surface border border-border text-foreground placeholder:text-muted focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           />
           {keywordFocused &&
-            (showAi || showHistory || showDictionary || aiLoading) && (
+            (showAi ||
+              showHistory ||
+              showDictionary ||
+              showUserHistory ||
+              aiLoading) && (
             <div className="absolute z-20 left-0 right-0 mt-1 bg-surface border border-border rounded-lg shadow-lg max-h-96 overflow-y-auto">
+              {/* あなたの検索履歴 (Supabase 永続) */}
+              {showUserHistory && (
+                <>
+                  <div className="px-3 py-1.5 text-[10px] text-muted bg-surface-2 sticky top-0 border-b border-border flex items-center gap-1">
+                    <HistoryIcon size={11} className="text-foreground" />
+                    <span>あなたの検索履歴</span>
+                  </div>
+                  {userHistoryCandidates.map((c) => (
+                    <button
+                      key={`uh-${c}`}
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        setKeyword(c);
+                        setKeywordFocused(false);
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-foreground hover:bg-surface-2 text-left"
+                    >
+                      <HistoryIcon size={14} className="text-foreground shrink-0" />
+                      <span className="truncate">{c}</span>
+                    </button>
+                  ))}
+                </>
+              )}
+
               {/* ローカル辞書候補 (AI 取得前の即時表示) */}
               {showDictionary && (
                 <>
@@ -469,14 +541,8 @@ export function SearchFormFields({
 
       <div className="flex flex-col gap-1.5">
         <span className="text-sm font-medium text-foreground">検索期間</span>
-        <div className="grid grid-cols-3 gap-2">
-          {(
-            [
-              { v: "30", label: "直近30日" },
-              { v: "90", label: "直近90日" },
-              { v: "all", label: "全期間" },
-            ] as { v: Period; label: string }[]
-          ).map((opt) => (
+        <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
+          {PERIOD_OPTIONS.map((opt) => (
             <button
               key={opt.v}
               type="button"

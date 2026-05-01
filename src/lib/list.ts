@@ -48,7 +48,7 @@ export type DefaultQuery = Omit<ListItemQuery, "keyword">;
 
 const FALLBACK_DEFAULT_QUERY: DefaultQuery = {
   excludes: "",
-  period: "30",
+  period: "90",
   sources: ["yahoo_auction", "mercari", "jimoty"],
   conditions: [],
   shipping: "any",
