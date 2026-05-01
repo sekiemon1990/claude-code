@@ -28,3 +28,21 @@ export function formatJstDuration(ms: number): string {
   if (h > 0) return `${h}時間${m}分${s}秒`;
   return `${m}分${s}秒`;
 }
+
+/**
+ * 顧客名表示用のフォーマッタ。
+ * dealSnapshot.customerName が末尾「様」付きで入っているケースが現場データで存在し、
+ * メッセージ側でも「様」を付けると重複するため、末尾検査で重複を防ぐ。
+ *
+ * - 末尾の半角/全角スペースは trimEnd で除去 (ECMAScript 2019+ は U+3000 も対象)
+ * - 末尾が「様」ならそのまま返す
+ * - そうでなければ ` 様` を付与
+ * - null/undefined/空白のみ は「(顧客不明) 様」を返す
+ */
+export function formatCustomerName(name: string | null | undefined): string {
+  if (!name) return '(顧客不明) 様';
+  const trimmed = name.trimEnd();
+  if (!trimmed) return '(顧客不明) 様';
+  if (trimmed.endsWith('様')) return trimmed;
+  return `${trimmed} 様`;
+}

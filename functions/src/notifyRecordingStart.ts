@@ -3,7 +3,7 @@ import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { logger } from 'firebase-functions/v2';
 
 import { postToRoom } from './chatwork';
-import { formatJstDateTime } from './formatJst';
+import { formatCustomerName, formatJstDateTime } from './formatJst';
 
 type RecordingDoc = {
   status?: string;
@@ -28,7 +28,7 @@ function buildMessage(rec: RecordingDoc): string {
     `査定担当: ${rec.assessorName ?? '担当者不明'}`,
     `予約日時: ${reservationAt} 開始予定`,
     `案件URL: ${rec.dealSnapshot?.dealUrl ?? '(URL なし)'}`,
-    `顧客: ${rec.dealSnapshot?.customerName ?? '(顧客名なし)'} 様`,
+    `顧客: ${formatCustomerName(rec.dealSnapshot?.customerName)}`,
     `訪問先: ${rec.dealSnapshot?.address ?? '(住所なし)'}`,
   ];
   return lines.join('\n');
