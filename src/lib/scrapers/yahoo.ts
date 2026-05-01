@@ -342,6 +342,14 @@ function mapAuctionItem(o: AuctionItemLike): Listing | null {
     undefined;
 
   const bidCount = num(o.bidCount) ?? num(o.bids) ?? undefined;
+  // ウォッチリスト数 (likes として汎用表示)
+  const likes =
+    num(o.watchListNum) ??
+    num(o.watchListCount) ??
+    num(o.watchers) ??
+    num(o.watchCount) ??
+    num(o.numberOfWatches) ??
+    undefined;
 
   // フリマ商品か通常オークションかで URL を出し分け
   const isFleamarket = o.isFleamarketItem === true;
@@ -379,6 +387,7 @@ function mapAuctionItem(o: AuctionItemLike): Listing | null {
     thumbnail,
     url,
     bidCount,
+    likes,
     condition,
     sellerName,
     shipping,
@@ -569,6 +578,8 @@ function parseYahooHtml(html: string): Listing[] {
     const thumbnail = $card.find("img").first().attr("src") ?? undefined;
     const bidMatch = cardText.match(/(\d+)\s*(?:入札|件入札|bid)/);
     const bidCount = bidMatch ? Number(bidMatch[1]) : undefined;
+    const watchMatch = cardText.match(/(\d+)\s*(?:ウォッチ|watch)/i);
+    const likes = watchMatch ? Number(watchMatch[1]) : undefined;
 
     seenIds.add(id);
     listings.push({
@@ -581,6 +592,7 @@ function parseYahooHtml(html: string): Listing[] {
         ? href
         : `https://auctions.yahoo.co.jp${href}`,
       bidCount,
+      likes,
     });
   });
 

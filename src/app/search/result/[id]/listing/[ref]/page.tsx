@@ -137,6 +137,7 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
           shipping?: "free" | "paid" | "pickup";
           shippingInfo?: string;
           location?: string;
+          likes?: number;
         };
       };
       return data.detail;
@@ -261,7 +262,10 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
       jimotyItemQuery.data?.price && jimotyItemQuery.data.price > 0
         ? jimotyItemQuery.data.price
         : baseListing.price,
-    likes: jimotyItemQuery.data?.likes ?? baseListing.likes,
+    likes:
+      detailQuery.data?.likes ??
+      jimotyItemQuery.data?.likes ??
+      baseListing.likes,
   };
 
   const meta = SOURCES.find((s) => s.key === source)!;
