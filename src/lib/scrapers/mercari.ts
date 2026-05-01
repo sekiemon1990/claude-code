@@ -93,6 +93,16 @@ export async function scrapeMercari(
     "totalAvailable:",
     totalAvailable,
   );
+  if (items[0]) {
+    console.log(
+      "[mercari-scrape] sample item keys:",
+      Object.keys(items[0]).join(","),
+    );
+    console.log(
+      "[mercari-scrape] sample item:",
+      JSON.stringify(items[0]).slice(0, 600),
+    );
+  }
 
   const listings: Listing[] = [];
   for (const it of items) {
@@ -159,12 +169,19 @@ type MercariItem = {
   thumbnails?: string[];
   thumbnail?: string;
   status?: string;
+  // camelCase / snake_case 両方ありうる (v2 とレガシーで揺れる)
   itemConditionId?: number;
+  item_condition_id?: number;
   itemCondition?: { id?: number; name?: string };
+  item_condition?: { id?: number; name?: string };
   shippingPayer?: { id?: number; name?: string };
+  shipping_payer?: { id?: number; name?: string };
   shippingPayerId?: number;
+  shipping_payer_id?: number;
   numLikes?: number;
+  num_likes?: number;
   numComments?: number;
+  num_comments?: number;
   updated?: string | number;
   created?: string | number;
 };
@@ -204,19 +221,36 @@ function mapItem(o: MercariItem): Listing | null {
       ? o.thumbnails[0]
       : undefined) || (typeof o.thumbnail === "string" ? o.thumbnail : undefined);
 
+  const conditionId =
+    (typeof o.itemConditionId === "number" ? o.itemConditionId : undefined) ??
+    (typeof o.item_condition_id === "number"
+      ? o.item_condition_id
+      : undefined) ??
+    o.itemCondition?.id ??
+    o.item_condition?.id;
   const condition =
     o.itemCondition?.name ||
-    (typeof o.itemConditionId === "number"
-      ? ITEM_CONDITION_LABEL[o.itemConditionId]
+    o.item_condition?.name ||
+    (typeof conditionId === "number"
+      ? ITEM_CONDITION_LABEL[conditionId]
       : undefined);
 
-  // 送料: shippingPayerId 1=出品者負担(送料無料) / 2=購入者負担
-  const payerId = o.shippingPayer?.id ?? o.shippingPayerId;
+  // 送料: id 1=出品者負担(送料無料) / 2=購入者負担
+  const payerId =
+    o.shippingPayer?.id ??
+    o.shipping_payer?.id ??
+    o.shippingPayerId ??
+    o.shipping_payer_id;
   const shipping: "free" | "paid" | undefined =
     payerId === 1 ? "free" : payerId === 2 ? "paid" : undefined;
 
   const endedAt = toIso(o.updated) || toIso(o.created) || "";
-  const likes = typeof o.numLikes === "number" ? o.numLikes : undefined;
+  const likes =
+    typeof o.numLikes === "number"
+      ? o.numLikes
+      : typeof o.num_likes === "number"
+        ? o.num_likes
+        : undefined;
 
   return {
     id,
