@@ -335,16 +335,17 @@ export async function scrapeJimotyItem(
   }
 
   // 出品者: プロフィールページへのリンクを起点に探す
-  // Jimoty のプロフィールページ URL パターン: /profile/users/XXX, /users/XXX, /user/XXX
+  // Jimoty のプロフィールページ URL パターン: /profiles/XXX (XXX は MongoDB ObjectId)
   let sellerName: string | undefined;
   let sellerUrl: string | undefined;
   let sellerRating: string | undefined;
 
-  const $profileLink = $('a[href*="/profile/users/"], a[href*="/users/"], a[href*="/user/"]')
+  const $profileLink = $('a[href^="/profiles/"]')
     .filter((_, el) => {
       const href = $(el).attr("href") ?? "";
-      // 商品 URL や guest_articles の絞り込み
-      return !href.includes("article-") && !href.includes("/categories/");
+      // /profiles/{id}/evaluations や /profiles/{id}/posts などのサブページは除外
+      // /profiles/{id} だけを対象に
+      return /^\/profiles\/[a-f0-9]+(?:\?|$)/i.test(href);
     })
     .first();
 
@@ -362,7 +363,7 @@ export async function scrapeJimotyItem(
     );
   }
 
-  // 診断: 全プロフィールリンクを 5 件まで列挙 (取れなかった場合に確認用)
+  // 診断: 全プロフィールリンクを 8 件まで列挙 (取れなかった場合に確認用)
   const profileProbe = $('a[href*="/profile"], a[href*="/users/"], a[href*="/user/"]')
     .map((_, el) => {
       const $el = $(el);
@@ -372,20 +373,29 @@ export async function scrapeJimotyItem(
     .slice(0, 8);
   console.log("[jimoty-item] profile link probe:", profileProbe);
 
-  // 出品者の評価 (★4.5 や 評価98% パターン)
-  const bodyText = $("body").text();
-  const ratingMatch =
-    bodyText.match(/評価[\s:]*([\d.]+\s*[％%])/) ||
-    bodyText.match(/★\s*([\d.]+)/) ||
-    bodyText.match(/Good\s*([\d.]+\s*[％%])/i);
-  if (ratingMatch) {
-    sellerRating = ratingMatch[1].trim();
-    console.log("[jimoty-item] seller rating:", sellerRating);
-  }
-  // 評価件数 (XXX件) も併記
-  const reviewCountMatch = bodyText.match(/評価[^()]*\(\s*([\d,]+)\s*件\s*\)/);
-  if (reviewCountMatch && sellerRating) {
-    sellerRating = `${sellerRating} (${reviewCountMatch[1]}件)`;
+  // 出品者の評価: profile リンクの近くから「評価」「件」「★」などを探す
+  if ($profileLink.length) {
+    // セラーのプロフィール URL から ID を取り出して、その ID の evaluations リンクから件数を取る
+    const sellerIdMatch = sellerUrl?.match(/\/profiles\/([a-f0-9]+)/i);
+    const sellerId = sellerIdMatch?.[1];
+
+    // セラーリンクの親〜祖父あたりから「評価」を含む要素を探す
+    const $sellerArea = $profileLink.closest(
+      "[class*='user'], [class*='User'], [class*='profile'], [class*='Profile'], section, article, div",
+    );
+    const areaText = $sellerArea.text().replace(/\s+/g, " ").slice(0, 1000);
+    const ratingMatch =
+      areaText.match(/評価[\s:：]*([\d.]+\s*[％%])/) ||
+      areaText.match(/★\s*([\d.]+)/) ||
+      areaText.match(/Good\s*([\d.]+\s*[％%])/i) ||
+      areaText.match(/評価\s*\(?([\d,]+)件/);
+    if (ratingMatch) {
+      sellerRating = ratingMatch[0].trim();
+      console.log("[jimoty-item] seller rating:", sellerRating);
+    }
+    if (sellerId) {
+      console.log("[jimoty-item] seller id:", sellerId);
+    }
   }
 
   // 所在地
