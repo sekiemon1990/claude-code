@@ -25,11 +25,11 @@ export async function scrapeJimoty(
 ): Promise<SourceResult> {
   const { keyword, excludes, limit = 30 } = options;
 
-  // Jimoty の検索 URL 形式は path-based: /all/sale-all/g-{keyword} (g- は keyword)
-  const encodedKeyword = encodeURIComponent(keyword);
-  const url = `https://jmty.jp/all/sale-all/g-${encodedKeyword}`;
+  // Jimoty 検索: /all/sale?keyword=... が「売ります」全カテゴリの検索 URL
+  const url = new URL("https://jmty.jp/all/sale");
+  url.searchParams.set("keyword", keyword);
 
-  const res = await fetch(url, {
+  const res = await fetch(url.toString(), {
     headers: {
       "User-Agent": USER_AGENT,
       "Accept-Language": "ja,en-US;q=0.9,en;q=0.8",
@@ -41,7 +41,14 @@ export async function scrapeJimoty(
     redirect: "follow",
   });
 
-  console.log("[jimoty-scrape] status:", res.status, "url:", url, "final:", res.url);
+  console.log(
+    "[jimoty-scrape] status:",
+    res.status,
+    "url:",
+    url.toString(),
+    "final:",
+    res.url,
+  );
 
   if (!res.ok) {
     throw new Error(`ジモティー応答エラー: ${res.status}`);
