@@ -145,6 +145,36 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
     retry: 1,
   });
 
+  // ジモティー個別商品ページからの追加データ (description, images, price 等)
+  const jimotyItemQuery = useQuery({
+    queryKey: ["jimoty_item", source, lid, baseListing?.url ?? ""],
+    queryFn: async () => {
+      if (!baseListing?.url) throw new Error("URL なし");
+      const res = await fetch("/api/scrape/jimoty-item", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: baseListing.url }),
+      });
+      if (!res.ok) throw new Error("商品詳細取得失敗");
+      const data = (await res.json()) as {
+        detail: {
+          id: string;
+          description?: string;
+          images?: string[];
+          price?: number;
+          sellerName?: string;
+          location?: string;
+        };
+      };
+      return data.detail;
+    },
+    enabled: !!baseListing?.url && source === "jimoty",
+    staleTime: 30 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+
   const [activeImage, setActiveImage] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [memoEditing, setMemoEditing] = useState(false);
@@ -194,13 +224,29 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
   // 詳細データを基本データにマージ (詳細データ優先)
   const listing: Listing = {
     ...baseListing,
-    description: detailQuery.data?.description ?? baseListing.description,
-    images: detailQuery.data?.images ?? baseListing.images,
+    description:
+      detailQuery.data?.description ??
+      jimotyItemQuery.data?.description ??
+      baseListing.description,
+    images:
+      detailQuery.data?.images ??
+      jimotyItemQuery.data?.images ??
+      baseListing.images,
     condition: detailQuery.data?.condition ?? baseListing.condition,
-    sellerName: detailQuery.data?.sellerName ?? baseListing.sellerName,
+    sellerName:
+      detailQuery.data?.sellerName ??
+      jimotyItemQuery.data?.sellerName ??
+      baseListing.sellerName,
     shipping: detailQuery.data?.shipping ?? baseListing.shipping,
     shippingInfo: detailQuery.data?.shippingInfo ?? baseListing.shippingInfo,
-    location: detailQuery.data?.location ?? baseListing.location,
+    location:
+      detailQuery.data?.location ??
+      jimotyItemQuery.data?.location ??
+      baseListing.location,
+    price:
+      jimotyItemQuery.data?.price && jimotyItemQuery.data.price > 0
+        ? jimotyItemQuery.data.price
+        : baseListing.price,
   };
 
   const meta = SOURCES.find((s) => s.key === source)!;
