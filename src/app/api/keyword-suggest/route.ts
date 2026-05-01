@@ -8,27 +8,17 @@ type RequestBody = {
   prefix: string;
 };
 
-const SYSTEM_PROMPT = `あなたは日本の中古品マーケット (ヤフオク・メルカリ等) における
-検索キーワードのオートコンプリートエンジンです。
+const SYSTEM_PROMPT = `日本の中古品マーケット (ヤフオク・メルカリ等) の
+検索キーワードオートコンプリート。
 
-ユーザーが商品名や型番を入力途中の状態で、続きとして妥当な完成形候補を
-5〜8 個提案します。
+入力途中の文字列を含む形で 5〜8 個、短く具体的な候補を返す。
+- 入力文字列を必ず含める
+- 実在する型番・モデル名・容量・色・世代などに寄せる
+- 1 候補 20 文字以内
+- 「ジャンク」「本体のみ」など買取現場でよく使う絞り込みも可
 
-# 重要な原則
-- 入力途中の文字列を必ず含む形で補完する (Amazon の検索オートコンプリートと同じ感覚)
-- 中古市場で実際に存在する具体的なモデル名・型番に寄せる
-- 1 候補は短くシンプルに (検索しやすい長さ、20 文字以内目安)
-- 古いモデルから新しいモデルまでバランスよく
-- 「ジャンク」「本体のみ」「アクセサリー」など買取現場でよく使う絞り込みも含めても良い
-- ブランド名 / シリーズ / 型番 / 容量 / 色 などを補完する形が中心
-
-# 出力フォーマット
-以下の JSON スキーマに厳密に従ってください。説明文や前置き、
-コードブロック装飾なしで JSON 本体のみを出力してください。
-
-{
-  "candidates": ["候補1", "候補2", ...]
-}`;
+JSON のみ出力。説明文・前置き・コードブロック装飾なし:
+{ "candidates": ["候補1", "候補2", ...] }`;
 
 const SUGGEST_SCHEMA = {
   type: "object" as const,
@@ -66,9 +56,10 @@ export async function POST(req: Request) {
   const client = new Anthropic();
 
   try {
+    // Haiku 4.5: autocomplete のような高頻度・低レイテンシ用途に最適
     const response = await client.messages.create({
-      model: "claude-opus-4-7",
-      max_tokens: 2000,
+      model: "claude-haiku-4-5",
+      max_tokens: 600,
       system: [
         {
           type: "text",
@@ -79,7 +70,7 @@ export async function POST(req: Request) {
       output_config: {
         format: { type: "json_schema", schema: SUGGEST_SCHEMA },
       },
-      messages: [{ role: "user", content: `入力途中のキーワード: ${prefix}` }],
+      messages: [{ role: "user", content: prefix }],
     });
 
     const textBlock = response.content.find(

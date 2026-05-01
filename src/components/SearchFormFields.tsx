@@ -121,7 +121,7 @@ export function SearchFormFields({
           setAiLoading(false);
         }
       }
-    }, 350);
+    }, 200);
 
     return () => {
       clearTimeout(t);
