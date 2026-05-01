@@ -13,6 +13,7 @@ import { PlatformLogo } from "@/components/PlatformLogo";
 import { SOURCES, type SourceKey } from "@/lib/types";
 import { CONDITION_RANKS, CONDITION_META, type ConditionRank } from "@/lib/conditions";
 import { MOCK_HISTORY } from "@/lib/mock-data";
+import { findDictionaryMatches } from "@/lib/keyword-dictionary";
 
 export type Period = "30" | "90" | "all";
 export type ShippingFilter = "any" | "free" | "paid";
@@ -67,7 +68,14 @@ export function SearchFormFields({
     return filtered.slice(0, 6);
   }, [keyword]);
 
-  // AI オートコンプリート (入力 2 文字以上で 350ms デバウンス後にリクエスト)
+  // ローカル辞書からの即時候補 (0ms)
+  const dictionaryCandidates = useMemo(() => {
+    const trimmed = keyword.trim();
+    if (trimmed.length < 1) return [];
+    return findDictionaryMatches(trimmed, 6);
+  }, [keyword]);
+
+  // AI オートコンプリート (入力 2 文字以上で 150ms デバウンス後にリクエスト)
   const [aiCandidates, setAiCandidates] = useState<string[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
   const aiCacheRef = useRef<Map<string, string[]>>(new Map());
@@ -143,6 +151,7 @@ export function SearchFormFields({
   // 表示用の統合候補 (履歴と AI を重複排除しつつ統合)
   const showAi = aiCandidates.length > 0;
   const showHistory = historySuggestions.length > 0;
+  const showDictionary = dictionaryCandidates.length > 0 && !showAi;
 
   async function handlePasteFromClipboard() {
     try {
@@ -232,8 +241,37 @@ export function SearchFormFields({
             autoComplete="off"
             className="w-full h-12 px-4 rounded-lg bg-surface border border-border text-foreground placeholder:text-muted focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           />
-          {keywordFocused && (showAi || showHistory || aiLoading) && (
+          {keywordFocused &&
+            (showAi || showHistory || showDictionary || aiLoading) && (
             <div className="absolute z-20 left-0 right-0 mt-1 bg-surface border border-border rounded-lg shadow-lg max-h-96 overflow-y-auto">
+              {/* ローカル辞書候補 (AI 取得前の即時表示) */}
+              {showDictionary && (
+                <>
+                  <div className="px-3 py-1.5 text-[10px] text-muted bg-surface-2 sticky top-0 border-b border-border flex items-center gap-1">
+                    <Sparkles size={11} className="text-primary" />
+                    <span>候補</span>
+                    {aiLoading && (
+                      <span className="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                    )}
+                  </div>
+                  {dictionaryCandidates.map((c) => (
+                    <button
+                      key={`dict-${c}`}
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        setKeyword(c);
+                        setKeywordFocused(false);
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-foreground hover:bg-surface-2 text-left"
+                    >
+                      <Sparkles size={14} className="text-primary shrink-0" />
+                      <span className="truncate">{c}</span>
+                    </button>
+                  ))}
+                </>
+              )}
+
               {/* AI 候補 (入力中のみ) */}
               {showAi && (
                 <>
@@ -262,14 +300,17 @@ export function SearchFormFields({
                 </>
               )}
 
-              {/* AI 取得中で AI 候補がまだ無い時のスケルトン */}
-              {!showAi && aiLoading && keyword.trim().length >= 2 && (
-                <div className="px-3 py-3 text-xs text-muted flex items-center gap-2">
-                  <Sparkles size={12} className="text-primary" />
-                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                  AI 候補を生成中...
-                </div>
-              )}
+              {/* AI 取得中で AI 候補も辞書候補もない時のみスケルトン */}
+              {!showAi &&
+                !showDictionary &&
+                aiLoading &&
+                keyword.trim().length >= 2 && (
+                  <div className="px-3 py-3 text-xs text-muted flex items-center gap-2">
+                    <Sparkles size={12} className="text-primary" />
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                    AI 候補を生成中...
+                  </div>
+                )}
 
               {/* 履歴ベースの候補 */}
               {showHistory && (
