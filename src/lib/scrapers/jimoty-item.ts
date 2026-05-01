@@ -223,31 +223,51 @@ export async function scrapeJimotyItem(
       }
     }
   }
-  // 「あげます」「差し上げ」「無料」表記なら 0 円扱い (誤マッチ防止のため "0円" 単体は使わない)
+  // 価格 selector 候補のテキスト一覧を常に出力 (診断用)
+  const priceProbe = $('[class*="price" i], [data-testid*="price" i]')
+    .map((_, el) => {
+      const $el = $(el);
+      const cls = $el.attr("class") ?? "";
+      const id = $el.attr("id") ?? "";
+      const txt = $el.text().trim().slice(0, 80);
+      return `<${(el as { name?: string }).name ?? ""}> #${id} .${cls} | ${txt}`;
+    })
+    .get()
+    .slice(0, 15);
+  console.log("[jimoty-item] price probe candidates:", priceProbe);
+
+  // dt/dd でラベルされた価格パターンも探す (例: <dt>価格</dt><dd>10,000円</dd>)
   if (price === undefined) {
-    // タイトルや特定の小範囲だけを見る (本文の「送料無料」等の誤マッチを避けるため)
-    const $main = $("main, article").first();
-    const scopedText = ($main.length ? $main.text() : $("body").text()).slice(
-      0,
-      3000,
-    );
-    if (/(差し上げます|あげます|お譲りします)/.test(scopedText)) {
-      price = 0;
-      console.log("[jimoty-item] price = 0 (giveaway phrase)");
-    }
+    $("dt, th, label").each((_, el) => {
+      if (price !== undefined) return false;
+      const $el = $(el);
+      const labelText = $el.text().replace(/\s/g, "");
+      if (/価格|料金|金額/.test(labelText)) {
+        const $next = $el.next();
+        if ($next.length) {
+          const valText = $next.text().replace(/\s/g, "");
+          const m = valText.match(/[¥￥]?\s?([\d,]+)\s*円?/);
+          if (m) {
+            const n = Number(m[1].replace(/,/g, ""));
+            if (Number.isFinite(n) && n >= 0 && n < 100_000_000) {
+              price = n;
+              console.log("[jimoty-item] price via dt/th label match:", n);
+            }
+          }
+        }
+      }
+      return undefined;
+    });
   }
-  // 価格 selector 候補のテキストもログ出力 (診断用)
-  if (price === undefined) {
-    const priceProbe = $('[class*="price" i], [data-testid*="price" i]')
-      .map((_, el) => {
-        const $el = $(el);
-        const cls = $el.attr("class") ?? "";
-        const txt = $el.text().trim().slice(0, 60);
-        return `[${cls}] ${txt}`;
-      })
-      .get()
-      .slice(0, 10);
-    console.log("[jimoty-item] price probe:", priceProbe);
+
+  // URL から giveaway 判定 (sale カテゴリなら絶対 giveaway ではない)
+  const isSaleUrl = /\/(sale|sell|s)-/.test(fullUrl) || fullUrl.includes("/sale/");
+  const isGiveawayUrl = /\/(give|present|free|mu)-/.test(fullUrl);
+
+  // 「あげます」「差し上げ」表記なら 0 円扱い (URL で giveaway 確定の時のみ)
+  if (price === undefined && isGiveawayUrl && !isSaleUrl) {
+    price = 0;
+    console.log("[jimoty-item] price = 0 (giveaway URL)");
   }
 
   // 出品者
