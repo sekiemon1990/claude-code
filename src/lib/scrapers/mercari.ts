@@ -58,6 +58,30 @@ export async function scrapeMercari(
   const html = await res.text();
   console.log("[mercari-scrape] html size:", html.length);
 
+  // 診断: メルカリがどこにデータを埋め込んでいるか調査
+  const hasNextData = html.includes('id="__NEXT_DATA__"');
+  const hasApollo = html.includes("__APOLLO_STATE__");
+  const hasInitialState = html.includes("__INITIAL_STATE__");
+  const hasNuxt = html.includes("__NUXT__");
+  const hasJsonLd = html.includes('type="application/ld+json"');
+  const hasItemLinks = (html.match(/\/item\/[a-z0-9]+/gi) ?? []).length;
+  const hasMercariId = (html.match(/m\d{12}/g) ?? []).length;
+  console.log("[mercari-scrape] structure probe:", {
+    hasNextData,
+    hasApollo,
+    hasInitialState,
+    hasNuxt,
+    hasJsonLd,
+    itemLinkCount: hasItemLinks,
+    mercariIdCount: hasMercariId,
+  });
+
+  // <script> タグの id 属性を全て収集
+  const scriptIds = Array.from(
+    html.matchAll(/<script[^>]*id="([^"]+)"/g),
+  ).map((m) => m[1]);
+  console.log("[mercari-scrape] script ids:", scriptIds.slice(0, 20));
+
   // 1. __NEXT_DATA__ JSON を試す
   const nextDataListings = parseFromNextData(html);
   if (nextDataListings && nextDataListings.length > 0) {
