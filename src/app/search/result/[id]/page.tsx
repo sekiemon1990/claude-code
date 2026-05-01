@@ -523,6 +523,11 @@ function ResultInner({ resultId }: { resultId: string }) {
                   {fetchedSum}件取得)
                 </div>
               )}
+              {totalAvailableSum > 0 && totalAvailableSum === fetchedSum && (
+                <div className="mt-1 text-[11px] opacity-80">
+                  媒体側に {formatCount(fetchedSum)}以上 存在
+                </div>
+              )}
             </>
           ) : (
             <p className="text-sm opacity-90">
