@@ -163,6 +163,8 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
           images?: string[];
           price?: number;
           sellerName?: string;
+          sellerUrl?: string;
+          sellerRating?: string;
           location?: string;
         };
       };
@@ -237,6 +239,14 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
       detailQuery.data?.sellerName ??
       jimotyItemQuery.data?.sellerName ??
       baseListing.sellerName,
+    sellerUrl:
+      detailQuery.data?.sellerUrl ??
+      jimotyItemQuery.data?.sellerUrl ??
+      baseListing.sellerUrl,
+    sellerRating:
+      detailQuery.data?.sellerRating ??
+      jimotyItemQuery.data?.sellerRating ??
+      baseListing.sellerRating,
     shipping: detailQuery.data?.shipping ?? baseListing.shipping,
     shippingInfo: detailQuery.data?.shippingInfo ?? baseListing.shippingInfo,
     location:
@@ -379,7 +389,22 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
           <DetailRow
             icon={<User size={16} />}
             label="出品者"
-            value={listing.sellerName}
+            value={
+              listing.sellerUrl ? (
+                <a
+                  href={listing.sellerUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline inline-flex items-center gap-0.5"
+                >
+                  {listing.sellerName}
+                  <ExternalLink size={11} className="shrink-0" />
+                </a>
+              ) : (
+                listing.sellerName
+              )
+            }
+            sub={listing.sellerRating}
           />
         )}
         {listing.shippingInfo && (
