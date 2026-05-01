@@ -121,13 +121,24 @@ export function SearchFormFields({
           setAiLoading(false);
         }
       }
-    }, 200);
+    }, 150);
 
     return () => {
       clearTimeout(t);
       controller.abort();
     };
   }, [keyword]);
+
+  // ページマウント時に Vercel function を pre-warm (コールドスタート対策)
+  useEffect(() => {
+    fetch("/api/keyword-suggest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prefix: "" }),
+    }).catch(() => {
+      // pre-warm は失敗しても無視
+    });
+  }, []);
 
   // 表示用の統合候補 (履歴と AI を重複排除しつつ統合)
   const showAi = aiCandidates.length > 0;
