@@ -101,6 +101,27 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
     refetchOnWindowFocus: false,
   });
 
+  const mercariQuery = useQuery({
+    queryKey: ["scrape_mercari", fromKeyword ?? "", fromExcludes],
+    queryFn: async (): Promise<SourceResult> => {
+      const res = await fetch("/api/scrape/mercari", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          keyword: fromKeyword,
+          excludes: fromExcludes || undefined,
+        }),
+      });
+      if (!res.ok) throw new Error("メルカリ取得失敗");
+      const data = (await res.json()) as { result: SourceResult };
+      return data.result;
+    },
+    enabled: !!parsed && source === "mercari" && !!fromKeyword,
+    staleTime: 5 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
+
   // 探索順: 本物のスクレイピング結果 → モック
   let baseListing: Listing | undefined;
   if (parsed && source === "yahoo_auction" && yahooQuery.data) {
@@ -108,6 +129,9 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
   }
   if (parsed && source === "jimoty" && jimotyQuery.data) {
     baseListing = jimotyQuery.data.listings.find((l) => l.id === lid);
+  }
+  if (parsed && source === "mercari" && mercariQuery.data) {
+    baseListing = mercariQuery.data.listings.find((l) => l.id === lid);
   }
   if (!baseListing && parsed) {
     const sourceData = MOCK_RESULT.sources.find((s) => s.source === source);
@@ -226,7 +250,9 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
   const isFetchingSource =
     (source === "yahoo_auction" &&
       (yahooQuery.isLoading || yahooQuery.isFetching)) ||
-    (source === "jimoty" && (jimotyQuery.isLoading || jimotyQuery.isFetching));
+    (source === "jimoty" && (jimotyQuery.isLoading || jimotyQuery.isFetching)) ||
+    (source === "mercari" &&
+      (mercariQuery.isLoading || mercariQuery.isFetching));
   if (!baseListing && fromKeyword && isFetchingSource) {
     return (
       <div className="pt-12 text-center text-muted text-sm">
