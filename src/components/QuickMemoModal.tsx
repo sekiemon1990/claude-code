@@ -105,10 +105,12 @@ export function QuickMemoModal({
             </div>
           </div>
 
+          <MemoTemplates value={memo} onChange={setMemo} />
+
           <textarea
             value={memo}
             onChange={(e) => setMemo(e.target.value)}
-            rows={4}
+            rows={5}
             placeholder="例: ¥120,000で買取打診したい候補。状態Bランクを目安"
             className="w-full p-3 rounded-lg bg-surface-2 border border-border text-foreground placeholder:text-muted text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 resize-none"
             autoFocus
@@ -131,6 +133,72 @@ export function QuickMemoModal({
             </button>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// 出張買取の現場で使う定型チェック項目
+const MEMO_TEMPLATES = [
+  "□ 傷チェック",
+  "□ 動作確認",
+  "□ 付属品確認",
+  "□ 元箱あり",
+  "□ 取説あり",
+  "□ 保証書あり",
+  "□ バッテリー状態",
+  "□ シリアル確認",
+  "□ 写真撮影済",
+];
+
+function MemoTemplates({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  function toggle(label: string) {
+    const lines = value.split("\n");
+    const idx = lines.findIndex((l) => l.trim() === label);
+    if (idx >= 0) {
+      // 既に追加済み → その行を削除
+      lines.splice(idx, 1);
+      onChange(lines.join("\n").replace(/\n{3,}/g, "\n\n").trimStart());
+    } else {
+      // 末尾に追加 (前行が空でなければ改行を挟む)
+      const trimmed = value.trimEnd();
+      const sep = trimmed.length === 0 ? "" : trimmed.endsWith("\n") ? "" : "\n";
+      onChange(trimmed + sep + label + "\n");
+    }
+  }
+
+  const present = new Set(
+    value.split("\n").map((l) => l.trim()).filter(Boolean),
+  );
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-[11px] text-muted">定型チェック (タップで追加/解除)</span>
+      <div className="flex flex-wrap gap-1.5">
+        {MEMO_TEMPLATES.map((t) => {
+          const active = present.has(t);
+          return (
+            <button
+              key={t}
+              type="button"
+              onClick={() => toggle(t)}
+              aria-pressed={active}
+              className={
+                active
+                  ? "h-7 px-2.5 rounded-full text-xs font-medium border bg-primary text-primary-foreground border-primary"
+                  : "h-7 px-2.5 rounded-full text-xs font-medium border bg-surface-2 text-foreground border-border hover:border-primary/40"
+              }
+            >
+              {t}
+            </button>
+          );
+        })}
       </div>
     </div>
   );

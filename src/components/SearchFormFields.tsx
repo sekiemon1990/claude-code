@@ -433,6 +433,7 @@ export function SearchFormFields({
           placeholder="例: ジャンク 部品"
           className="h-12 px-4 rounded-lg bg-surface border border-border text-foreground placeholder:text-muted focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
         />
+        <ExcludePresets value={excludes} onChange={setExcludes} />
       </div>
 
       <div className="flex flex-col gap-1.5">
@@ -567,5 +568,68 @@ export function SearchFormFields({
         {submitLabel}
       </button>
     </form>
+  );
+}
+
+const EXCLUDE_PRESETS = [
+  "ジャンク",
+  "本体のみ",
+  "部品取り",
+  "壊れ",
+  "難あり",
+  "訳あり",
+  "ノークレーム",
+  "未使用",
+  "新品",
+  "コピー",
+  "互換",
+  "海賊版",
+];
+
+function ExcludePresets({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const tokens = value
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter(Boolean);
+  const set = new Set(tokens);
+
+  function toggle(word: string) {
+    if (set.has(word)) {
+      const next = tokens.filter((t) => t !== word).join(" ");
+      onChange(next);
+    } else {
+      const next = [...tokens, word].join(" ");
+      onChange(next);
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap gap-1.5 mt-1">
+      {EXCLUDE_PRESETS.map((w) => {
+        const active = set.has(w);
+        return (
+          <button
+            key={w}
+            type="button"
+            onClick={() => toggle(w)}
+            aria-pressed={active}
+            className={
+              active
+                ? "h-7 px-2.5 rounded-full text-xs font-medium border bg-primary text-primary-foreground border-primary"
+                : "h-7 px-2.5 rounded-full text-xs font-medium border bg-surface-2 text-foreground border-border hover:border-primary/40"
+            }
+          >
+            {active ? "✓ " : "+ "}
+            {w}
+          </button>
+        );
+      })}
+    </div>
   );
 }
