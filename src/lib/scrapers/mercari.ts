@@ -165,19 +165,22 @@ function generateDpop(method: string, url: string): string {
 type MercariItem = {
   id?: string;
   name?: string;
+  title?: string;
   price?: number | string;
-  thumbnails?: string[];
+  thumbnails?: (string | { uri?: string; url?: string })[];
   thumbnail?: string;
+  photos?: { uri?: string; url?: string }[];
   status?: string;
-  // camelCase / snake_case 両方ありうる (v2 とレガシーで揺れる)
-  itemConditionId?: number;
-  item_condition_id?: number;
-  itemCondition?: { id?: number; name?: string };
-  item_condition?: { id?: number; name?: string };
-  shippingPayer?: { id?: number; name?: string };
-  shipping_payer?: { id?: number; name?: string };
-  shippingPayerId?: number;
-  shipping_payer_id?: number;
+  itemType?: string;
+  // 数値文字列で来ることがある
+  itemConditionId?: number | string;
+  item_condition_id?: number | string;
+  itemCondition?: { id?: number | string; name?: string };
+  item_condition?: { id?: number | string; name?: string };
+  shippingPayer?: { id?: number | string; name?: string };
+  shipping_payer?: { id?: number | string; name?: string };
+  shippingPayerId?: number | string;
+  shipping_payer_id?: number | string;
   numLikes?: number;
   num_likes?: number;
   numComments?: number;
@@ -203,54 +206,69 @@ const ITEM_CONDITION_LABEL: Record<number, string> = {
   6: "全体的に状態が悪い",
 };
 
+// 文字列でも数値でも数値化する (空文字や非数は undefined)
+function toNum(v: unknown): number | undefined {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string" && v.trim()) {
+    const n = Number(v);
+    if (Number.isFinite(n)) return n;
+  }
+  return undefined;
+}
+
 function mapItem(o: MercariItem): Listing | null {
   const id = typeof o.id === "string" ? o.id : "";
   if (!id) return null;
-  const title = typeof o.name === "string" ? o.name : "";
+  const title =
+    (typeof o.name === "string" && o.name.trim()) ||
+    (typeof o.title === "string" && o.title.trim()) ||
+    "";
   if (!title) return null;
-  const price =
-    typeof o.price === "number"
-      ? o.price
-      : typeof o.price === "string"
-        ? Number(o.price)
-        : 0;
-  if (!Number.isFinite(price) || price <= 0) return null;
 
-  const thumbnail =
-    (Array.isArray(o.thumbnails) && typeof o.thumbnails[0] === "string"
-      ? o.thumbnails[0]
-      : undefined) || (typeof o.thumbnail === "string" ? o.thumbnail : undefined);
+  const price = toNum(o.price) ?? 0;
+  if (price <= 0) return null;
+
+  // サムネイル: thumbnails が文字列配列 or {uri} 配列、photos も {uri} 配列
+  let thumbnail: string | undefined;
+  if (Array.isArray(o.thumbnails) && o.thumbnails.length > 0) {
+    const t = o.thumbnails[0];
+    thumbnail =
+      typeof t === "string" ? t : t?.uri ?? t?.url ?? undefined;
+  }
+  if (!thumbnail && Array.isArray(o.photos) && o.photos.length > 0) {
+    thumbnail = o.photos[0]?.uri ?? o.photos[0]?.url ?? undefined;
+  }
+  if (!thumbnail && typeof o.thumbnail === "string") {
+    thumbnail = o.thumbnail;
+  }
 
   const conditionId =
-    (typeof o.itemConditionId === "number" ? o.itemConditionId : undefined) ??
-    (typeof o.item_condition_id === "number"
-      ? o.item_condition_id
-      : undefined) ??
-    o.itemCondition?.id ??
-    o.item_condition?.id;
+    toNum(o.itemConditionId) ??
+    toNum(o.item_condition_id) ??
+    toNum(o.itemCondition?.id) ??
+    toNum(o.item_condition?.id);
   const condition =
     o.itemCondition?.name ||
     o.item_condition?.name ||
-    (typeof conditionId === "number"
-      ? ITEM_CONDITION_LABEL[conditionId]
-      : undefined);
+    (conditionId !== undefined ? ITEM_CONDITION_LABEL[conditionId] : undefined);
 
-  // 送料: id 1=出品者負担(送料無料) / 2=購入者負担
+  // 送料: id 1=出品者負担(送料無料) / 2=購入者負担 / 0=不明
   const payerId =
-    o.shippingPayer?.id ??
-    o.shipping_payer?.id ??
-    o.shippingPayerId ??
-    o.shipping_payer_id;
+    toNum(o.shippingPayer?.id) ??
+    toNum(o.shipping_payer?.id) ??
+    toNum(o.shippingPayerId) ??
+    toNum(o.shipping_payer_id);
   const shipping: "free" | "paid" | undefined =
     payerId === 1 ? "free" : payerId === 2 ? "paid" : undefined;
 
   const endedAt = toIso(o.updated) || toIso(o.created) || "";
-  const likes =
-    typeof o.numLikes === "number"
-      ? o.numLikes
-      : typeof o.num_likes === "number"
-        ? o.num_likes
-        : undefined;
+  const likes = toNum(o.numLikes) ?? toNum(o.num_likes);
+
+  // URL: メルカリショップ商品 (ITEM_TYPE_BEYOND) は /shops/product/{id}
+  const url =
+    o.itemType === "ITEM_TYPE_BEYOND"
+      ? `https://jp.mercari.com/shops/product/${id}`
+      : `https://jp.mercari.com/item/${id}`;
 
   return {
     id,
@@ -258,7 +276,7 @@ function mapItem(o: MercariItem): Listing | null {
     price,
     endedAt,
     thumbnail,
-    url: `https://jp.mercari.com/item/${id}`,
+    url,
     condition,
     shipping,
     likes,
