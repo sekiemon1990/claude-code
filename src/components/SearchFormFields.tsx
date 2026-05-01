@@ -8,6 +8,7 @@ import {
   ClipboardPaste,
   History as HistoryIcon,
   Sparkles,
+  Mic,
 } from "lucide-react";
 import { PlatformLogo } from "@/components/PlatformLogo";
 import { SOURCES, type SourceKey } from "@/lib/types";
@@ -282,8 +283,9 @@ export function SearchFormFields({
             }}
             placeholder="例: SONY α7 IV ILCE-7M4"
             autoComplete="off"
-            className="w-full h-12 px-4 rounded-lg bg-surface border border-border text-foreground placeholder:text-muted focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+            className="w-full h-12 pl-4 pr-12 rounded-lg bg-surface border border-border text-foreground placeholder:text-muted focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           />
+          <VoiceInputButton onResult={(t) => setKeyword(t)} />
           {keywordFocused &&
             (showAi ||
               showHistory ||
@@ -568,6 +570,109 @@ export function SearchFormFields({
         {submitLabel}
       </button>
     </form>
+  );
+}
+
+// Web Speech API 型定義 (TypeScript 標準には無い)
+type SpeechRecognitionEvent = {
+  resultIndex: number;
+  results: {
+    length: number;
+    [index: number]: {
+      isFinal: boolean;
+      [index: number]: { transcript: string };
+    };
+  };
+};
+type SpeechRecognitionLike = {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onresult: (e: SpeechRecognitionEvent) => void;
+  onerror: () => void;
+  onend: () => void;
+  start: () => void;
+  stop: () => void;
+};
+
+function getSpeechRecognitionCtor():
+  | (new () => SpeechRecognitionLike)
+  | null {
+  if (typeof window === "undefined") return null;
+  const w = window as unknown as {
+    SpeechRecognition?: new () => SpeechRecognitionLike;
+    webkitSpeechRecognition?: new () => SpeechRecognitionLike;
+  };
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+}
+
+function VoiceInputButton({
+  onResult,
+}: {
+  onResult: (text: string) => void;
+}) {
+  const [supported, setSupported] = useState(false);
+  const [listening, setListening] = useState(false);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+
+  useEffect(() => {
+    setSupported(getSpeechRecognitionCtor() !== null);
+  }, []);
+
+  function start() {
+    const Ctor = getSpeechRecognitionCtor();
+    if (!Ctor) return;
+    const r = new Ctor();
+    r.lang = "ja-JP";
+    r.continuous = false;
+    r.interimResults = true;
+    r.onresult = (e) => {
+      // 最終結果優先、無ければ interim を表示
+      let finalText = "";
+      let interimText = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const res = e.results[i];
+        const t = res[0]?.transcript ?? "";
+        if (res.isFinal) finalText += t;
+        else interimText += t;
+      }
+      const combined = (finalText || interimText).trim();
+      if (combined) onResult(combined);
+    };
+    r.onerror = () => setListening(false);
+    r.onend = () => setListening(false);
+    recognitionRef.current = r;
+    setListening(true);
+    try {
+      r.start();
+    } catch {
+      setListening(false);
+    }
+  }
+
+  function stop() {
+    recognitionRef.current?.stop();
+    setListening(false);
+  }
+
+  if (!supported) return null;
+
+  return (
+    <button
+      type="button"
+      onClick={listening ? stop : start}
+      onMouseDown={(e) => e.preventDefault()}
+      aria-label={listening ? "音声入力停止" : "音声入力開始"}
+      aria-pressed={listening}
+      className={
+        "absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-md flex items-center justify-center transition-colors " +
+        (listening
+          ? "bg-danger text-danger-foreground animate-pulse"
+          : "text-muted hover:text-foreground hover:bg-surface-2")
+      }
+    >
+      <Mic size={18} />
+    </button>
   );
 }
 
