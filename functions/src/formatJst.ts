@@ -46,3 +46,52 @@ export function formatCustomerName(name: string | null | undefined): string {
   if (trimmed.endsWith('様')) return trimmed;
   return `${trimmed} 様`;
 }
+
+/**
+ * Chatwork 通知本文の共通レンダラ。
+ * 録音開始/終了で本文構造は同じ。差分は title 行 (絵文字 / 文言 / 録音時間有無) のみなので
+ * title を呼び出し側で組み立てて渡す。
+ *
+ * - reservationAtIso: dealSnapshot.reservationAt (ISO 8601 文字列)。空なら「(予約日時なし)」
+ * - insideSalesName: trim 後空相当なら「予約: ...」行ごと省略 (空欄ノイズ回避)
+ * - 出力は Chatwork タグ ([info]/[title]/[hr]) を含む 1 つの文字列
+ */
+export function buildChatworkMessage(params: {
+  title: string;
+  customerName: string | null | undefined;
+  address: string | null | undefined;
+  reservationAtIso: string | null | undefined;
+  assessorName: string | null | undefined;
+  insideSalesName?: string | null;
+  dealUrl: string | null | undefined;
+}): string {
+  const customerLine = `顧客: ${formatCustomerName(params.customerName)}`;
+  const addressLine = `訪問先: ${params.address ?? '(住所なし)'}`;
+  const reservationLine = params.reservationAtIso
+    ? `予約日時: ${formatJstDateTime(new Date(params.reservationAtIso))} 開始予定`
+    : '予約日時: (予約日時なし)';
+  const assessorLine = `査定: ${params.assessorName ?? '担当者不明'}`;
+  const url = params.dealUrl ?? '(URL なし)';
+
+  const handlerLines: string[] = [assessorLine];
+  const insideSales = params.insideSalesName?.trim();
+  if (insideSales) {
+    handlerLines.push(`予約: ${insideSales}`);
+  }
+
+  return [
+    `[info][title]${params.title}[/title]`,
+    '[hr]',
+    '▼ 案件情報',
+    customerLine,
+    addressLine,
+    reservationLine,
+    '',
+    '▼ 担当者',
+    ...handlerLines,
+    '',
+    '▼ リンク',
+    url,
+    '[/info]',
+  ].join('\n');
+}

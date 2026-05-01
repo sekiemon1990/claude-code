@@ -3,7 +3,7 @@ import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
 import { logger } from 'firebase-functions/v2';
 
 import { postToRoom } from './chatwork';
-import { formatCustomerName, formatJstDateTime, formatJstDuration } from './formatJst';
+import { buildChatworkMessage, formatJstDateTime, formatJstDuration } from './formatJst';
 
 type RecordingDoc = {
   status?: string;
@@ -16,25 +16,23 @@ type RecordingDoc = {
     address?: string;
     reservationAt?: string;
     dealUrl?: string;
+    insideSalesName?: string;
   };
 };
 
 function buildMessage(rec: RecordingDoc): string {
   const endedAt = rec.recordingEndedAt?.toDate() ?? new Date();
-  const reservationAt = rec.dealSnapshot?.reservationAt
-    ? formatJstDateTime(new Date(rec.dealSnapshot.reservationAt))
-    : '(予約日時なし)';
   // 録音時間は durationMs を直接使う ((end - start) を使わない: 中断・再開で実時間と差が出るため)
   const duration = formatJstDuration(rec.durationMs ?? 0);
-  const lines = [
-    `[録音終了] ${formatJstDateTime(endedAt)} (録音時間: ${duration})`,
-    `査定担当: ${rec.assessorName ?? '担当者不明'}`,
-    `予約日時: ${reservationAt} 開始予定`,
-    `案件URL: ${rec.dealSnapshot?.dealUrl ?? '(URL なし)'}`,
-    `顧客: ${formatCustomerName(rec.dealSnapshot?.customerName)}`,
-    `訪問先: ${rec.dealSnapshot?.address ?? '(住所なし)'}`,
-  ];
-  return lines.join('\n');
+  return buildChatworkMessage({
+    title: `🔴 録音終了 - ${formatJstDateTime(endedAt)} (録音時間: ${duration})`,
+    customerName: rec.dealSnapshot?.customerName,
+    address: rec.dealSnapshot?.address,
+    reservationAtIso: rec.dealSnapshot?.reservationAt,
+    assessorName: rec.assessorName,
+    insideSalesName: rec.dealSnapshot?.insideSalesName,
+    dealUrl: rec.dealSnapshot?.dealUrl,
+  });
 }
 
 export const notifyRecordingEnd = onDocumentUpdated(
