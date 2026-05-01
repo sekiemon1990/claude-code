@@ -19,6 +19,12 @@ import { SourceBadge } from "@/components/SourceBadge";
 import { ConditionBadge } from "@/components/ConditionBadge";
 import { MOCK_HISTORY } from "@/lib/mock-data";
 import { formatYen, formatCount } from "@/lib/utils";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  fetchSearchHistory,
+  toggleFavoriteKeyword,
+  deleteSearchHistoryEntry,
+} from "@/lib/api/search-keywords";
 import { RelativeDate } from "@/components/RelativeDate";
 import {
   searchKeyFromKeyword,
@@ -225,30 +231,81 @@ function SearchHistoryList({
   memoOnly: boolean;
   query: string;
 }) {
+  const queryClient = useQueryClient();
+  const historyQuery = useQuery({
+    queryKey: ["search_history"],
+    queryFn: () => fetchSearchHistory(200),
+    staleTime: 30_000,
+  });
+
   const items = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return MOCK_HISTORY.map((h) => ({
-      ...h,
-      searchKey: searchKeyFromKeyword(h.keyword),
-    })).filter((h) => !q || h.keyword.toLowerCase().includes(q));
-  }, [query]);
+    const all = historyQuery.data ?? [];
+    return all.filter((h) => !q || h.keyword.toLowerCase().includes(q));
+  }, [historyQuery.data, query]);
 
+  // 保存検索 (is_favorite=true) は最上部の固定セクションに分離
+  const favorites = items.filter((i) => i.isFavorite);
+  const regulars = items.filter((i) => !i.isFavorite);
   const groups = useMemo(
-    () => groupByDate(items, (i) => i.searchedAt),
-    [items]
+    () => groupByDate(regulars, (i) => i.lastUsedAt),
+    [regulars]
   );
+
+  async function handleToggleFavorite(keyword: string, current: boolean) {
+    await toggleFavoriteKeyword(keyword, !current);
+    await queryClient.invalidateQueries({ queryKey: ["search_history"] });
+  }
+
+  async function handleDelete(keyword: string) {
+    await deleteSearchHistoryEntry(keyword);
+    await queryClient.invalidateQueries({ queryKey: ["search_history"] });
+  }
+
+  if (historyQuery.isLoading) {
+    return (
+      <div className="bg-surface border border-border rounded-xl p-8 text-center text-sm text-muted">
+        読込中...
+      </div>
+    );
+  }
 
   if (items.length === 0) {
     return (
       <div className="bg-surface border border-border rounded-xl p-8 text-center">
         <SearchIcon className="text-muted mx-auto mb-2" size={28} />
-        <p className="text-sm text-muted">該当する検索履歴がありません</p>
+        <p className="text-sm text-muted">
+          {query ? "該当する検索履歴がありません" : "検索履歴がまだありません"}
+        </p>
       </div>
     );
   }
 
   return (
     <div className="flex flex-col gap-3">
+      {favorites.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <div className="text-[11px] font-semibold text-muted px-1 inline-flex items-center gap-1">
+            <Star size={10} className="text-warning" fill="currentColor" />
+            保存検索
+          </div>
+          {favorites.map((h) => (
+            <SearchHistoryCard
+              key={`fav-${h.keyword}`}
+              keyword={h.keyword}
+              count={h.count}
+              lastUsedAt={h.lastUsedAt}
+              isFavorite={h.isFavorite}
+              pinnedOnly={pinnedOnly}
+              memoOnly={memoOnly}
+              onToggleFavorite={() =>
+                handleToggleFavorite(h.keyword, h.isFavorite)
+              }
+              onDelete={() => handleDelete(h.keyword)}
+            />
+          ))}
+        </div>
+      )}
       {DATE_GROUP_ORDER.map((g) => {
         const list = groups[g];
         if (list.length === 0) return null;
@@ -259,15 +316,17 @@ function SearchHistoryList({
             </div>
             {list.map((h) => (
               <SearchHistoryCard
-                key={h.id}
-                id={h.id}
+                key={`his-${h.keyword}`}
                 keyword={h.keyword}
-                searchKey={h.searchKey}
-                median={h.median}
-                totalCount={h.totalCount}
-                searchedAt={h.searchedAt}
+                count={h.count}
+                lastUsedAt={h.lastUsedAt}
+                isFavorite={h.isFavorite}
                 pinnedOnly={pinnedOnly}
                 memoOnly={memoOnly}
+                onToggleFavorite={() =>
+                  handleToggleFavorite(h.keyword, h.isFavorite)
+                }
+                onDelete={() => handleDelete(h.keyword)}
               />
             ))}
           </div>
@@ -278,75 +337,93 @@ function SearchHistoryList({
 }
 
 function SearchHistoryCard({
-  id,
   keyword,
-  searchKey,
-  median,
-  totalCount,
-  searchedAt,
+  count,
+  lastUsedAt,
+  isFavorite,
   pinnedOnly,
   memoOnly,
+  onToggleFavorite,
+  onDelete,
 }: {
-  id: string;
   keyword: string;
-  searchKey: string;
-  median: number;
-  totalCount: number;
-  searchedAt: string;
+  count: number;
+  lastUsedAt: string;
+  isFavorite: boolean;
   pinnedOnly: boolean;
   memoOnly: boolean;
+  onToggleFavorite: () => void;
+  onDelete: () => void;
 }) {
+  const searchKey = searchKeyFromKeyword(keyword);
   const memo = useMemoValue(searchKey);
   const pinned = usePinnedValue(searchKey);
 
   if (pinnedOnly && !pinned) return null;
   if (memoOnly && !memo) return null;
 
-  const href = `/search/result/${id}?keyword=${encodeURIComponent(keyword)}&period=30&sources=yahoo_auction,mercari,jimoty`;
+  const href = `/search/loading?keyword=${encodeURIComponent(
+    keyword,
+  )}&period=90&sources=yahoo_auction,mercari,jimoty`;
 
   return (
-    <Link
-      href={href}
-      className="bg-surface border border-border rounded-xl p-4 flex items-start gap-3 hover:border-primary/40 active:bg-surface-2 transition-colors"
-    >
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5 mb-1">
-          {pinned && (
-            <Star
-              size={14}
-              className="text-warning shrink-0"
-              fill="currentColor"
-            />
-          )}
-          <p className="text-sm font-semibold text-foreground line-clamp-1">
-            {keyword}
-          </p>
-        </div>
-        {memo && (
-          <div className="flex items-start gap-1.5 mt-1.5 mb-1.5 p-2 rounded-md bg-warning/10 border border-warning/20">
-            <StickyNote
-              size={12}
-              className="text-warning mt-0.5 shrink-0"
-            />
-            <p className="text-xs text-foreground line-clamp-2 leading-relaxed">
-              {memo}
+    <div className="bg-surface border border-border rounded-xl p-3 flex items-stretch gap-2 hover:border-primary/40 transition-colors">
+      <Link href={href} className="flex-1 min-w-0 flex items-start gap-2 py-1">
+        <SearchIcon size={16} className="text-muted shrink-0 mt-0.5" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 mb-0.5">
+            {pinned && (
+              <Star
+                size={12}
+                className="text-warning shrink-0"
+                fill="currentColor"
+              />
+            )}
+            <p className="text-sm font-semibold text-foreground line-clamp-1">
+              {keyword}
             </p>
           </div>
-        )}
-        <div className="flex items-center gap-2 mt-1 flex-wrap">
-          <span className="text-base font-bold text-foreground">
-            {formatYen(median)}
-          </span>
-          <span className="text-xs text-muted">中央値</span>
-          <span className="text-xs text-muted">・</span>
-          <span className="text-xs text-muted">{formatCount(totalCount)}</span>
+          {memo && (
+            <div className="flex items-start gap-1.5 mt-1.5 mb-1 p-2 rounded-md bg-warning/10 border border-warning/20">
+              <StickyNote
+                size={12}
+                className="text-warning mt-0.5 shrink-0"
+              />
+              <p className="text-xs text-foreground line-clamp-2 leading-relaxed">
+                {memo}
+              </p>
+            </div>
+          )}
+          <div className="flex items-center gap-2 text-[11px] text-muted">
+            <span>{count} 回検索</span>
+            <span>・</span>
+            <RelativeDate iso={lastUsedAt} />
+          </div>
         </div>
-        <div className="text-xs text-muted mt-1">
-          <RelativeDate iso={searchedAt} />
-        </div>
+      </Link>
+      <div className="flex flex-col items-center justify-between gap-1 shrink-0">
+        <button
+          type="button"
+          onClick={onToggleFavorite}
+          className="p-1.5 rounded-md hover:bg-surface-2 active:bg-surface-2"
+          aria-label={isFavorite ? "保存検索を解除" : "保存検索に追加"}
+        >
+          <Star
+            size={16}
+            className={isFavorite ? "text-warning" : "text-muted"}
+            fill={isFavorite ? "currentColor" : "none"}
+          />
+        </button>
+        <button
+          type="button"
+          onClick={onDelete}
+          className="p-1.5 rounded-md hover:bg-surface-2 active:bg-surface-2"
+          aria-label="履歴から削除"
+        >
+          <Trash2 size={14} className="text-muted" />
+        </button>
       </div>
-      <ChevronRight size={18} className="text-muted shrink-0 mt-1" />
-    </Link>
+    </div>
   );
 }
 
