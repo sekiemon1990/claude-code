@@ -19,7 +19,11 @@ import {
   type ConditionRank,
 } from "@/lib/conditions";
 import { addItemToList, useDefaultQuery } from "@/lib/list";
-import type { Period, ShippingFilter } from "./SearchFormFields";
+import {
+  PERIOD_OPTIONS,
+  type Period,
+  type ShippingFilter,
+} from "./SearchFormFields";
 import { haptic } from "@/lib/storage";
 import { toast } from "@/lib/toast";
 
@@ -193,14 +197,8 @@ export function QuickAddBar() {
           {/* 期間 */}
           <div>
             <div className="text-[10px] text-muted mb-1.5">期間</div>
-            <div className="grid grid-cols-3 gap-2">
-              {(
-                [
-                  { v: "30", label: "直近30日" },
-                  { v: "90", label: "直近90日" },
-                  { v: "all", label: "全期間" },
-                ] as { v: Period; label: string }[]
-              ).map((opt) => (
+            <div className="grid grid-cols-4 gap-2">
+              {PERIOD_OPTIONS.map((opt) => (
                 <button
                   key={opt.v}
                   type="button"

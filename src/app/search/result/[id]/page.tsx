@@ -32,6 +32,8 @@ import {
   SearchFormFields,
   type Period,
   type ShippingFilter,
+  PERIOD_OPTIONS,
+  getPeriodLabel,
 } from "@/components/SearchFormFields";
 import { MOCK_RESULT } from "@/lib/mock-data";
 import { useQuery } from "@tanstack/react-query";
@@ -253,6 +255,18 @@ function ResultInner({ resultId }: { resultId: string }) {
     if (filter !== "all") {
       list = list.filter((l) => l.source === filter);
     }
+    // 期間フィルタ (endedAt が period 日以内かどうか)
+    if (period !== "all") {
+      const days = Number(period);
+      if (Number.isFinite(days) && days > 0) {
+        const threshold = Date.now() - days * 86400000;
+        list = list.filter((l) => {
+          if (!l.endedAt) return true; // 期間不明はそのまま含める
+          const t = new Date(l.endedAt).getTime();
+          return Number.isFinite(t) && t >= threshold;
+        });
+      }
+    }
     if (conditionFilter.length > 0) {
       list = list.filter((l) =>
         conditionFilter.includes(classifyCondition(l.condition))
@@ -284,7 +298,7 @@ function ResultInner({ resultId }: { resultId: string }) {
       if (sort === "price_desc") return b.price - a.price;
       return a.price - b.price;
     });
-  }, [flatListings, filter, conditionFilter, shippingFilter, refine, sort]);
+  }, [flatListings, filter, conditionFilter, shippingFilter, refine, sort, period]);
 
   const visibleCount =
     pageSize === "all"
@@ -447,7 +461,7 @@ function ResultInner({ resultId }: { resultId: string }) {
           {isEmpty ? keyword : result.productGuess}
         </h2>
         <div className="text-xs text-muted mt-1">
-          検索: {keyword} ・ 直近{period === "all" ? "全期間" : `${period}日`}
+          検索: {keyword} ・ {period === "all" ? "全期間" : `直近${getPeriodLabel(period as Period)}`}
         </div>
         {yahooLoading && yahooEnabled && (
           <div className="mt-2 text-xs text-primary flex items-center gap-1.5">
@@ -762,7 +776,7 @@ function ResultInner({ resultId }: { resultId: string }) {
                 <Filter size={12} className="text-muted shrink-0" />
                 <span className="text-muted">期間</span>
                 <span className="font-semibold text-foreground">
-                  {period === "all" ? "全期間" : `${period}日`}
+                  {getPeriodLabel(period as Period)}
                 </span>
                 <span className="text-muted">/ 送料</span>
                 <span className="font-semibold text-foreground">
@@ -792,13 +806,7 @@ function ResultInner({ resultId }: { resultId: string }) {
                   <span className="shrink-0 text-[10px] text-muted px-1">
                     期間:
                   </span>
-                  {(
-                    [
-                      { v: "30", label: "30日" },
-                      { v: "90", label: "90日" },
-                      { v: "all", label: "全期間" },
-                    ] as { v: Period; label: string }[]
-                  ).map((opt) => {
+                  {PERIOD_OPTIONS.map((opt) => {
                     const active = period === opt.v;
                     return (
                       <button

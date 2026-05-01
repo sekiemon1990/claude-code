@@ -68,7 +68,7 @@ export type SearchResult = {
   query: {
     keyword: string;
     excludes?: string;
-    period: "30" | "90" | "all";
+    period: "7" | "30" | "60" | "90" | "180" | "365" | "all";
   };
   searchedAt: string;
   productGuess?: string;
