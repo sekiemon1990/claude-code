@@ -15,6 +15,8 @@ import { SOURCES, type SourceKey } from "@/lib/types";
 import { CONDITION_RANKS, CONDITION_META, type ConditionRank } from "@/lib/conditions";
 import { MOCK_HISTORY } from "@/lib/mock-data";
 import { findDictionaryMatches } from "@/lib/keyword-dictionary";
+import { enqueueOfflineSearch } from "@/lib/offline-queue";
+import { toast } from "@/lib/toast";
 import {
   recordSearchKeyword,
   fetchUserKeywordSuggestions,
@@ -239,6 +241,26 @@ export function SearchFormFields({
     e.preventDefault();
     if (!keyword.trim()) return;
     if (selectedSources.length === 0) return;
+
+    // オフライン時はキューに保存して後で実行
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      enqueueOfflineSearch({
+        keyword: keyword.trim(),
+        excludes: excludes.trim() || undefined,
+        period,
+        sources: selectedSources,
+        conditions: selectedConditions,
+        shipping,
+      });
+      toast({
+        message: "オフラインのため検索を保留しました。回線復帰時に自動実行されます",
+        actionLabel: "保留中の検索を見る",
+        actionHref: "/list",
+      });
+      onAfterSubmit?.();
+      return;
+    }
+
     // バックグラウンドで検索キーワード履歴に記録 (失敗しても続行)
     recordSearchKeyword(keyword).catch(() => {});
     router.push(`/search/loading?${buildParams().toString()}`);
