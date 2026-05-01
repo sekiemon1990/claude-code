@@ -610,6 +610,7 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
         title={listing.title}
         description={listing.description}
         accessories={listing.accessories}
+        images={images}
       />
 
       {/* 商品説明 */}
@@ -920,16 +921,64 @@ function AccessoriesSection({
   title,
   description,
   accessories,
+  images,
 }: {
   title?: string;
   description?: string;
   accessories?: string[];
+  images?: string[];
 }) {
-  const { items, isInferred } = detectAccessories({
-    title,
-    description,
-    accessories,
+  const textResult = detectAccessories({ title, description, accessories });
+
+  // 本文/タイトルから何も抽出できなかった時のみ、画像から AI 検出にフォールバック
+  const shouldUseImages =
+    textResult.items.length === 0 &&
+    Array.isArray(images) &&
+    images.length > 0;
+
+  const imageQuery = useQuery({
+    queryKey: ["detect_accessories_img", images?.slice(0, 4).join("|") ?? ""],
+    queryFn: async (): Promise<{ accessories: string[] }> => {
+      const res = await fetch("/api/detect-accessories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          images: images?.slice(0, 4) ?? [],
+          productHint: title,
+        }),
+      });
+      if (!res.ok) return { accessories: [] };
+      return (await res.json()) as { accessories: string[] };
+    },
+    enabled: shouldUseImages,
+    staleTime: 60 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    retry: 0,
   });
+
+  const items = textResult.items.length > 0
+    ? textResult.items
+    : imageQuery.data?.accessories ?? [];
+  const isInferred = textResult.items.length > 0
+    ? textResult.isInferred
+    : (imageQuery.data?.accessories ?? []).length > 0;
+  const fromImages = textResult.items.length === 0 && items.length > 0;
+
+  // ローディング表示: 画像 AI 検出中で、まだテキスト結果も無い場合
+  if (shouldUseImages && imageQuery.isLoading && items.length === 0) {
+    return (
+      <section className="bg-surface border border-border rounded-xl p-4">
+        <div className="flex items-center gap-2">
+          <Package size={16} className="text-primary" />
+          <h2 className="text-sm font-semibold text-foreground">付属品</h2>
+          <span className="text-[10px] text-muted">
+            画像から AI 検出中...
+          </span>
+        </div>
+      </section>
+    );
+  }
 
   if (items.length === 0) return null;
 
@@ -943,7 +992,7 @@ function AccessoriesSection({
         {isInferred && (
           <span className="inline-flex items-center gap-1 text-[10px] text-muted px-2 py-0.5 rounded-full bg-surface-2">
             <Sparkles size={10} />
-            本文から自動抽出
+            {fromImages ? "画像から AI 抽出" : "本文から自動抽出"}
           </span>
         )}
       </div>
@@ -959,7 +1008,11 @@ function AccessoriesSection({
       </div>
       {isInferred && (
         <p className="text-[11px] text-muted mt-2 leading-relaxed">
-          ※ 本文中のキーワードから自動抽出した結果です。実際の付属品とは異なる場合があります。
+          ※{" "}
+          {fromImages
+            ? "出品画像から AI が自動推定した結果です。"
+            : "本文中のキーワードから自動抽出した結果です。"}
+          実際の付属品とは異なる場合があります。
         </p>
       )}
     </section>
