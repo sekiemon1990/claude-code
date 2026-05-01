@@ -88,23 +88,23 @@ export function mockPastCompletedDeals(context: CrmContext): Deal[] {
   // 90 日に分散させて、3ヶ月期間・1ヶ月期間・1週間期間それぞれで意味のある集計が出るように
   return [
     // 直近1週間 (5件、うち2件録音あり)
-    { id: 'past_001', customerName: '高橋 二郎 様', customerAddress: '埼玉県さいたま市浦和区', reservationAt: days(1), assessorEmail: ME, assessorName: '自分', status: 'completed', items: '腕時計、ネックレス、指輪' },
-    { id: 'past_002', customerName: '伊藤 三郎 様', customerAddress: '東京都世田谷区', reservationAt: days(2), assessorEmail: ME, assessorName: '自分', status: 'completed', items: 'ブランドバッグ2点、財布' },
-    { id: 'past_003', customerName: '渡辺 四郎 様', customerAddress: '千葉県千葉市', reservationAt: days(3), assessorEmail: ME, assessorName: '自分', status: 'completed', items: '時計、コイン3点' },
-    { id: 'past_004', customerName: '中村 五郎 様', customerAddress: '神奈川県川崎市', reservationAt: days(4), assessorEmail: ME, assessorName: '自分', status: 'completed', items: '着物一式' },
-    { id: 'past_005', customerName: '小林 六郎 様', customerAddress: '東京都品川区', reservationAt: days(6), assessorEmail: ME, assessorName: '自分', status: 'completed', items: '貴金属、宝石類' },
+    { id: 'past_001', customerName: '高橋 二郎 様', customerAddress: '埼玉県さいたま市浦和区', reservationAt: days(1), assessorEmail: ME, assessorName: '自分', insideSalesName: '田中 花子', status: 'completed', items: '腕時計、ネックレス、指輪' },
+    { id: 'past_002', customerName: '伊藤 三郎 様', customerAddress: '東京都世田谷区', reservationAt: days(2), assessorEmail: ME, assessorName: '自分', insideSalesName: '佐藤 健', status: 'completed', items: 'ブランドバッグ2点、財布' },
+    { id: 'past_003', customerName: '渡辺 四郎 様', customerAddress: '千葉県千葉市', reservationAt: days(3), assessorEmail: ME, assessorName: '自分', insideSalesName: '鈴木 美咲', status: 'completed', items: '時計、コイン3点' },
+    { id: 'past_004', customerName: '中村 五郎 様', customerAddress: '神奈川県川崎市', reservationAt: days(4), assessorEmail: ME, assessorName: '自分', insideSalesName: '高橋 大輔', status: 'completed', items: '着物一式' },
+    { id: 'past_005', customerName: '小林 六郎 様', customerAddress: '東京都品川区', reservationAt: days(6), assessorEmail: ME, assessorName: '自分', insideSalesName: '渡辺 さくら', status: 'completed', items: '貴金属、宝石類' },
     // 1ヶ月（8〜30日前、6件、うち2件録音あり）
-    { id: 'past_006', customerName: '加藤 七郎 様', customerAddress: '東京都新宿区', reservationAt: days(9), assessorEmail: ME, assessorName: '自分', status: 'completed', items: 'ロレックス2点' },
-    { id: 'past_007', customerName: '吉田 八郎 様', customerAddress: '神奈川県横浜市', reservationAt: days(12), assessorEmail: ME, assessorName: '自分', status: 'completed', items: 'ダイヤモンドネックレス' },
-    { id: 'past_008', customerName: '山口 九郎 様', customerAddress: '千葉県市川市', reservationAt: days(15), assessorEmail: ME, assessorName: '自分', status: 'completed', items: '陶磁器コレクション' },
-    { id: 'past_009', customerName: '松本 十郎 様', customerAddress: '埼玉県川越市', reservationAt: days(20), assessorEmail: ME, assessorName: '自分', status: 'completed', items: '切手、古銭' },
-    { id: 'past_010', customerName: '井上 百一 様', customerAddress: '東京都目黒区', reservationAt: days(24), assessorEmail: ME, assessorName: '自分', status: 'completed', items: '骨董品3点' },
-    { id: 'past_011', customerName: '木村 百二 様', customerAddress: '神奈川県藤沢市', reservationAt: days(28), assessorEmail: ME, assessorName: '自分', status: 'completed', items: 'ブランド時計、財布' },
+    { id: 'past_006', customerName: '加藤 七郎 様', customerAddress: '東京都新宿区', reservationAt: days(9), assessorEmail: ME, assessorName: '自分', insideSalesName: '田中 花子', status: 'completed', items: 'ロレックス2点' },
+    { id: 'past_007', customerName: '吉田 八郎 様', customerAddress: '神奈川県横浜市', reservationAt: days(12), assessorEmail: ME, assessorName: '自分', insideSalesName: '佐藤 健', status: 'completed', items: 'ダイヤモンドネックレス' },
+    { id: 'past_008', customerName: '山口 九郎 様', customerAddress: '千葉県市川市', reservationAt: days(15), assessorEmail: ME, assessorName: '自分', insideSalesName: '鈴木 美咲', status: 'completed', items: '陶磁器コレクション' },
+    { id: 'past_009', customerName: '松本 十郎 様', customerAddress: '埼玉県川越市', reservationAt: days(20), assessorEmail: ME, assessorName: '自分', insideSalesName: '高橋 大輔', status: 'completed', items: '切手、古銭' },
+    { id: 'past_010', customerName: '井上 百一 様', customerAddress: '東京都目黒区', reservationAt: days(24), assessorEmail: ME, assessorName: '自分', insideSalesName: '渡辺 さくら', status: 'completed', items: '骨董品3点' },
+    { id: 'past_011', customerName: '木村 百二 様', customerAddress: '神奈川県藤沢市', reservationAt: days(28), assessorEmail: ME, assessorName: '自分', insideSalesName: '田中 花子', status: 'completed', items: 'ブランド時計、財布' },
     // 3ヶ月（31〜90日前、4件、うち1件録音あり）
-    { id: 'past_012', customerName: '林 百三 様', customerAddress: '東京都杉並区', reservationAt: days(40), assessorEmail: ME, assessorName: '自分', status: 'completed', items: '宝石類、金貨' },
-    { id: 'past_013', customerName: '清水 百四 様', customerAddress: '埼玉県越谷市', reservationAt: days(55), assessorEmail: ME, assessorName: '自分', status: 'completed', items: '着物、帯' },
-    { id: 'past_014', customerName: '山本 百五 様', customerAddress: '千葉県松戸市', reservationAt: days(70), assessorEmail: ME, assessorName: '自分', status: 'completed', items: '楽器（バイオリン）' },
-    { id: 'past_015', customerName: '池田 百六 様', customerAddress: '東京都板橋区', reservationAt: days(85), assessorEmail: ME, assessorName: '自分', status: 'completed', items: 'カメラ、レンズ多数' },
+    { id: 'past_012', customerName: '林 百三 様', customerAddress: '東京都杉並区', reservationAt: days(40), assessorEmail: ME, assessorName: '自分', insideSalesName: '佐藤 健', status: 'completed', items: '宝石類、金貨' },
+    { id: 'past_013', customerName: '清水 百四 様', customerAddress: '埼玉県越谷市', reservationAt: days(55), assessorEmail: ME, assessorName: '自分', insideSalesName: '鈴木 美咲', status: 'completed', items: '着物、帯' },
+    { id: 'past_014', customerName: '山本 百五 様', customerAddress: '千葉県松戸市', reservationAt: days(70), assessorEmail: ME, assessorName: '自分', insideSalesName: '高橋 大輔', status: 'completed', items: '楽器（バイオリン）' },
+    { id: 'past_015', customerName: '池田 百六 様', customerAddress: '東京都板橋区', reservationAt: days(85), assessorEmail: ME, assessorName: '自分', insideSalesName: '渡辺 さくら', status: 'completed', items: 'カメラ、レンズ多数' },
   ];
 }
 
@@ -124,6 +124,7 @@ function mockDeals(context: CrmContext): Deal[] {
       reservationAt: minutes(30),
       assessorEmail: ME,
       assessorName: '自分',
+      insideSalesName: '田中 花子',
       status: 'scheduled',
       items: '動作確認用テスト品目（録音テストにご利用ください）',
       notes: 'この案件は時刻に関係なく常に直近30分後の予定として表示されます',
@@ -136,6 +137,7 @@ function mockDeals(context: CrmContext): Deal[] {
       reservationAt: hours(2),
       assessorEmail: ME,
       assessorName: '自分',
+      insideSalesName: '佐藤 健',
       status: 'scheduled',
       items: '腕時計（ロレックス）、ブランドバッグ数点',
       notes: 'マンション1階、駐車場あり',
@@ -148,6 +150,7 @@ function mockDeals(context: CrmContext): Deal[] {
       reservationAt: hours(5),
       assessorEmail: ME,
       assessorName: '自分',
+      insideSalesName: '鈴木 美咲',
       status: 'scheduled',
       items: '着物一式、貴金属',
     },
@@ -158,6 +161,7 @@ function mockDeals(context: CrmContext): Deal[] {
       reservationAt: hours(26),
       assessorEmail: ME,
       assessorName: '自分',
+      insideSalesName: '高橋 大輔',
       status: 'scheduled',
       items: '切手コレクション',
     },
@@ -169,6 +173,7 @@ function mockDeals(context: CrmContext): Deal[] {
       reservationAt: hours(3),
       assessorEmail: SOMEONE_ELSE,
       assessorName: '別の営業マン',
+      insideSalesName: '渡辺 さくら',
       status: 'scheduled',
       items: 'これはあなたに割り当てられていない案件です',
     },
@@ -313,5 +318,6 @@ export function toSnapshot(deal: Deal): DealSnapshot {
     address: deal.customerAddress,
     items: deal.items,
     dealUrl: getDealUrl(deal),
+    insideSalesName: deal.insideSalesName,
   };
 }

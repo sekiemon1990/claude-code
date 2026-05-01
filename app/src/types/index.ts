@@ -23,6 +23,8 @@ export type Deal = {
   assessorUid?: string;
   assessorEmail?: string;
   assessorName?: string;
+  /** 予約担当者 (インサイドセールス担当)。査定担当 (assessor*) とは別の役割 */
+  insideSalesName?: string;
   status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
   items?: string;
   notes?: string;
@@ -41,6 +43,8 @@ export type DealSnapshot = {
   address?: string;
   items?: string;
   dealUrl?: string;
+  /** 予約担当者 (インサイドセールス担当)。Chatwork 通知に表示するため snapshot に含める */
+  insideSalesName?: string;
 };
 
 export type Recording = {
