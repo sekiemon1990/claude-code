@@ -19,50 +19,23 @@ export type YahooScrapeOptions = {
   limit?: number;
 };
 
-// 1 リクエストあたりの最大件数 (Yahoo の上限)
+// 1 ページあたりの取得件数 (Yahoo の上限)
 const PER_PAGE = 100;
-// 並列取得する最大ページ数 (1000 件まで)
-const MAX_PAGES = 10;
 
 export async function scrapeYahooAuction(
   options: YahooScrapeOptions,
 ): Promise<SourceResult> {
   const { keyword, excludes } = options;
 
-  // 最初の 1 ページを取得して、結果が満杯 (PER_PAGE 件) なら追加ページも並列取得
-  const firstHtml = await fetchYahooPage(keyword, excludes, 1);
-  const firstListings = parsePageListings(firstHtml);
-  console.log("[yahoo-scrape] page 1 parsed:", firstListings.length);
+  // 1 ページのみ取得 (高速・低負荷)
+  const html = await fetchYahooPage(keyword, excludes, 1);
+  const listings = parsePageListings(html);
+  const totalAvailable = parseTotalCount(html);
 
-  let allListings = firstListings;
+  console.log("[yahoo-scrape] page 1 parsed:", listings.length);
+  console.log("[yahoo-scrape] total available:", totalAvailable);
 
-  if (firstListings.length >= PER_PAGE) {
-    // 2 ページ目以降を並列で取得
-    const pagePromises: Promise<string>[] = [];
-    for (let p = 2; p <= MAX_PAGES; p++) {
-      const start = (p - 1) * PER_PAGE + 1;
-      pagePromises.push(fetchYahooPage(keyword, excludes, start));
-    }
-    const additionalHtmls = await Promise.all(pagePromises);
-    for (let i = 0; i < additionalHtmls.length; i++) {
-      const items = parsePageListings(additionalHtmls[i]);
-      console.log(`[yahoo-scrape] page ${i + 2} parsed:`, items.length);
-      if (items.length === 0) break;
-      allListings = allListings.concat(items);
-    }
-  }
-
-  // ID で重複排除 (同じ商品が複数ページに来ることは稀だが念のため)
-  const seen = new Set<string>();
-  const dedup: Listing[] = [];
-  for (const l of allListings) {
-    if (seen.has(l.id)) continue;
-    seen.add(l.id);
-    dedup.push(l);
-  }
-
-  console.log("[yahoo-scrape] total parsed:", dedup.length);
-  return summarize("yahoo_auction", dedup);
+  return summarize("yahoo_auction", listings, totalAvailable);
 }
 
 async function fetchYahooPage(
@@ -106,6 +79,64 @@ function parsePageListings(html: string): Listing[] {
   const fromNext = parseFromNextData(html);
   if (fromNext && fromNext.length > 0) return fromNext;
   return parseYahooHtml(html);
+}
+
+// __NEXT_DATA__ から総件数を抽出する
+function parseTotalCount(html: string): number | undefined {
+  if (!html) return undefined;
+  const match = html.match(
+    /<script\s+id="__NEXT_DATA__"\s+type="application\/json">([\s\S]*?)<\/script>/,
+  );
+  if (!match) return undefined;
+  let data: unknown;
+  try {
+    data = JSON.parse(match[1]);
+  } catch {
+    return undefined;
+  }
+  const total = findTotalCount(data);
+  return total;
+}
+
+// 再帰的に "totalCount" / "total" / "totalHits" 等を探索
+function findTotalCount(node: unknown, depth = 0): number | undefined {
+  if (depth > 12) return undefined;
+  if (!node || typeof node !== "object") return undefined;
+
+  const TOTAL_KEYS = [
+    "totalCount",
+    "totalHits",
+    "totalNumber",
+    "totalResults",
+    "totalNum",
+    "total",
+    "hitCount",
+    "numFound",
+  ];
+
+  if (Array.isArray(node)) {
+    for (const c of node) {
+      const v = findTotalCount(c, depth + 1);
+      if (v !== undefined) return v;
+    }
+    return undefined;
+  }
+
+  const o = node as Record<string, unknown>;
+  for (const key of TOTAL_KEYS) {
+    const v = o[key];
+    if (typeof v === "number" && v > 0) return v;
+    if (typeof v === "string") {
+      const n = Number(v.replace(/[^\d]/g, ""));
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+  }
+
+  for (const v of Object.values(o)) {
+    const found = findTotalCount(v, depth + 1);
+    if (found !== undefined) return found;
+  }
+  return undefined;
 }
 
 // ---- __NEXT_DATA__ パース ----
@@ -495,11 +526,20 @@ function parseYahooHtml(html: string): Listing[] {
 function summarize(
   source: SourceResult["source"],
   listings: Listing[],
+  totalAvailable?: number,
 ): SourceResult {
   const prices = listings.map((l) => l.price).sort((a, b) => a - b);
   const count = listings.length;
   if (count === 0) {
-    return { source, count: 0, median: 0, min: 0, max: 0, listings: [] };
+    return {
+      source,
+      count: 0,
+      median: 0,
+      min: 0,
+      max: 0,
+      listings: [],
+      totalAvailable,
+    };
   }
   const median =
     count % 2 === 1
@@ -507,5 +547,5 @@ function summarize(
       : Math.round((prices[count / 2 - 1] + prices[count / 2]) / 2);
   const min = prices[0];
   const max = prices[count - 1];
-  return { source, count, median, min, max, listings };
+  return { source, count, median, min, max, listings, totalAvailable };
 }
