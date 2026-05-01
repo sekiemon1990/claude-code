@@ -32,6 +32,46 @@ function preserveBreaks(text: string): string {
     .trim();
 }
 
+// JSON-LD 構造化データから price を再帰的に探す
+function findJsonLdPrice(node: unknown, depth = 0): number | undefined {
+  if (depth > 8) return undefined;
+  if (!node) return undefined;
+  if (Array.isArray(node)) {
+    for (const c of node) {
+      const v = findJsonLdPrice(c, depth + 1);
+      if (v !== undefined) return v;
+    }
+    return undefined;
+  }
+  if (typeof node !== "object") return undefined;
+  const o = node as Record<string, unknown>;
+  // 直接の price フィールド
+  const direct = o.price;
+  if (typeof direct === "number" && Number.isFinite(direct)) return direct;
+  if (typeof direct === "string") {
+    const n = Number(direct.replace(/[^\d.]/g, ""));
+    if (Number.isFinite(n) && n >= 0) return n;
+  }
+  // offers.price (Schema.org Product)
+  const offers = o.offers;
+  if (offers) {
+    const v = findJsonLdPrice(offers, depth + 1);
+    if (v !== undefined) return v;
+  }
+  // priceSpecification.price
+  const priceSpec = o.priceSpecification;
+  if (priceSpec) {
+    const v = findJsonLdPrice(priceSpec, depth + 1);
+    if (v !== undefined) return v;
+  }
+  // 一般的な再帰
+  for (const v of Object.values(o)) {
+    const r = findJsonLdPrice(v, depth + 1);
+    if (r !== undefined) return r;
+  }
+  return undefined;
+}
+
 // HTML から改行を保持してテキスト抽出 (<br>/<p>/<div> を改行に変換)
 function htmlToTextWithBreaks(htmlSnippet: string): string {
   return htmlSnippet
@@ -212,17 +252,6 @@ export async function scrapeJimotyItem(
       }
     }
   }
-  // 最後の保険: HTML 全体から ¥X,XXX を最初に出てくるものを採用
-  if (price === undefined) {
-    const m = html.match(/[¥￥]\s?([\d,]{1,9})(?!\d)/);
-    if (m) {
-      const n = Number(m[1].replace(/,/g, ""));
-      if (Number.isFinite(n)) {
-        price = n;
-        console.log("[jimoty-item] price via fallback regex");
-      }
-    }
-  }
   // 価格 selector 候補のテキスト一覧を常に出力 (診断用)
   const priceProbe = $('[class*="price" i], [data-testid*="price" i]')
     .map((_, el) => {
@@ -260,11 +289,44 @@ export async function scrapeJimotyItem(
     });
   }
 
+  // JSON-LD (構造化データ) から価格を取得
+  if (price === undefined) {
+    const jsonLdMatches = html.matchAll(
+      /<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g,
+    );
+    for (const ldMatch of jsonLdMatches) {
+      try {
+        const parsed = JSON.parse(ldMatch[1].trim());
+        const found = findJsonLdPrice(parsed);
+        if (found !== undefined) {
+          price = found;
+          console.log("[jimoty-item] price via JSON-LD:", found);
+          break;
+        }
+      } catch {
+        // ignore parse errors
+      }
+    }
+  }
+
+  // 最後の保険: HTML 全体から ¥X,XXX または X,XXX円 を抽出
+  if (price === undefined) {
+    const m =
+      html.match(/[¥￥]\s?([\d,]{2,9})(?!\d)/) ||
+      html.match(/([\d,]{2,9})\s*円/);
+    if (m) {
+      const n = Number(m[1].replace(/,/g, ""));
+      if (Number.isFinite(n) && n > 0 && n < 100_000_000) {
+        price = n;
+        console.log("[jimoty-item] price via fallback HTML regex:", n);
+      }
+    }
+  }
+
+  // 「あげます」「差し上げ」表記なら 0 円扱い (URL で giveaway 確定の時のみ)
   // URL から giveaway 判定 (sale カテゴリなら絶対 giveaway ではない)
   const isSaleUrl = /\/(sale|sell|s)-/.test(fullUrl) || fullUrl.includes("/sale/");
   const isGiveawayUrl = /\/(give|present|free|mu)-/.test(fullUrl);
-
-  // 「あげます」「差し上げ」表記なら 0 円扱い (URL で giveaway 確定の時のみ)
   if (price === undefined && isGiveawayUrl && !isSaleUrl) {
     price = 0;
     console.log("[jimoty-item] price = 0 (giveaway URL)");
