@@ -23,6 +23,8 @@ export type YahooScrapeOptions = {
   limit?: number;
   /** "sold": 落札相場 (closedsearch) / "active": 出品中 / デフォルト sold */
   status?: "sold" | "active";
+  /** 1-indexed ページ番号 (デフォルト 1) */
+  page?: number;
 };
 
 // 1 ページあたりの取得件数 (Yahoo の上限)
@@ -31,12 +33,20 @@ const PER_PAGE = 100;
 export async function scrapeYahooAuction(
   options: YahooScrapeOptions,
 ): Promise<SourceResult> {
-  const { keyword, excludes, limit = 30, status = "sold" } = options;
+  const { keyword, excludes, limit = 30, status = "sold", page = 1 } = options;
 
   // 表示に必要な件数のみ取得 (Yahoo の上限 100 まで)
   const fetchCount = Math.min(Math.max(limit, 10), 100);
+  // Yahoo は b (start position) で 1-indexed の開始位置指定
+  const startPosition = (Math.max(1, page) - 1) * fetchCount + 1;
 
-  const html = await fetchYahooPage(keyword, excludes, 1, fetchCount, status);
+  const html = await fetchYahooPage(
+    keyword,
+    excludes,
+    startPosition,
+    fetchCount,
+    status,
+  );
   const listings = parsePageListings(html);
   let totalAvailable = parseTotalCount(html);
 
@@ -49,10 +59,16 @@ export async function scrapeYahooAuction(
     );
   }
 
-  log.info("fetched:", listings.length, "/", fetchCount);
+  log.info("fetched:", listings.length, "/", fetchCount, "page:", page);
   log.info("total available:", totalAvailable);
 
-  return summarize("yahoo_auction", listings, totalAvailable);
+  // 次ページの存在判定: 取得件数が満杯 OR (totalAvailable が判明していて開始位置 + 取得 < total)
+  const hasNextPage =
+    listings.length >= fetchCount ||
+    (typeof totalAvailable === "number" &&
+      startPosition + listings.length - 1 < totalAvailable);
+
+  return summarize("yahoo_auction", listings, totalAvailable, hasNextPage);
 }
 
 async function fetchYahooPage(
@@ -615,6 +631,7 @@ function summarize(
   source: SourceResult["source"],
   listings: Listing[],
   totalAvailable?: number,
+  hasNextPage?: boolean,
 ): SourceResult {
   const prices = listings.map((l) => l.price).sort((a, b) => a - b);
   const count = listings.length;
@@ -627,6 +644,7 @@ function summarize(
       max: 0,
       listings: [],
       totalAvailable,
+      hasNextPage,
     };
   }
   const median =
@@ -635,5 +653,5 @@ function summarize(
       : Math.round((prices[count / 2 - 1] + prices[count / 2]) / 2);
   const min = prices[0];
   const max = prices[count - 1];
-  return { source, count, median, min, max, listings, totalAvailable };
+  return { source, count, median, min, max, listings, totalAvailable, hasNextPage };
 }
