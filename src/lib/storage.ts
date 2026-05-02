@@ -1,6 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
+
+// localStorage 系の購読共通: storage / maxus_search:storage 両イベントを listen
+function subscribeMaxusStorage(callback: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener("maxus_search:storage", callback);
+  window.addEventListener("storage", callback);
+  return () => {
+    window.removeEventListener("maxus_search:storage", callback);
+    window.removeEventListener("storage", callback);
+  };
+}
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getQueryClient } from "@/components/QueryProvider";
 import {
@@ -320,20 +331,11 @@ export function getLastResultUrl(): string | null {
 }
 
 export function useLastResultUrl(): string | null {
-  const [url, setUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    setUrl(getLastResultUrl());
-    const onChange = () => setUrl(getLastResultUrl());
-    window.addEventListener("maxus_search:storage", onChange);
-    window.addEventListener("storage", onChange);
-    return () => {
-      window.removeEventListener("maxus_search:storage", onChange);
-      window.removeEventListener("storage", onChange);
-    };
-  }, []);
-
-  return url;
+  return useSyncExternalStore(
+    subscribeMaxusStorage,
+    () => getLastResultUrl(),
+    () => null,
+  );
 }
 
 // ============================================================================
@@ -392,23 +394,16 @@ export function setSettings(settings: AppSettings): void {
 }
 
 export function useSettings(): [AppSettings, (s: Partial<AppSettings>) => void] {
-  const [settings, setLocal] = useState<AppSettings>(DEFAULT_SETTINGS);
-
-  useEffect(() => {
-    setLocal(getSettings());
-    const onChange = () => setLocal(getSettings());
-    window.addEventListener("maxus_search:storage", onChange);
-    window.addEventListener("storage", onChange);
-    return () => {
-      window.removeEventListener("maxus_search:storage", onChange);
-      window.removeEventListener("storage", onChange);
-    };
-  }, []);
+  const settings = useSyncExternalStore(
+    subscribeMaxusStorage,
+    () => getSettings(),
+    () => DEFAULT_SETTINGS,
+  );
 
   const update = (partial: Partial<AppSettings>) => {
     const next = { ...settings, ...partial };
     setSettings(next);
-    setLocal(next);
+    // 永続化後 maxus_search:storage イベントが飛び useSyncExternalStore が再読込
   };
 
   return [settings, update];
@@ -475,16 +470,16 @@ export function setTheme(theme: "light" | "dark"): void {
 }
 
 export function useTheme(): ["light" | "dark", () => void] {
-  const [theme, setThemeState] = useState<"light" | "dark">("light");
-
-  useEffect(() => {
-    setThemeState(getTheme());
-  }, []);
+  const theme = useSyncExternalStore(
+    subscribeMaxusStorage,
+    () => getTheme(),
+    () => "light" as const,
+  );
 
   const toggle = () => {
     const next = theme === "dark" ? "light" : "dark";
     setTheme(next);
-    setThemeState(next);
+    // setTheme 内で write → maxus_search:storage が飛ぶので state は自動更新
   };
 
   return [theme, toggle];

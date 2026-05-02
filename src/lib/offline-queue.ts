@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import type { ListItemQuery } from "./api/lists";
 
 /**
@@ -66,6 +66,54 @@ export function clearOfflineQueue(): void {
   writeQueue([]);
 }
 
+function subscribeQueue(callback: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  const onStorage = (e: StorageEvent) => {
+    if (e.key === KEY) callback();
+  };
+  window.addEventListener(EVT, callback);
+  window.addEventListener("online", callback);
+  window.addEventListener("offline", callback);
+  window.addEventListener("storage", onStorage);
+  return () => {
+    window.removeEventListener(EVT, callback);
+    window.removeEventListener("online", callback);
+    window.removeEventListener("offline", callback);
+    window.removeEventListener("storage", onStorage);
+  };
+}
+
+// snapshot は参照同一性を維持するためキャッシュする
+// (useSyncExternalStore の getSnapshot は同一の参照を返さないと無限再レンダーになる)
+let cachedSnapshot: {
+  items: QueuedSearch[];
+  count: number;
+  isOnline: boolean;
+} = { items: [], count: 0, isOnline: true };
+let cachedKey = "";
+
+function getQueueSnapshot(): {
+  items: QueuedSearch[];
+  count: number;
+  isOnline: boolean;
+} {
+  const items = readQueue();
+  const isOnline =
+    typeof navigator !== "undefined" ? navigator.onLine : true;
+  // 軽量な変更検出キー
+  const key = `${items.length}:${items.map((i) => i.id).join(",")}:${isOnline}`;
+  if (key === cachedKey) return cachedSnapshot;
+  cachedKey = key;
+  cachedSnapshot = { items, count: items.length, isOnline };
+  return cachedSnapshot;
+}
+
+const SERVER_SNAPSHOT: {
+  items: QueuedSearch[];
+  count: number;
+  isOnline: boolean;
+} = { items: [], count: 0, isOnline: true };
+
 /**
  * 現在のキュー状態を購読する hook。
  * オフラインキューの増減をリアルタイム反映する。
@@ -75,30 +123,9 @@ export function useOfflineQueue(): {
   count: number;
   isOnline: boolean;
 } {
-  const [items, setItems] = useState<QueuedSearch[]>([]);
-  const [isOnline, setIsOnline] = useState(true);
-
-  useEffect(() => {
-    setItems(readQueue());
-    setIsOnline(typeof navigator !== "undefined" ? navigator.onLine : true);
-
-    const onChange = () => setItems(readQueue());
-    const onOnline = () => setIsOnline(true);
-    const onOffline = () => setIsOnline(false);
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === KEY) setItems(readQueue());
-    };
-    window.addEventListener(EVT, onChange);
-    window.addEventListener("online", onOnline);
-    window.addEventListener("offline", onOffline);
-    window.addEventListener("storage", onStorage);
-    return () => {
-      window.removeEventListener(EVT, onChange);
-      window.removeEventListener("online", onOnline);
-      window.removeEventListener("offline", onOffline);
-      window.removeEventListener("storage", onStorage);
-    };
-  }, []);
-
-  return { items, count: items.length, isOnline };
+  return useSyncExternalStore(
+    subscribeQueue,
+    getQueueSnapshot,
+    () => SERVER_SNAPSHOT,
+  );
 }
