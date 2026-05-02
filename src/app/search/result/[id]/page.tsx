@@ -1576,8 +1576,8 @@ function ListingCard({
   }
 
   const cardClass = pinned
-    ? "tap-scale bg-surface border-2 border-pin/40 rounded-xl overflow-hidden hover:border-pin/60 transition-colors"
-    : "bg-surface border border-border rounded-xl overflow-hidden hover:border-primary/40 transition-colors";
+    ? "tap-scale bg-surface border-2 border-pin/40 rounded-xl overflow-hidden hover:border-pin/60 hover:shadow-md transition-all duration-150"
+    : "bg-surface border border-border rounded-xl overflow-hidden hover:border-primary/30 hover:shadow-md transition-all duration-150";
 
   if (compact) {
     return (
@@ -1646,47 +1646,56 @@ function ListingCard({
       <Link href={detailHref} onClick={handleCardTap} className="block">
         <div className="flex p-3 gap-3">
           {listing.thumbnail ? (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onLightbox(listing.thumbnail!);
-              }}
-              className="w-20 h-20 rounded-lg overflow-hidden bg-surface-2 shrink-0"
-              aria-label="画像を拡大"
-            >
-              <Image
-                src={listing.thumbnail}
-                alt=""
-                width={80}
-                height={80}
-                loading="lazy"
-                unoptimized
-                className="w-full h-full object-cover"
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onLightbox(listing.thumbnail!);
+                }}
+                className="w-20 h-20 rounded-lg overflow-hidden bg-surface-2 block"
+                aria-label="画像を拡大"
+              >
+                <Image
+                  src={listing.thumbnail}
+                  alt=""
+                  width={80}
+                  height={80}
+                  loading="lazy"
+                  unoptimized
+                  className="w-full h-full object-cover"
+                />
+              </button>
+              <SourceBadge
+                source={listing.source}
+                variant="overlay"
+                className="absolute top-1 left-1"
               />
-            </button>
+            </div>
           ) : (
             <div className="w-20 h-20 rounded-lg bg-surface-2 shrink-0 flex items-center justify-center text-muted text-[10px]">
               画像なし
             </div>
           )}
           <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-2 mb-1.5">
-              <SourceBadge source={listing.source} />
-              <div className="flex items-center gap-0.5 -mt-1 -mr-1">
+            <div className="flex items-start justify-between gap-2">
+              <p className="text-sm font-medium text-foreground line-clamp-2 leading-snug flex-1">
+                {listing.title}
+              </p>
+              <div className="flex items-center gap-0.5 shrink-0 -mt-1 -mr-1">
                 <button
                   type="button"
                   onClick={togglePin}
                   aria-label={pinned ? "ピンを外す" : "ピン留め"}
                   className={
                     pinned
-                      ? "tap-scale shrink-0 w-9 h-9 rounded-md flex items-center justify-center bg-pin/10 text-pin"
-                      : "shrink-0 w-9 h-9 rounded-md flex items-center justify-center text-muted hover:bg-surface-2"
+                      ? "tap-scale w-8 h-8 rounded-md flex items-center justify-center bg-pin/10 text-pin"
+                      : "w-8 h-8 rounded-md flex items-center justify-center text-muted hover:bg-surface-2"
                   }
                 >
                   <Star
-                    size={18}
+                    size={16}
                     fill={pinned ? "currentColor" : "none"}
                   />
                 </button>
@@ -1698,15 +1707,12 @@ function ListingCard({
                     setMenuOpen(!menuOpen);
                   }}
                   aria-label="メニュー"
-                  className="shrink-0 w-9 h-9 rounded-md flex items-center justify-center text-muted hover:bg-surface-2"
+                  className="w-8 h-8 rounded-md flex items-center justify-center text-muted hover:bg-surface-2"
                 >
-                  <MoreVertical size={18} />
+                  <MoreVertical size={16} />
                 </button>
               </div>
             </div>
-            <p className="text-sm font-medium text-foreground line-clamp-2 leading-snug">
-              {listing.title}
-            </p>
             <div className="flex items-baseline gap-2 mt-1.5 flex-wrap">
               <span className="text-xl font-bold text-foreground tracking-tight">
                 {formatYen(listing.price)}
@@ -1724,7 +1730,7 @@ function ListingCard({
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-1.5 mt-1 text-xs flex-wrap">
+            <div className="flex items-center gap-1.5 mt-1.5 text-xs flex-wrap">
               <ConditionBadge rank={rank} size="sm" />
               <ShippingBadge shipping={listing.shipping} size="sm" />
               {listing.sellerType === "store" && (
@@ -1732,13 +1738,12 @@ function ListingCard({
                   ストア
                 </span>
               )}
-            </div>
-            <div className="flex items-center gap-1.5 mt-1 text-xs text-muted">
               {listing.condition && (
-                <span className="truncate">{listing.condition}</span>
+                <span className="text-muted truncate max-w-[140px]">
+                  {listing.condition}
+                </span>
               )}
-              {listing.condition && <span>・</span>}
-              <span className="shrink-0">
+              <span className="text-muted ml-auto shrink-0">
                 <RelativeDate iso={listing.endedAt} />
               </span>
             </div>
@@ -1756,10 +1761,10 @@ function ListingCard({
           </div>
         </div>
       </Link>
-      <div className="grid grid-cols-2 border-t border-border">
+      <div className="grid grid-cols-2 border-t border-border bg-surface-2/30">
         <Link
           href={detailHref}
-          className="flex items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-semibold text-foreground hover:bg-surface-2 transition-colors border-r border-border"
+          className="flex items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-semibold text-foreground hover:bg-surface-2 transition-colors"
         >
           詳細を見る
         </Link>
@@ -1767,7 +1772,7 @@ function ListingCard({
           href={listing.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-semibold hover:bg-surface-2 transition-colors"
+          className="flex items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-semibold hover:bg-surface-2 transition-colors border-l border-border"
           style={{ color: sourceMeta.color }}
         >
           <PlatformLogo source={listing.source} size={14} />
