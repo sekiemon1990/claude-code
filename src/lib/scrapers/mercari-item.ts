@@ -34,9 +34,21 @@ const ITEM_CONDITION_LABEL: Record<number, string> = {
   6: "全体的に状態が悪い",
 };
 
+// メルカリ ID 形式の判定:
+// - C2C (個人出品): "m" + 11 桁数字 (例: m12345678901)
+// - Shops (BEYOND): 20+ 文字英数字 (例: 2JQYNqmAsfzVn35DzpxxDu)
+function isMercariShopsId(id: string): boolean {
+  return !/^m\d{10,}$/i.test(id);
+}
+
 export async function scrapeMercariItem(
   id: string,
 ): Promise<MercariItemDetail> {
+  // Shops 商品は /items/get では取れないため、SSR HTML パースに切り替え
+  if (isMercariShopsId(id)) {
+    return scrapeMercariShopProduct(id);
+  }
+
   const url = `https://api.mercari.jp/items/get?id=${encodeURIComponent(id)}`;
   const dpop = generateMercariDpop("GET", url);
 
@@ -130,6 +142,253 @@ export async function scrapeMercariItem(
   });
 
   return result;
+}
+
+// ---- Mercari Shops (BEYOND) 商品: SSR HTML パース ----
+
+const SHOP_USER_AGENT =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36";
+
+async function scrapeMercariShopProduct(
+  id: string,
+): Promise<MercariItemDetail> {
+  const url = `https://jp.mercari.com/shops/product/${id}`;
+  log.info("fetching shop product:", url);
+
+  const res = await fetch(url, {
+    headers: {
+      "User-Agent": SHOP_USER_AGENT,
+      "Accept-Language": "ja,en-US;q=0.9,en;q=0.8",
+      Accept:
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    },
+    cache: "no-store",
+  });
+
+  log.info("shop status:", res.status);
+  if (!res.ok) {
+    throw new Error(`メルカリショップ商品ページ取得エラー: ${res.status}`);
+  }
+
+  const html = await res.text();
+  log.info("shop html size:", html.length);
+
+  // __NEXT_DATA__ を抽出
+  const m = html.match(
+    /<script\s+id="__NEXT_DATA__"\s+type="application\/json">([\s\S]*?)<\/script>/,
+  );
+  if (!m) {
+    log.warn("__NEXT_DATA__ not found in shop page");
+    return { id };
+  }
+
+  let data: unknown;
+  try {
+    data = JSON.parse(m[1]);
+  } catch (e) {
+    log.error("__NEXT_DATA__ parse failed:", e);
+    return { id };
+  }
+
+  // Shops 商品ノードを再帰探索 (id, name, price を持つ)
+  const product = findShopProduct(data, id);
+  if (!product) {
+    log.warn("shop product node not found");
+    return { id };
+  }
+
+  log.info("shop product keys:", Object.keys(product).slice(0, 30).join(","));
+
+  // 画像: thumbnails / images / productImage[].url 等
+  const images = extractShopImages(product);
+
+  // 商品説明
+  const description =
+    pickStr(product, "description") ||
+    pickStr(product, "productDescription") ||
+    pickStr(product, "detailDescription") ||
+    undefined;
+
+  // 状態
+  const conditionId =
+    pickNum(product, "itemConditionId") ??
+    pickNum(product, "condition_id") ??
+    pickNum(product, "conditionId");
+  const conditionName =
+    pickStr(product, "itemConditionName") ||
+    pickStr(pickObj(product, "itemCondition"), "name") ||
+    pickStr(pickObj(product, "condition"), "name");
+  const condition =
+    conditionName ||
+    (typeof conditionId === "number"
+      ? ITEM_CONDITION_LABEL[conditionId]
+      : undefined);
+
+  // 価格
+  const price = pickNum(product, "price") ?? undefined;
+
+  // ショップ情報 (出品者の代わり)
+  const shop = pickObj(product, "shop") ?? pickObj(product, "store");
+  const sellerName =
+    pickStr(product, "shopName") ||
+    pickStr(shop, "name") ||
+    pickStr(shop, "shopName") ||
+    undefined;
+  const shopId = pickStr(product, "shopId") || pickStr(shop, "id") || "";
+  const sellerUrl = shopId
+    ? `https://jp.mercari.com/shops/${shopId}`
+    : undefined;
+
+  // 送料: shipping_payer.id 1=出品者(無料) / 2=購入者
+  const shippingPayerId =
+    pickNum(pickObj(product, "shippingPayer"), "id") ??
+    pickNum(product, "shippingPayerId");
+  const shipping: "free" | "paid" | undefined =
+    shippingPayerId === 1
+      ? "free"
+      : shippingPayerId === 2
+        ? "paid"
+        : undefined;
+  const shippingMethod =
+    pickStr(pickObj(product, "shippingMethod"), "name") ||
+    pickStr(pickObj(product, "shipping_method"), "name");
+  const shippingDuration =
+    pickStr(pickObj(product, "shippingDuration"), "name") ||
+    pickStr(pickObj(product, "shipping_duration"), "name");
+  const shippingInfo =
+    [shippingMethod, shippingDuration].filter(Boolean).join(" / ") ||
+    undefined;
+  const shippingFromArea =
+    pickStr(pickObj(product, "shippingFromArea"), "name") ||
+    pickStr(pickObj(product, "shipping_from_area"), "name");
+
+  const result: MercariItemDetail = {
+    id,
+    description,
+    images: images.length > 0 ? images : undefined,
+    price,
+    condition,
+    shipping,
+    shippingInfo,
+    shippingFromArea,
+    sellerName,
+    sellerUrl,
+  };
+
+  log.info("shop mapped:", {
+    hasDescription: !!result.description,
+    descLen: result.description?.length ?? 0,
+    imageCount: result.images?.length ?? 0,
+    condition: result.condition,
+    sellerName: result.sellerName,
+    shipping: result.shipping,
+  });
+
+  return result;
+}
+
+// __NEXT_DATA__ から id 一致 or 商品ノードらしき object を再帰探索
+function findShopProduct(
+  node: unknown,
+  targetId: string,
+  depth = 0,
+): Record<string, unknown> | null {
+  if (depth > 14) return null;
+  if (!node || typeof node !== "object") return null;
+  if (Array.isArray(node)) {
+    for (const c of node) {
+      const found = findShopProduct(c, targetId, depth + 1);
+      if (found) return found;
+    }
+    return null;
+  }
+  const o = node as Record<string, unknown>;
+  // id 一致 + name/price あれば確定
+  const idMatch =
+    o.id === targetId || o.productId === targetId || o.product_id === targetId;
+  const hasFields =
+    typeof o.name === "string" || typeof o.productName === "string";
+  if (idMatch && hasFields) return o;
+  for (const v of Object.values(o)) {
+    const found = findShopProduct(v, targetId, depth + 1);
+    if (found) return found;
+  }
+  return null;
+}
+
+function extractShopImages(o: Record<string, unknown>): string[] {
+  const out: string[] = [];
+  // 検索結果と同じ photos / thumbnails 形式
+  const photos = o.photos;
+  if (Array.isArray(photos)) {
+    for (const p of photos) {
+      if (typeof p === "string") out.push(p);
+      else if (p && typeof p === "object") {
+        const url =
+          (p as Record<string, unknown>).url ??
+          (p as Record<string, unknown>).uri;
+        if (typeof url === "string") out.push(url);
+      }
+    }
+  }
+  if (out.length === 0 && Array.isArray(o.thumbnails)) {
+    for (const t of o.thumbnails as unknown[]) {
+      if (typeof t === "string") out.push(t);
+    }
+  }
+  if (out.length === 0) {
+    // productImage[] / images[] 等のフォールバック
+    const arr =
+      (Array.isArray(o.productImage) && o.productImage) ||
+      (Array.isArray(o.images) && o.images) ||
+      null;
+    if (arr) {
+      for (const it of arr) {
+        if (typeof it === "string") out.push(it);
+        else if (it && typeof it === "object") {
+          const u =
+            (it as Record<string, unknown>).url ??
+            (it as Record<string, unknown>).uri;
+          if (typeof u === "string") out.push(u);
+        }
+      }
+    }
+  }
+  return out;
+}
+
+function pickStr(
+  o: Record<string, unknown> | undefined | null,
+  key: string,
+): string | undefined {
+  if (!o) return undefined;
+  const v = o[key];
+  return typeof v === "string" && v.trim() ? v : undefined;
+}
+
+function pickNum(
+  o: Record<string, unknown> | undefined | null,
+  key: string,
+): number | undefined {
+  if (!o) return undefined;
+  const v = o[key];
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string") {
+    const n = Number(v);
+    if (Number.isFinite(n)) return n;
+  }
+  return undefined;
+}
+
+function pickObj(
+  o: Record<string, unknown> | undefined | null,
+  key: string,
+): Record<string, unknown> | undefined {
+  if (!o) return undefined;
+  const v = o[key];
+  return v && typeof v === "object" && !Array.isArray(v)
+    ? (v as Record<string, unknown>)
+    : undefined;
 }
 
 function pickPhotos(d: MercariItemData): string[] {
