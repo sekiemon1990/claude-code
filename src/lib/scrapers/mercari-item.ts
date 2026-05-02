@@ -1,4 +1,4 @@
-import { generateKeyPairSync, randomUUID, sign } from "node:crypto";
+import { generateMercariDpop } from "./mercari-dpop";
 
 /**
  * メルカリ個別商品 API (DPoP 認証)
@@ -35,7 +35,7 @@ export async function scrapeMercariItem(
   id: string,
 ): Promise<MercariItemDetail> {
   const url = `https://api.mercari.jp/items/get?id=${encodeURIComponent(id)}`;
-  const dpop = generateDpop("GET", url);
+  const dpop = generateMercariDpop("GET", url);
 
   console.log("[mercari-item] fetching:", url);
 
@@ -157,48 +157,6 @@ function formatSellerRating(
   if (typeof ratings === "number") return `${ratings}件の評価`;
   if (typeof score === "number") return `★ ${score.toFixed(1)}`;
   return "";
-}
-
-// ---- DPoP ----
-
-function base64UrlEncode(buf: Buffer): string {
-  return buf
-    .toString("base64")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/g, "");
-}
-
-function generateDpop(method: string, url: string): string {
-  const { privateKey, publicKey } = generateKeyPairSync("ec", {
-    namedCurve: "P-256",
-  });
-  const jwk = publicKey.export({ format: "jwk" }) as {
-    kty?: string;
-    crv?: string;
-    x?: string;
-    y?: string;
-  };
-  const header = {
-    alg: "ES256",
-    typ: "dpop+jwt",
-    jwk: { kty: jwk.kty, crv: jwk.crv, x: jwk.x, y: jwk.y },
-  };
-  const payload = {
-    iat: Math.floor(Date.now() / 1000),
-    jti: randomUUID(),
-    htu: url,
-    htm: method,
-    uuid: randomUUID(),
-  };
-  const headerB64 = base64UrlEncode(Buffer.from(JSON.stringify(header)));
-  const payloadB64 = base64UrlEncode(Buffer.from(JSON.stringify(payload)));
-  const signingInput = `${headerB64}.${payloadB64}`;
-  const signature = sign("sha256", Buffer.from(signingInput), {
-    key: privateKey,
-    dsaEncoding: "ieee-p1363",
-  });
-  return `${signingInput}.${base64UrlEncode(signature)}`;
 }
 
 // ---- レスポンス型 ----
