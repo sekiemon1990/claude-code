@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { X } from "lucide-react";
 import { useEffect } from "react";
 
@@ -37,12 +38,19 @@ export function ImageLightbox({ src, alt, onClose }: Props) {
       >
         <X size={20} />
       </button>
-      <img
-        src={src}
-        alt={alt ?? ""}
-        className="max-w-full max-h-full object-contain rounded-lg"
+      <div
+        className="relative max-w-full max-h-full"
         onClick={(e) => e.stopPropagation()}
-      />
+      >
+        <Image
+          src={src}
+          alt={alt ?? ""}
+          width={1600}
+          height={1600}
+          unoptimized
+          className="max-w-full max-h-[90vh] object-contain rounded-lg w-auto h-auto"
+        />
+      </div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { notFound, useSearchParams } from "next/navigation";
 import { Suspense, use, useEffect, useState } from "react";
 import {
@@ -796,9 +797,13 @@ function ImageGallery({
           className="block w-full h-full"
           aria-label="画像を拡大"
         >
-          <img
+          <Image
             src={images[activeIndex]}
             alt=""
+            width={800}
+            height={800}
+            unoptimized
+            priority
             className="w-full h-full object-cover"
           />
         </button>
@@ -821,7 +826,15 @@ function ImageGallery({
                   : "shrink-0 w-16 h-16 rounded-md overflow-hidden border border-border opacity-70"
               }
             >
-              <img src={src} alt="" className="w-full h-full object-cover" />
+              <Image
+                src={src}
+                alt=""
+                width={64}
+                height={64}
+                unoptimized
+                loading="lazy"
+                className="w-full h-full object-cover"
+              />
             </button>
           ))}
         </div>

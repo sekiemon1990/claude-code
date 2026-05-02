@@ -37,6 +37,20 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       { protocol: "https", hostname: "picsum.photos" },
       { protocol: "https", hostname: "fastly.picsum.photos" },
+      // Mercari
+      { protocol: "https", hostname: "static.mercdn.net" },
+      { protocol: "https", hostname: "assets.mercari-shops-static.com" },
+      { protocol: "https", hostname: "u-static.mercdn.net" },
+      // Yahoo Auctions
+      { protocol: "https", hostname: "wing-auctions.c.yimg.jp" },
+      { protocol: "https", hostname: "auc-pctr.c.yimg.jp" },
+      { protocol: "https", hostname: "auctions.c.yimg.jp" },
+      // Yahoo PayPay フリマ
+      { protocol: "https", hostname: "item-shopping.c.yimg.jp" },
+      // Jimoty
+      { protocol: "https", hostname: "cdn.jmty.jp" },
+      { protocol: "https", hostname: "img.jmty.jp" },
+      { protocol: "https", hostname: "jmty.jp" },
     ],
   },
   async headers() {
