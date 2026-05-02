@@ -21,6 +21,8 @@ export type JimotyScrapeOptions = {
   keyword: string;
   excludes?: string;
   limit?: number;
+  /** "sold" / "active" / "all" - ジモティーは現状フィルタなし (全件返却) */
+  status?: "sold" | "active" | "all";
 };
 
 export async function scrapeJimoty(
