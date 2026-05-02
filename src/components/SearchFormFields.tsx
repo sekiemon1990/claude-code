@@ -113,6 +113,9 @@ export function SearchFormFields({
   const aiCacheRef = useRef<Map<string, string[]>>(new Map());
   const aiAbortRef = useRef<AbortController | null>(null);
 
+  // AI fetch は keyword 変化に反応する debounce + cache の典型パターン。
+  // setState in effect は意図通りなので React 19 strict ルールを抑制。
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     const trimmed = keyword.trim();
     // 空欄 / 1 文字なら AI 候補は出さない
@@ -168,6 +171,7 @@ export function SearchFormFields({
       controller.abort();
     };
   }, [keyword]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // ページマウント時に Vercel function を pre-warm (コールドスタート対策)
   useEffect(() => {

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { notFound, useSearchParams } from "next/navigation";
-import { Suspense, use, useEffect, useState } from "react";
+import { Suspense, use, useEffect, useRef, useState } from "react";
 import {
   ExternalLink,
   Gavel,
@@ -50,9 +50,9 @@ function parseRef(ref: string): { source: SourceKey; lid: string } | null {
   return { source: src as SourceKey, lid };
 }
 
-function DetailInner({ id, ref }: { id: string; ref: string }) {
+function DetailInner({ id, listingRefParam }: { id: string; listingRefParam: string }) {
   const params = useSearchParams();
-  const parsed = parseRef(ref);
+  const parsed = parseRef(listingRefParam);
 
   // ⚠️ React hooks のルール: return 文より前に全 hooks を呼ぶ必要あり
   const source = parsed?.source ?? ("yahoo_auction" as SourceKey);
@@ -124,20 +124,22 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
   });
 
   // 探索順: 本物のスクレイピング結果 → モック
-  let baseListing: Listing | undefined;
-  if (parsed && source === "yahoo_auction" && yahooQuery.data) {
-    baseListing = yahooQuery.data.listings.find((l) => l.id === lid);
-  }
-  if (parsed && source === "jimoty" && jimotyQuery.data) {
-    baseListing = jimotyQuery.data.listings.find((l) => l.id === lid);
-  }
-  if (parsed && source === "mercari" && mercariQuery.data) {
-    baseListing = mercariQuery.data.listings.find((l) => l.id === lid);
-  }
-  if (!baseListing && parsed) {
-    const sourceData = MOCK_RESULT.sources.find((s) => s.source === source);
-    baseListing = sourceData?.listings.find((l) => l.id === lid);
-  }
+  // (後で fallback で再代入する箇所もあるため let を採用)
+  let baseListing: Listing | undefined =
+    (parsed && source === "yahoo_auction" && yahooQuery.data
+      ? yahooQuery.data.listings.find((l) => l.id === lid)
+      : undefined) ||
+    (parsed && source === "jimoty" && jimotyQuery.data
+      ? jimotyQuery.data.listings.find((l) => l.id === lid)
+      : undefined) ||
+    (parsed && source === "mercari" && mercariQuery.data
+      ? mercariQuery.data.listings.find((l) => l.id === lid)
+      : undefined) ||
+    (parsed
+      ? MOCK_RESULT.sources
+          .find((s) => s.source === source)
+          ?.listings.find((l) => l.id === lid)
+      : undefined);
 
   // 個別商品ページから詳細データ (description, images 等) を追加 fetch
   const isFleamarket = baseListing?.url?.includes("paypayfleamarket") ?? false;
@@ -309,6 +311,7 @@ function DetailInner({ id, ref }: { id: string; ref: string }) {
       );
     }
     if (m && m.images && m.images.length > 0) {
+      // eslint-disable-next-line react-hooks/immutability
       baseListing = {
         id: lid,
         title: "",
@@ -763,18 +766,18 @@ function ImageGallery({
   onChange: (i: number) => void;
   onZoom: () => void;
 }) {
-  const touchStartX = useState({ x: 0 })[0];
-  const touchEndX = useState({ x: 0 })[0];
+  const touchStartXRef = useRef({ x: 0 });
+  const touchEndXRef = useRef({ x: 0 });
 
   function onTouchStart(e: React.TouchEvent) {
-    touchStartX.x = e.touches[0].clientX;
-    touchEndX.x = e.touches[0].clientX;
+    touchStartXRef.current.x = e.touches[0].clientX;
+    touchEndXRef.current.x = e.touches[0].clientX;
   }
   function onTouchMove(e: React.TouchEvent) {
-    touchEndX.x = e.touches[0].clientX;
+    touchEndXRef.current.x = e.touches[0].clientX;
   }
   function onTouchEnd() {
-    const dx = touchEndX.x - touchStartX.x;
+    const dx = touchEndXRef.current.x - touchStartXRef.current.x;
     if (Math.abs(dx) < 50) return;
     if (dx < 0 && activeIndex < images.length - 1) {
       onChange(activeIndex + 1);
@@ -1079,7 +1082,7 @@ export default function ListingDetailPage({
           </div>
         }
       >
-        <DetailInner id={id} ref={ref} />
+        <DetailInner id={id} listingRefParam={ref} />
       </Suspense>
     </AppShell>
   );
