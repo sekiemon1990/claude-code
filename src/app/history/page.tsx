@@ -97,6 +97,8 @@ export default function HistoryPage() {
   // 日付境界が異なり、項目のグループ分けが変わって HTML 不一致 (#418) になる。
   // マウント後にだけリスト本体をレンダリングして回避する。
   const [mounted, setMounted] = useState(false);
+  // ハイドレーション不一致回避のため mount 後にのみ render する典型パターン
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setMounted(true), []);
 
   return (

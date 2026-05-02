@@ -315,6 +315,7 @@ function ResultInner({ resultId }: { resultId: string }) {
   }
 
   // Mock failure simulation
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const failedSources: SourceKey[] = mockMode === "error" ? ["mercari"] : [];
 
   const flatListings: FlatListing[] = useMemo(() => {
@@ -337,6 +338,7 @@ function ResultInner({ resultId }: { resultId: string }) {
     if (period !== "all") {
       const days = Number(period);
       if (Number.isFinite(days) && days > 0) {
+        // eslint-disable-next-line react-hooks/purity
         const threshold = Date.now() - days * 86400000;
         list = list.filter((l) => {
           if (!l.endedAt) return true; // 期間不明はそのまま含める

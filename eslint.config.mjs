@@ -12,15 +12,14 @@ const eslintConfig = defineConfig([
   ]),
   {
     rules: {
-      // React 19 の厳格 hooks ルールは段階的に対処するため warning に
-      // (既存コードは動作しているが、推奨ではないパターンに該当)
-      "react-hooks/set-state-in-effect": "warn",
-      "react-hooks/immutability": "warn",
-      "react-hooks/purity": "warn",
-      "react-hooks/refs": "warn",
-      "react-hooks/exhaustive-deps": "warn",
-      // Next.js の <Image> 推奨は段階的に置換するため warning に
-      "@next/next/no-img-element": "warn",
+      // 既存コードは React 19 strict hooks ルールを概ね修正済み。
+      // 例外パターンは個別 eslint-disable で抑制。
+      "react-hooks/set-state-in-effect": "error",
+      "react-hooks/immutability": "error",
+      "react-hooks/purity": "error",
+      "react-hooks/refs": "error",
+      "react-hooks/exhaustive-deps": "error",
+      "@next/next/no-img-element": "error",
     },
   },
 ]);
