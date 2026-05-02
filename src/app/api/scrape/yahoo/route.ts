@@ -9,6 +9,7 @@ type RequestBody = {
   keyword: string;
   excludes?: string;
   limit?: number;
+  status?: "sold" | "active";
 };
 
 export async function POST(req: Request) {
@@ -34,6 +35,7 @@ export async function POST(req: Request) {
       keyword: body.keyword.trim(),
       excludes: body.excludes,
       limit: body.limit ?? 30,
+      status: body.status,
     });
     return NextResponse.json({ result });
   } catch (e) {

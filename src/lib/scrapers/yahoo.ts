@@ -12,7 +12,8 @@ const log = createLogger("yahoo-scrape");
  *   2. 見つからなければ HTML 上のリンク要素を起点に近傍から情報を抽出
  */
 
-const YAHOO_BASE = "https://auctions.yahoo.co.jp/closedsearch/closedsearch";
+const YAHOO_CLOSED = "https://auctions.yahoo.co.jp/closedsearch/closedsearch";
+const YAHOO_OPEN = "https://auctions.yahoo.co.jp/search/search";
 const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36";
 
@@ -20,6 +21,8 @@ export type YahooScrapeOptions = {
   keyword: string;
   excludes?: string;
   limit?: number;
+  /** "sold": 落札相場 (closedsearch) / "active": 出品中 / デフォルト sold */
+  status?: "sold" | "active";
 };
 
 // 1 ページあたりの取得件数 (Yahoo の上限)
@@ -28,12 +31,12 @@ const PER_PAGE = 100;
 export async function scrapeYahooAuction(
   options: YahooScrapeOptions,
 ): Promise<SourceResult> {
-  const { keyword, excludes, limit = 30 } = options;
+  const { keyword, excludes, limit = 30, status = "sold" } = options;
 
   // 表示に必要な件数のみ取得 (Yahoo の上限 100 まで)
   const fetchCount = Math.min(Math.max(limit, 10), 100);
 
-  const html = await fetchYahooPage(keyword, excludes, 1, fetchCount);
+  const html = await fetchYahooPage(keyword, excludes, 1, fetchCount, status);
   const listings = parsePageListings(html);
   let totalAvailable = parseTotalCount(html);
 
@@ -57,8 +60,9 @@ async function fetchYahooPage(
   excludes: string | undefined,
   startPosition: number,
   pageSize: number = PER_PAGE,
+  status: "sold" | "active" = "sold",
 ): Promise<string> {
-  const url = new URL(YAHOO_BASE);
+  const url = new URL(status === "active" ? YAHOO_OPEN : YAHOO_CLOSED);
   url.searchParams.set("p", keyword);
   url.searchParams.set("va", keyword);
   url.searchParams.set("b", String(startPosition));

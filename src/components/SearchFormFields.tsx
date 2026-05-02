@@ -44,6 +44,10 @@ export function getPeriodLabel(period: Period): string {
 export type ShippingFilter = "any" | "free" | "paid";
 export type ConditionRankNonUnknown = Exclude<ConditionRank, "unknown">;
 
+// 出品ステータス: 落札・売切のみ / 出品中のみ
+export type ListingStatus = "sold" | "active";
+export const DEFAULT_LISTING_STATUS: ListingStatus = "sold";
+
 export type SearchFormValues = {
   keyword: string;
   excludes: string;
@@ -51,6 +55,7 @@ export type SearchFormValues = {
   sources: SourceKey[];
   conditions: ConditionRankNonUnknown[];
   shipping: ShippingFilter;
+  listingStatus: ListingStatus;
 };
 
 type Props = {
@@ -79,6 +84,9 @@ export function SearchFormFields({
   >(initial?.conditions ?? []);
   const [shipping, setShipping] = useState<ShippingFilter>(
     initial?.shipping ?? "any"
+  );
+  const [listingStatus, setListingStatus] = useState<ListingStatus>(
+    initial?.listingStatus ?? DEFAULT_LISTING_STATUS
   );
   const [keywordFocused, setKeywordFocused] = useState(false);
   const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -226,6 +234,9 @@ export function SearchFormFields({
         conditions: selectedConditions.join(","),
       }),
       ...(shipping !== "any" && { shipping }),
+      ...(listingStatus !== DEFAULT_LISTING_STATUS && {
+        listingStatus,
+      }),
     });
   }
 
@@ -243,6 +254,7 @@ export function SearchFormFields({
         sources: selectedSources,
         conditions: selectedConditions,
         shipping,
+        listingStatus,
       });
       toast({
         message: "オフラインのため検索を保留しました。回線復帰時に自動実行されます",
@@ -547,6 +559,36 @@ export function SearchFormFields({
             </button>
           ))}
         </div>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <span className="text-sm font-medium text-foreground">出品ステータス</span>
+        <div className="grid grid-cols-2 gap-2">
+          {(
+            [
+              { v: "sold", label: "落札・売切" },
+              { v: "active", label: "出品中" },
+            ] as { v: ListingStatus; label: string }[]
+          ).map((opt) => (
+            <button
+              key={opt.v}
+              type="button"
+              onClick={() => setListingStatus(opt.v)}
+              className={
+                listingStatus === opt.v
+                  ? "h-11 rounded-lg border-2 border-primary bg-primary/5 text-primary font-semibold text-sm"
+                  : "h-11 rounded-lg border border-border bg-surface text-foreground text-sm hover:border-foreground/30"
+              }
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        {listingStatus === "active" && (
+          <p className="text-[10px] text-muted">
+            ※ ジモティーは元々出品中のみ表示
+          </p>
+        )}
       </div>
 
       <button

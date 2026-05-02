@@ -119,6 +119,10 @@ function ResultInner({ resultId }: { resultId: string }) {
   const period = params.get("period") ?? MOCK_RESULT.query.period;
   const mockMode = params.get("mock");
   const excludesParam = params.get("excludes") ?? "";
+  const listingStatusParam = (params.get("listingStatus") as
+    | "sold"
+    | "active"
+    | null) ?? "sold";
   const searchKey = searchKeyFromKeyword(keyword);
 
   // ---- 実スクレイピング ----
@@ -136,12 +140,16 @@ function ResultInner({ resultId }: { resultId: string }) {
     !!keyword.trim();
 
   const yahooQuery = useQuery({
-    queryKey: ["scrape_yahoo", keyword, excludesParam],
+    queryKey: ["scrape_yahoo", keyword, excludesParam, listingStatusParam],
     queryFn: async (): Promise<SourceResult> => {
       const res = await fetch("/api/scrape/yahoo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ keyword, excludes: excludesParam || undefined }),
+        body: JSON.stringify({
+          keyword,
+          excludes: excludesParam || undefined,
+          status: listingStatusParam,
+        }),
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -158,12 +166,16 @@ function ResultInner({ resultId }: { resultId: string }) {
   });
 
   const mercariQuery = useQuery({
-    queryKey: ["scrape_mercari", keyword, excludesParam],
+    queryKey: ["scrape_mercari", keyword, excludesParam, listingStatusParam],
     queryFn: async (): Promise<SourceResult> => {
       const res = await fetch("/api/scrape/mercari", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ keyword, excludes: excludesParam || undefined }),
+        body: JSON.stringify({
+          keyword,
+          excludes: excludesParam || undefined,
+          status: listingStatusParam,
+        }),
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };

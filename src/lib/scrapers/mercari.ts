@@ -21,12 +21,22 @@ export type MercariScrapeOptions = {
   keyword: string;
   excludes?: string;
   limit?: number;
+  /** "sold": 売切のみ (デフォルト) / "active": 出品中 / "all" */
+  status?: "sold" | "active" | "all";
 };
 
 export async function scrapeMercari(
   options: MercariScrapeOptions,
 ): Promise<SourceResult> {
-  const { keyword, excludes, limit = 30 } = options;
+  const { keyword, excludes, limit = 30, status = "sold" } = options;
+
+  // status: sold = STATUS_SOLD_OUT のみ、active = STATUS_ON_SALE のみ、all = 両方
+  const statusFilter =
+    status === "active"
+      ? ["STATUS_ON_SALE"]
+      : status === "all"
+        ? ["STATUS_ON_SALE", "STATUS_SOLD_OUT"]
+        : ["STATUS_SOLD_OUT"];
 
   const body = {
     userId: "",
@@ -40,7 +50,7 @@ export async function scrapeMercari(
       excludeKeyword: excludes ?? "",
       sort: "SORT_CREATED_TIME",
       order: "ORDER_DESC",
-      status: ["STATUS_SOLD_OUT"],
+      status: statusFilter,
       sizeId: [],
       categoryId: [],
       brandId: [],

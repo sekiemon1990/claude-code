@@ -19,6 +19,7 @@ export type ListItemQuery = {
   sources: SourceKey[];
   conditions: ConditionRank[];
   shipping: ShippingFilter;
+  listingStatus?: "sold" | "active";
 };
 
 export type ListItemResult = {
