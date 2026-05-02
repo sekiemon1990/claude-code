@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import {
   ChevronRight,
@@ -528,10 +529,13 @@ function ViewHistoryCard({
     >
       <div className="flex p-3 gap-3">
         {view.thumbnail ? (
-          <img
+          <Image
             src={view.thumbnail}
             alt=""
+            width={80}
+            height={80}
             loading="lazy"
+            unoptimized
             className="w-20 h-20 rounded-lg object-cover bg-surface-2 shrink-0"
           />
         ) : (

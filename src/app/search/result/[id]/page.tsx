@@ -24,6 +24,7 @@ import {
   ChevronUp,
   MoreVertical,
 } from "lucide-react";
+import Image from "next/image";
 import { AppShell } from "@/components/AppShell";
 import { SourceBadge } from "@/components/SourceBadge";
 import { PlatformLogo } from "@/components/PlatformLogo";
@@ -1418,10 +1419,13 @@ function ListingCard({
           className="flex items-center gap-3 p-2.5"
         >
           {listing.thumbnail ? (
-            <img
+            <Image
               src={listing.thumbnail}
               alt=""
+              width={48}
+              height={48}
               loading="lazy"
+              unoptimized
               className="w-12 h-12 rounded object-cover bg-surface-2 shrink-0"
             />
           ) : (
@@ -1483,10 +1487,13 @@ function ListingCard({
               className="w-20 h-20 rounded-lg overflow-hidden bg-surface-2 shrink-0"
               aria-label="画像を拡大"
             >
-              <img
+              <Image
                 src={listing.thumbnail}
                 alt=""
+                width={80}
+                height={80}
                 loading="lazy"
+                unoptimized
                 className="w-full h-full object-cover"
               />
             </button>

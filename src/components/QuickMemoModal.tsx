@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { X, StickyNote } from "lucide-react";
 import {
   setListingMemo,
@@ -89,9 +90,12 @@ export function QuickMemoModal({
         <div className="p-4 flex flex-col gap-3">
           <div className="flex gap-3">
             {thumbnail ? (
-              <img
+              <Image
                 src={thumbnail}
                 alt=""
+                width={56}
+                height={56}
+                unoptimized
                 className="w-14 h-14 rounded-lg object-cover bg-surface-2 shrink-0"
               />
             ) : (
