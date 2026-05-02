@@ -13,7 +13,6 @@ import {
 import { PlatformLogo } from "@/components/PlatformLogo";
 import { SOURCES, type SourceKey } from "@/lib/types";
 import { CONDITION_RANKS, CONDITION_META, type ConditionRank } from "@/lib/conditions";
-import { MOCK_HISTORY } from "@/lib/mock-data";
 import { findDictionaryMatches } from "@/lib/keyword-dictionary";
 import { enqueueOfflineSearch } from "@/lib/offline-queue";
 import { toast } from "@/lib/toast";
@@ -83,16 +82,6 @@ export function SearchFormFields({
   );
   const [keywordFocused, setKeywordFocused] = useState(false);
   const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // 履歴ベースの候補 (空欄時 = 最近の検索、入力時 = 履歴部分一致)
-  const historySuggestions = useMemo(() => {
-    const q = keyword.trim().toLowerCase();
-    const all = MOCK_HISTORY.map((h) => h.keyword);
-    const filtered = q
-      ? all.filter((k) => k.toLowerCase().includes(q) && k.toLowerCase() !== q)
-      : all;
-    return filtered.slice(0, 6);
-  }, [keyword]);
 
   // ローカル辞書からの即時候補 (0ms)
   const dictionaryCandidates = useMemo(() => {
@@ -193,7 +182,6 @@ export function SearchFormFields({
 
   // 表示用の統合候補
   const showAi = aiCandidates.length > 0;
-  const showHistory = historySuggestions.length > 0;
   const showDictionary = dictionaryCandidates.length > 0 && !showAi;
   const showUserHistory = userHistoryCandidates.length > 0;
 
@@ -310,7 +298,6 @@ export function SearchFormFields({
           <VoiceInputButton onResult={(t) => setKeyword(t)} />
           {keywordFocused &&
             (showAi ||
-              showHistory ||
               showDictionary ||
               showUserHistory ||
               aiLoading) && (
@@ -408,32 +395,6 @@ export function SearchFormFields({
                   </div>
                 )}
 
-              {/* 履歴ベースの候補 */}
-              {showHistory && (
-                <>
-                  <div className="px-3 py-1.5 text-[10px] text-muted bg-surface-2 sticky top-0 border-b border-border">
-                    {keyword.trim() ? "履歴から候補" : "最近の検索"}
-                  </div>
-                  {historySuggestions.map((s) => (
-                    <button
-                      key={`h-${s}`}
-                      type="button"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => {
-                        setKeyword(s);
-                        setKeywordFocused(false);
-                      }}
-                      className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-foreground hover:bg-surface-2 text-left"
-                    >
-                      <HistoryIcon
-                        size={14}
-                        className="text-muted shrink-0"
-                      />
-                      <span className="truncate">{s}</span>
-                    </button>
-                  ))}
-                </>
-              )}
             </div>
           )}
         </div>
