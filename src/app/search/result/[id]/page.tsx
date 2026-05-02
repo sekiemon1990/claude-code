@@ -365,6 +365,16 @@ function ResultInner({ resultId }: { resultId: string }) {
   const [shippingFilter, setShippingFilter] =
     useState<ShippingFilter>(initialShipping);
 
+  // ストア / 個人 出品者種別フィルタ
+  type SellerTypeFilter = "all" | "store" | "individual";
+  const sellerTypeParam = params.get("sellerType") as SellerTypeFilter | null;
+  const initialSellerType: SellerTypeFilter =
+    sellerTypeParam === "store" || sellerTypeParam === "individual"
+      ? sellerTypeParam
+      : "all";
+  const [sellerTypeFilter, setSellerTypeFilter] =
+    useState<SellerTypeFilter>(initialSellerType);
+
   const conditionsParam = params.get("conditions");
   const initialConditions = useMemo<ConditionRank[]>(
     () =>
@@ -430,6 +440,12 @@ function ResultInner({ resultId }: { resultId: string }) {
     } else if (shippingFilter === "paid") {
       list = list.filter((l) => l.shipping === "paid");
     }
+    if (sellerTypeFilter === "store") {
+      list = list.filter((l) => l.sellerType === "store");
+    } else if (sellerTypeFilter === "individual") {
+      // 未設定 (undefined) は個人扱いとする (デフォルトは個人と仮定)
+      list = list.filter((l) => l.sellerType !== "store");
+    }
     if (refine.trim()) {
       const terms = refine
         .trim()
@@ -449,7 +465,16 @@ function ResultInner({ resultId }: { resultId: string }) {
       if (sort === "price_desc") return b.price - a.price;
       return a.price - b.price;
     });
-  }, [flatListings, filter, conditionFilter, shippingFilter, refine, sort, period]);
+  }, [
+    flatListings,
+    filter,
+    conditionFilter,
+    shippingFilter,
+    sellerTypeFilter,
+    refine,
+    sort,
+    period,
+  ]);
 
   const visibleCount =
     pageSize === "all"
@@ -985,6 +1010,14 @@ function ResultInner({ resultId }: { resultId: string }) {
                     ? "全て"
                     : conditionFilter.join(",")}
                 </span>
+                <span className="text-muted">/ 出品者</span>
+                <span className="font-semibold text-foreground truncate">
+                  {sellerTypeFilter === "all"
+                    ? "全て"
+                    : sellerTypeFilter === "store"
+                      ? "ストア"
+                      : "個人"}
+                </span>
               </div>
               {filtersOpen ? (
                 <ChevronUp size={14} className="text-muted shrink-0" />
@@ -1055,6 +1088,38 @@ function ResultInner({ resultId }: { resultId: string }) {
                                 color: "var(--success)",
                               }
                             : undefined
+                        }
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 mb-1 scrollbar-none items-center">
+                  <span className="shrink-0 text-[10px] text-muted px-1">
+                    出品者:
+                  </span>
+                  {(
+                    [
+                      { v: "all", label: "全て" },
+                      { v: "store", label: "ストア (法人/Shops)" },
+                      { v: "individual", label: "個人" },
+                    ] as { v: SellerTypeFilter; label: string }[]
+                  ).map((opt) => {
+                    const active = sellerTypeFilter === opt.v;
+                    return (
+                      <button
+                        key={opt.v}
+                        type="button"
+                        onClick={() => {
+                          setSellerTypeFilter(opt.v);
+                          setExtraPages(0);
+                        }}
+                        className={
+                          active
+                            ? "shrink-0 h-7 px-2.5 rounded-full text-[11px] font-bold border-2 border-primary bg-primary/5 text-primary"
+                            : "shrink-0 h-7 px-2.5 rounded-full text-[11px] font-medium border border-border bg-surface text-muted hover:border-foreground/30"
                         }
                       >
                         {opt.label}
