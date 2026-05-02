@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -65,6 +66,9 @@ const REFINE_SCHEMA = {
 };
 
 export async function POST(req: Request) {
+  const limited = enforceRateLimit(req, "ai:refine", 30);
+  if (limited) return limited;
+
   if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json(
       { error: "ANTHROPIC_API_KEY が設定されていません" },
