@@ -1,5 +1,8 @@
 import * as cheerio from "cheerio";
 import type { Listing, SourceResult } from "@/lib/types";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("jimoty-scrape");
 
 /**
  * ジモティー (jmty.jp) スクレイパ
@@ -41,8 +44,8 @@ export async function scrapeJimoty(
     redirect: "follow",
   });
 
-  console.log(
-    "[jimoty-scrape] status:",
+  log.info(
+    "status:",
     res.status,
     "url:",
     url.toString(),
@@ -55,19 +58,16 @@ export async function scrapeJimoty(
   }
 
   const html = await res.text();
-  console.log("[jimoty-scrape] html size:", html.length);
+  log.info("html size:", html.length);
 
   // HTML サンプル: <main> や <h1> 周辺を見て検索結果ページか判定
   const h1Match = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/);
   if (h1Match) {
-    console.log(
-      "[jimoty-scrape] h1:",
-      h1Match[1].replace(/<[^>]+>/g, "").trim().slice(0, 200),
-    );
+    log.info("h1:", h1Match[1].replace(/<[^>]+>/g, "").trim().slice(0, 200));
   }
   const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/);
   if (titleMatch) {
-    console.log("[jimoty-scrape] page title:", titleMatch[1].trim());
+    log.info("page title:", titleMatch[1].trim());
   }
 
   // 構造プローブ
@@ -83,7 +83,7 @@ export async function scrapeJimoty(
       ),
     ),
   );
-  console.log("[jimoty-scrape] structure probe:", {
+  log.info("structure probe:", {
     allArticleLinks,
     prefArticleLinks,
     sampleUrls,
@@ -98,19 +98,13 @@ export async function scrapeJimoty(
   });
   const totalAvailable = parseTotalCount(html);
 
-  console.log("[jimoty-scrape] parsed (excl. promoted):", listings.length);
-  console.log("[jimoty-scrape] total available:", totalAvailable);
+  log.info("parsed (excl. promoted):", listings.length);
+  log.info("total available:", totalAvailable);
   if (listings[0]) {
-    console.log(
-      "[jimoty-scrape] sample listing:",
-      JSON.stringify(listings[0]).slice(0, 300),
-    );
+    log.info("sample listing:", JSON.stringify(listings[0]).slice(0, 300));
   }
   if (listings[1]) {
-    console.log(
-      "[jimoty-scrape] sample listing 2:",
-      JSON.stringify(listings[1]).slice(0, 300),
-    );
+    log.info("sample listing 2:", JSON.stringify(listings[1]).slice(0, 300));
   }
 
   // excludes クライアント側フィルタ
@@ -198,8 +192,8 @@ function parseJimotyHtml(html: string, limit: number): Listing[] {
 
     // 最初の 2 件だけ診断ログ
     if (listings.length < 2) {
-      console.log(
-        `[jimoty-scrape] card[${listings.length}] tag=${$card.prop("tagName")}`,
+      log.info(
+        `card[${listings.length}] tag=${$card.prop("tagName")}`,
         "priceCandidates:",
         candidates,
         "cardTextSample:",
@@ -280,7 +274,7 @@ function parseTotalCount(html: string): number | undefined {
     if (m) {
       const n = Number(m[1].replace(/,/g, ""));
       if (Number.isFinite(n) && n > 0) {
-        console.log(`[jimoty-scrape] totalCount via HTML regex (${re}):`, n);
+        log.info(`totalCount via HTML regex (${re}):`, n);
         return n;
       }
     }

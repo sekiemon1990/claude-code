@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type { Listing, SourceResult } from "@/lib/types";
 import { generateMercariDpop } from "./mercari-dpop";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("mercari-scrape");
 
 /**
  * メルカリスクレイパ (内部 API + DPoP 認証)
@@ -72,14 +75,11 @@ export async function scrapeMercari(
     cache: "no-store",
   });
 
-  console.log("[mercari-scrape] status:", res.status);
+  log.info("status:", res.status);
 
   if (!res.ok) {
     const text = await res.text();
-    console.error(
-      "[mercari-scrape] error response:",
-      text.slice(0, 500),
-    );
+    log.error("error response:", text.slice(0, 500));
     throw new Error(`メルカリ API エラー: ${res.status}`);
   }
 
@@ -88,21 +88,10 @@ export async function scrapeMercari(
   const totalAvailable =
     typeof json.meta?.numFound === "number" ? json.meta.numFound : undefined;
 
-  console.log(
-    "[mercari-scrape] items:",
-    items.length,
-    "totalAvailable:",
-    totalAvailable,
-  );
+  log.info("items:", items.length, "totalAvailable:", totalAvailable);
   if (items[0]) {
-    console.log(
-      "[mercari-scrape] sample item keys:",
-      Object.keys(items[0]).join(","),
-    );
-    console.log(
-      "[mercari-scrape] sample item:",
-      JSON.stringify(items[0]).slice(0, 600),
-    );
+    log.info("sample item keys:", Object.keys(items[0]).join(","));
+    log.info("sample item:", JSON.stringify(items[0]).slice(0, 600));
   }
 
   const listings: Listing[] = [];

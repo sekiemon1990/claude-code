@@ -1,4 +1,7 @@
 import * as cheerio from "cheerio";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("jimoty-item");
 
 /**
  * ジモティー個別商品ページの追加データ取得 (description, images 等)
@@ -101,7 +104,7 @@ export async function scrapeJimotyItem(
   const idMatch = fullUrl.match(/article-([a-z0-9_]+)/i);
   const id = idMatch?.[1] ?? "";
 
-  console.log("[jimoty-item] fetching:", fullUrl);
+  log.info("fetching:", fullUrl);
 
   const res = await fetch(fullUrl, {
     headers: {
@@ -115,13 +118,13 @@ export async function scrapeJimotyItem(
     redirect: "follow",
   });
 
-  console.log("[jimoty-item] status:", res.status, "final:", res.url);
+  log.info("status:", res.status, "final:", res.url);
   if (!res.ok) {
     throw new Error(`商品ページ取得エラー: ${res.status}`);
   }
 
   const html = await res.text();
-  console.log("[jimoty-item] html size:", html.length);
+  log.info("html size:", html.length);
 
   const $ = cheerio.load(html);
 
@@ -157,7 +160,7 @@ export async function scrapeJimotyItem(
     const text = htmlToTextWithBreaks(innerHtml).trim();
     if (text && text.length > 30) {
       description = preserveBreaks(text).slice(0, 5000);
-      console.log("[jimoty-item] description found via:", sel, "len:", text.length);
+      log.info("description found via:", sel, "len:", text.length);
       break;
     }
   }
@@ -181,8 +184,8 @@ export async function scrapeJimotyItem(
     });
     if (longest.length > 100) {
       description = preserveBreaks(longest).slice(0, 5000);
-      console.log(
-        "[jimoty-item] description via longest text block tag:",
+      log.info(
+        "description via longest text block tag:",
         longestTag,
         "len:",
         longest.length,
@@ -196,7 +199,7 @@ export async function scrapeJimotyItem(
       $('meta[property="og:description"]').attr("content")?.trim();
     if (metaDesc) {
       description = metaDesc;
-      console.log("[jimoty-item] description via meta (truncated SEO ver.)");
+      log.info("description via meta (truncated SEO ver.)");
     }
   }
 
@@ -237,7 +240,7 @@ export async function scrapeJimotyItem(
       const n = Number(content.replace(/[^\d]/g, ""));
       if (Number.isFinite(n) && n >= 0) {
         price = n;
-        console.log("[jimoty-item] price via content attr of:", sel);
+        log.info("price via content attr of:", sel);
         break;
       }
     }
@@ -247,7 +250,7 @@ export async function scrapeJimotyItem(
       const n = Number((m[1] ?? m[2]).replace(/,/g, ""));
       if (Number.isFinite(n)) {
         price = n;
-        console.log("[jimoty-item] price via text of:", sel);
+        log.info("price via text of:", sel);
         break;
       }
     }
@@ -261,7 +264,7 @@ export async function scrapeJimotyItem(
       const n = Number(ogPrice.replace(/[^\d]/g, ""));
       if (Number.isFinite(n)) {
         price = n;
-        console.log("[jimoty-item] price via og:price meta");
+        log.info("price via og:price meta");
       }
     }
   }
@@ -276,7 +279,7 @@ export async function scrapeJimotyItem(
     })
     .get()
     .slice(0, 15);
-  console.log("[jimoty-item] price probe candidates:", priceProbe);
+  log.info("price probe candidates:", priceProbe);
 
   // dt/dd でラベルされた価格パターンも探す (例: <dt>価格</dt><dd>10,000円</dd>)
   if (price === undefined) {
@@ -293,7 +296,7 @@ export async function scrapeJimotyItem(
             const n = Number(m[1].replace(/,/g, ""));
             if (Number.isFinite(n) && n >= 0 && n < 100_000_000) {
               price = n;
-              console.log("[jimoty-item] price via dt/th label match:", n);
+              log.info("price via dt/th label match:", n);
             }
           }
         }
@@ -313,7 +316,7 @@ export async function scrapeJimotyItem(
         const found = findJsonLdPrice(parsed);
         if (found !== undefined) {
           price = found;
-          console.log("[jimoty-item] price via JSON-LD:", found);
+          log.info("price via JSON-LD:", found);
           break;
         }
       } catch {
@@ -331,7 +334,7 @@ export async function scrapeJimotyItem(
       const n = Number(m[1].replace(/,/g, ""));
       if (Number.isFinite(n) && n > 0 && n < 100_000_000) {
         price = n;
-        console.log("[jimoty-item] price via fallback HTML regex:", n);
+        log.info("price via fallback HTML regex:", n);
       }
     }
   }
@@ -342,7 +345,7 @@ export async function scrapeJimotyItem(
   const isGiveawayUrl = /\/(give|present|free|mu)-/.test(fullUrl);
   if (price === undefined && isGiveawayUrl && !isSaleUrl) {
     price = 0;
-    console.log("[jimoty-item] price = 0 (giveaway URL)");
+    log.info("price = 0 (giveaway URL)");
   }
 
   // 出品者: プロフィールページへのリンクを起点に探す
@@ -366,12 +369,7 @@ export async function scrapeJimotyItem(
     const linkText = $profileLink.text().trim();
     const imgAlt = $profileLink.find("img").attr("alt")?.trim();
     sellerName = linkText && linkText.length < 50 ? linkText : imgAlt;
-    console.log(
-      "[jimoty-item] seller link found:",
-      sellerUrl,
-      "name:",
-      sellerName,
-    );
+    log.info("seller link found:", sellerUrl, "name:", sellerName);
   }
 
   // 診断: 全プロフィールリンクを 8 件まで列挙 (取れなかった場合に確認用)
@@ -382,7 +380,7 @@ export async function scrapeJimotyItem(
     })
     .get()
     .slice(0, 8);
-  console.log("[jimoty-item] profile link probe:", profileProbe);
+  log.info("profile link probe:", profileProbe);
 
   // 出品者の評価: profile リンクの近くから「評価」「件」「★」などを探す
   if ($profileLink.length) {
@@ -409,11 +407,8 @@ export async function scrapeJimotyItem(
     const areaText = $sellerArea.text().replace(/\s+/g, " ").slice(0, 1500);
 
     // 診断: セラー周辺の HTML をログ出力 (要素構造を見る)
-    console.log(
-      "[jimoty-item] seller area HTML sample:",
-      ($sellerArea.html() ?? "").slice(0, 1500),
-    );
-    console.log("[jimoty-item] seller area text:", areaText);
+    log.info("seller area HTML sample:", ($sellerArea.html() ?? "").slice(0, 1500));
+    log.info("seller area text:", areaText);
 
     // 1) 最優先: 「★ 5.0 (115)」のような平均評価＋件数表記
     //    記事ページの出品者欄に表示されているのでここから直接取れる
@@ -424,11 +419,11 @@ export async function scrapeJimotyItem(
       const stars = starMatch[1];
       const count = starMatch[2].replace(/,/g, "");
       sellerRating = `★ ${stars} (${count}件)`;
-      console.log("[jimoty-item] seller rating via star+count:", sellerRating);
+      log.info("seller rating via star+count:", sellerRating);
     }
 
     if (sellerId) {
-      console.log("[jimoty-item] seller id:", sellerId);
+      log.info("seller id:", sellerId);
     }
 
     // 記事ページに評価が無い場合、evaluations ページから取得
@@ -436,7 +431,7 @@ export async function scrapeJimotyItem(
     if (!sellerRating && sellerId) {
       try {
         const evalUrl = `https://jmty.jp/profiles/${sellerId}/evaluations`;
-        console.log("[jimoty-item] fetching evaluations page:", evalUrl);
+        log.info("fetching evaluations page:", evalUrl);
         const evalRes = await fetch(evalUrl, {
           headers: {
             "User-Agent": USER_AGENT,
@@ -477,26 +472,20 @@ export async function scrapeJimotyItem(
             } else {
               sellerRating = `評価 ${total}件`;
             }
-            console.log(
-              "[jimoty-item] seller rating from evaluations page:",
-              sellerRating,
-            );
+            log.info("seller rating from evaluations page:", sellerRating);
           } else if (onPage > 0) {
             const parts: string[] = [];
             if (goodN) parts.push(`良い ${goodN}`);
             if (normalN) parts.push(`普通 ${normalN}`);
             if (badN) parts.push(`悪い ${badN}`);
             sellerRating = parts.join(" / ");
-            console.log(
-              "[jimoty-item] seller rating via icon count only:",
-              sellerRating,
-            );
+            log.info("seller rating via icon count only:", sellerRating);
           } else {
             // 取れなかった場合の診断
             const evalIdx = evalHtml.search(/評価/);
             if (evalIdx > -1) {
-              console.log(
-                "[jimoty-item] evaluations '評価' context:",
+              log.info(
+                "evaluations '評価' context:",
                 evalHtml
                   .slice(Math.max(0, evalIdx - 50), evalIdx + 250)
                   .replace(/\s+/g, " "),
@@ -505,7 +494,7 @@ export async function scrapeJimotyItem(
           }
         }
       } catch (e) {
-        console.warn("[jimoty-item] evaluations fetch failed:", e);
+        log.warn("evaluations fetch failed:", e);
       }
     }
   }
@@ -546,7 +535,7 @@ export async function scrapeJimotyItem(
     }
   }
 
-  console.log("[jimoty-item] mapped:", {
+  log.info("mapped:", {
     hasDescription: !!description,
     descLen: description?.length ?? 0,
     imageCount: images.length,
