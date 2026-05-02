@@ -36,6 +36,24 @@ export type ShippingType = "free" | "paid" | "pickup";
 
 export type SellerType = "store" | "individual";
 
+/**
+ * 媒体ごとの「ストア」表記:
+ * - メルカリ: "Shops" (Mercari Shops のブランド名)
+ * - ヤフオク: "ストア" (Yahoo!ストア)
+ * - ジモティー: "法人"
+ */
+export function getStoreLabel(source: SourceKey): string {
+  switch (source) {
+    case "mercari":
+      return "Shops";
+    case "jimoty":
+      return "法人";
+    case "yahoo_auction":
+    default:
+      return "ストア";
+  }
+}
+
 export type Listing = {
   id: string;
   title: string;
