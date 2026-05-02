@@ -17,7 +17,6 @@ import {
 import { AppShell } from "@/components/AppShell";
 import { SourceBadge } from "@/components/SourceBadge";
 import { ConditionBadge } from "@/components/ConditionBadge";
-import { MOCK_HISTORY } from "@/lib/mock-data";
 import { formatYen, formatCount } from "@/lib/utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
