@@ -1560,6 +1560,11 @@ function ListingCard({
             <div className="flex items-center gap-1.5 mt-1 text-xs flex-wrap">
               <ConditionBadge rank={rank} size="sm" />
               <ShippingBadge shipping={listing.shipping} size="sm" />
+              {listing.sellerType === "store" && (
+                <span className="inline-flex items-center px-1.5 h-5 rounded text-[10px] font-medium bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200 border border-amber-200 dark:border-amber-900">
+                  ストア
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-1.5 mt-1 text-xs text-muted">
               {listing.condition && (

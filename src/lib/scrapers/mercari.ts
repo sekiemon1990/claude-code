@@ -115,6 +115,8 @@ type MercariItem = {
   photos?: { uri?: string; url?: string }[];
   status?: string;
   itemType?: string;
+  shopName?: string;
+  shop_name?: string;
   // 数値文字列で来ることがある
   itemConditionId?: number | string;
   item_condition_id?: number | string;
@@ -208,10 +210,16 @@ function mapItem(o: MercariItem): Listing | null {
   const likes = toNum(o.numLikes) ?? toNum(o.num_likes);
 
   // URL: メルカリショップ商品 (ITEM_TYPE_BEYOND) は /shops/product/{id}
-  const url =
-    o.itemType === "ITEM_TYPE_BEYOND"
-      ? `https://jp.mercari.com/shops/product/${id}`
-      : `https://jp.mercari.com/item/${id}`;
+  const isBeyond = o.itemType === "ITEM_TYPE_BEYOND";
+  const url = isBeyond
+    ? `https://jp.mercari.com/shops/product/${id}`
+    : `https://jp.mercari.com/item/${id}`;
+
+  // ストア / 個人 判別: ITEM_TYPE_BEYOND または shopName ありはストア
+  const sellerType: "store" | "individual" =
+    isBeyond || (typeof o.shopName === "string" && o.shopName.trim() !== "")
+      ? "store"
+      : "individual";
 
   return {
     id,
@@ -223,6 +231,7 @@ function mapItem(o: MercariItem): Listing | null {
     condition,
     shipping,
     likes,
+    sellerType,
   };
 }
 

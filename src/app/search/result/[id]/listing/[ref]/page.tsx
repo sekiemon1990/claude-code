@@ -568,19 +568,26 @@ function DetailInner({ id, listingRefParam }: { id: string; listingRefParam: str
             icon={<User size={16} />}
             label="出品者"
             value={
-              listing.sellerUrl ? (
-                <a
-                  href={listing.sellerUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline inline-flex items-center gap-0.5"
-                >
-                  {listing.sellerName}
-                  <ExternalLink size={11} className="shrink-0" />
-                </a>
-              ) : (
-                listing.sellerName
-              )
+              <span className="inline-flex items-center gap-1.5">
+                {listing.sellerUrl ? (
+                  <a
+                    href={listing.sellerUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline inline-flex items-center gap-0.5"
+                  >
+                    {listing.sellerName}
+                    <ExternalLink size={11} className="shrink-0" />
+                  </a>
+                ) : (
+                  listing.sellerName
+                )}
+                {listing.sellerType === "store" && (
+                  <span className="inline-flex items-center px-1.5 h-5 rounded text-[10px] font-medium bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200 border border-amber-200 dark:border-amber-900">
+                    ストア
+                  </span>
+                )}
+              </span>
             }
             sub={listing.sellerRating}
           />

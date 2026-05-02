@@ -362,6 +362,22 @@ function mapAuctionItem(o: AuctionItemLike): Listing | null {
   const sellerName =
     sellerNameRaw && sellerNameRaw !== "********" ? sellerNameRaw : undefined;
 
+  // ストア / 個人判別:
+  // - isStore / isBuy / sellerType=="store" 等のフラグ
+  // - seller.type / seller.isStore
+  // - itemType === "STORE" 等
+  const storeFlag =
+    o.isStore === true ||
+    (o.seller as Record<string, unknown> | undefined)?.isStore === true ||
+    (typeof o.sellerType === "string" &&
+      o.sellerType.toLowerCase().includes("store")) ||
+    (typeof (o.seller as Record<string, unknown> | undefined)?.type ===
+      "string" &&
+      ((o.seller as Record<string, unknown>).type as string)
+        .toLowerCase()
+        .includes("store"));
+  const sellerType: "store" | "individual" = storeFlag ? "store" : "individual";
+
   // 送料 (isFreeShipping / hasShippingFee)
   let shipping: "free" | "paid" | "pickup" | undefined;
   if (o.isFreeShipping === true) shipping = "free";
@@ -369,9 +385,6 @@ function mapAuctionItem(o: AuctionItemLike): Listing | null {
 
   // 所在地 (prefectureCode: "13" → "東京都")
   const location = mapPrefecture(str(o.prefectureCode)) || undefined;
-
-  // 商品説明: 検索結果データには含まれないため undefined
-  // (将来的に個別商品ページの追加 fetch で取得する場合は別実装)
 
   return {
     id,
@@ -384,6 +397,7 @@ function mapAuctionItem(o: AuctionItemLike): Listing | null {
     likes,
     condition,
     sellerName,
+    sellerType,
     shipping,
     location,
   };

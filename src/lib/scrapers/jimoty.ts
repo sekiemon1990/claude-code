@@ -233,6 +233,15 @@ function parseJimotyHtml(html: string, limit: number): Listing[] {
       if (Number.isFinite(n) && n >= 0 && n < 1_000_000) likes = n;
     }
 
+    // ストア / 個人 判別:
+    // - card text に「法人」「事業者」「店舗」が含まれればストア
+    // - seller リンクが /biz/ や /shop/ を含めばストア
+    const sellerType: "store" | "individual" =
+      /法人|事業者|店舗|ショップ/.test(cardText) ||
+      /\/(biz|shop|store)\//i.test($card.find("a[href*='/profiles/']").attr("href") ?? "")
+        ? "store"
+        : "individual";
+
     seenIds.add(id);
     listings.push({
       id,
@@ -243,6 +252,7 @@ function parseJimotyHtml(html: string, limit: number): Listing[] {
       url: href.startsWith("http") ? href : `https://jmty.jp${href}`,
       location,
       likes,
+      sellerType,
     });
   });
 
