@@ -7,10 +7,16 @@ const withBundleAnalyzer = bundleAnalyzer({
 
 // 全レスポンスに付与するセキュリティヘッダ
 // CSP は既存の inline scripts (theme init) と相性が悪いので段階的に対応
+//
+// 注意: X-Frame-Options: SAMEORIGIN は Vercel ダッシュボードの
+// プレビュー iframe (vercel.com → *.vercel.app の cross-origin) を
+// 403 にする原因なので削除。代わりに CSP frame-ancestors で
+// 自社 + vercel ホストのみ許可する。
 const securityHeaders = [
   {
-    key: "X-Frame-Options",
-    value: "SAMEORIGIN",
+    key: "Content-Security-Policy",
+    value:
+      "frame-ancestors 'self' https://vercel.com https://*.vercel.com https://*.vercel.app",
   },
   {
     key: "X-Content-Type-Options",
