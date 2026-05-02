@@ -77,6 +77,7 @@ import { QuickMemoModal } from "@/components/QuickMemoModal";
 import { PlatformPriceBars } from "@/components/PlatformPriceBars";
 import {
   SOURCES,
+  getStoreLabel,
   type SourceKey,
   type Listing,
   type ShippingType,
@@ -1735,7 +1736,7 @@ function ListingCard({
               <ShippingBadge shipping={listing.shipping} size="sm" />
               {listing.sellerType === "store" && (
                 <span className="inline-flex items-center px-1.5 h-5 rounded text-[10px] font-medium bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200 border border-amber-200 dark:border-amber-900">
-                  ストア
+                  {getStoreLabel(listing.source)}
                 </span>
               )}
               {listing.condition && (

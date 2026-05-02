@@ -41,7 +41,7 @@ import {
   haptic,
 } from "@/lib/storage";
 import { MOCK_RESULT as MOCK } from "@/lib/mock-data";
-import { SOURCES, type SourceKey } from "@/lib/types";
+import { SOURCES, getStoreLabel, type SourceKey } from "@/lib/types";
 
 function parseRef(ref: string): { source: SourceKey; lid: string } | null {
   const [src, ...rest] = ref.split("-");
@@ -584,7 +584,7 @@ function DetailInner({ id, listingRefParam }: { id: string; listingRefParam: str
                 )}
                 {listing.sellerType === "store" && (
                   <span className="inline-flex items-center px-1.5 h-5 rounded text-[10px] font-medium bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200 border border-amber-200 dark:border-amber-900">
-                    ストア
+                    {getStoreLabel(source)}
                   </span>
                 )}
               </span>
