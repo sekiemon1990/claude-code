@@ -19,22 +19,30 @@
 
 | # | 新 repo | 種別 | 元 branch | 担当セッション | Vercel? | 進捗 |
 |---|---|---|---|---|---|---|
-| 1 | `sekiemon1990/claude-code` (将来 `makxas-search` に rename) | Web | main | `/home/user/claude-code` (マクサスサーチ) | ✅ 既存稼働 | - (現状維持) |
-| 2 | `sekiemon1990/makxas-recording` (monorepo) | Web+iOS | `claude/review-recording-app-KtyN1` + `claude/sales-recording-app-9LcDo` + `feat/noise-removal` | `~/Desktop/claude-code-admin` (admin) + `~/Desktop/claude-code` Mac (iOS) | ✅ admin のみ | 未着手 |
-| 3 | `sekiemon1990/ai-phone-screening` | Node サーバー | `claude/ai-phone-screening-uQhyh` | **要照会** | ❌ (Node サーバーで Render/Fly 想定) | 担当照会待ち |
-| 4 | `sekiemon1990/donation-website` | Web | `claude/build-donation-website-nmT5R` | **要照会** | ✅ | 担当照会待ち |
-| 5 | `sekiemon1990/chatwork-mcp` | MCP server | `claude/chatwork-mcp-integration-Xi1b4` | **要照会** | ❌ (Docker) | 担当照会待ち |
-| 6 | `sekiemon1990/line-headquarters` | LINE bot | `claude/setup-line-headquarters-iPZJx` | **要照会** | ❌ | 担当照会待ち |
-| - | (削除) | - | `claude/automate-journal-entries-NJtzu` | **要確認** | - | コードほぼ無し → 削除予定 |
+| 1 | `sekiemon1990/claude-code` (将来 `makxas-search` に rename) | Web | main | このセッション (マクサスサーチ本体は別セッションが担当) | ✅ 既存稼働 | - (現状維持) |
+| 2 | `sekiemon1990/makxas-recording` (monorepo) | Web+iOS | `claude/review-recording-app-KtyN1` + `claude/sales-recording-app-9LcDo` + `feat/noise-removal` | 録音管理 + iOS の 2 セッション | ✅ admin のみ | 未着手 |
+| 3 | `sekiemon1990/ai-phone-screening-poc` (※ 推奨に変更) | Node サーバー | `claude/ai-phone-screening-uQhyh` | AI 電話スクリーニング PoC セッション | ❌ (PoC、本格版は別 repo で Pipecat 化予定) | 約 40% (PoC 段階) |
+| 4 | `sekiemon1990/mono-kifu-foundation` | Web | `claude/build-donation-website-nmT5R` | モノ寄付基金セッション | ✅ Vercel | 約 35-40% (フロント 90%) |
+| 5 | `sekiemon1990/chatwork-mcp` | MCP server | `claude/chatwork-mcp-integration-Xi1b4` | Chatwork MCP セッション | ❌ (Cloud Run 想定) | 約 85% (実 API E2E のみ未) |
+| 6 | `sekiemon1990/kaitori-maxus-line` | ドキュメント+設定 | `claude/setup-line-headquarters-iPZJx` | 買取マクサス LINE セッション | ❌ (LINE 公式アカウントが本番) | Phase 1 100% / 全体 40% |
+| 7 | `sekiemon1990/makxas-mf-accounting-automation` (PRIVATE 必須) | AI エージェント設定 | `claude/automate-journal-entries-NJtzu` | MF 仕訳自動化セッション | ❌ (Claude Code CLI 対話実行) | 約 25-30% (初仕訳投稿成功済) |
 
 ---
 
-## 進める順番
+## 進める順番 (5 セッション全員から回答受領済 / 2026-05-02)
 
-1. **`makxas-recording` monorepo (#2)** ← 最優先 (担当判明済 + 最も成熟)
-2. **担当不明 4 件 (#3-6)** ← `00-session-inquiry-template.md` で並行照会 → 回答後に `02-generic-product-migration.md` で各個移行
-3. **`automate-journal-entries` の処遇確認** → 削除 or 保留
-4. **旧 repo `sekiemon1990/claude-code` のクリーンアップ** (不要 branch 削除、`makxas-search` への rename 検討)
+1. **`chatwork-mcp` (#5)** ← 進捗 85% で最も成熟、独立度 100%、最速で完了できる
+2. **`makxas-mf-accounting-automation` (#7) PRIVATE** ← 中身が `.mcp.json` + `CLAUDE.md` のみで超軽量、`CLAUDE.md` に事業者情報があるため必ず PRIVATE
+3. **`mono-kifu-foundation` (#4)** ← Vercel デプロイ準備中、独立度高い
+4. **`kaitori-maxus-line` (#6)** ← デプロイ不要 (LINE 公式アカウントが本番)、ドキュメント中心で安全
+5. **`makxas-recording` monorepo (#2)** ← 最複雑 (Firebase 共有、3 branch 統合)、本番稼働中要素あり、後回しで慎重に
+6. **`ai-phone-screening-poc` (#3)** ← PoC archive 化、最後に
+7. **旧 repo クリーンアップ** (不要 branch 削除、将来 `makxas-search` への rename)
+
+### 順番の根拠
+- **小さい/独立度高い** ものから先に流して、Vercel デプロイ枠と GitHub UI 操作の手順に慣れる
+- **monorepo 化 (#2)** は Firebase 設定 merge など本番リスクがあるので最後の集中作業として確保
+- **AI Phone PoC** は本格版が別アーキテクチャになるので慌てて移行する必要なし、最後
 
 ---
 
