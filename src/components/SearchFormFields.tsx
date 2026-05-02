@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   Search,
   Check,
@@ -589,18 +589,20 @@ function getSpeechRecognitionCtor():
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
+// SpeechRecognition の有無を SSR-safe に検出
+const subscribeNoop = () => () => {};
 function VoiceInputButton({
   onResult,
 }: {
   onResult: (text: string) => void;
 }) {
-  const [supported, setSupported] = useState(false);
+  const supported = useSyncExternalStore(
+    subscribeNoop,
+    () => getSpeechRecognitionCtor() !== null,
+    () => false,
+  );
   const [listening, setListening] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
-
-  useEffect(() => {
-    setSupported(getSpeechRecognitionCtor() !== null);
-  }, []);
 
   function start() {
     const Ctor = getSpeechRecognitionCtor();

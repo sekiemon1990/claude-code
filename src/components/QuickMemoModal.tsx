@@ -26,12 +26,14 @@ export function QuickMemoModal({
 }: Props) {
   const initialMemo = useListingMemoValue(listingRef);
   const [memo, setMemo] = useState(initialMemo);
-
-  // Supabase からメモが取得されたら textarea の内容を初期化
-  useEffect(() => {
+  // listingRef が変わった or Supabase からメモが取れたタイミングで textarea を初期化
+  // (render 中の setState は React 19 で許可されており、無限ループの懸念がない場合の derived state パターン)
+  const [snapshotKey, setSnapshotKey] = useState(`${listingRef}:${initialMemo}`);
+  const currentKey = `${listingRef}:${initialMemo}`;
+  if (currentKey !== snapshotKey) {
+    setSnapshotKey(currentKey);
     setMemo(initialMemo);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listingRef]);
+  }
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getQueryClient } from "@/components/QueryProvider";
 import {
@@ -91,27 +91,43 @@ export function setDefaultQuery(query: DefaultQuery): void {
   writeLocal(DEFAULT_QUERY_KEY, JSON.stringify(query));
 }
 
+function subscribeListStorage(callback: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener("maxus_search:list", callback);
+  window.addEventListener("storage", callback);
+  return () => {
+    window.removeEventListener("maxus_search:list", callback);
+    window.removeEventListener("storage", callback);
+  };
+}
+
+// snapshot キャッシュ (useSyncExternalStore は同一参照を要求)
+let cachedDefaultQuery: DefaultQuery = FALLBACK_DEFAULT_QUERY;
+let cachedDefaultQueryKey = "";
+
+function getDefaultQuerySnapshot(): DefaultQuery {
+  const q = getDefaultQuery();
+  const key = JSON.stringify(q);
+  if (key === cachedDefaultQueryKey) return cachedDefaultQuery;
+  cachedDefaultQueryKey = key;
+  cachedDefaultQuery = q;
+  return q;
+}
+
 export function useDefaultQuery(): [
   DefaultQuery,
   (q: Partial<DefaultQuery>) => void,
 ] {
-  const [q, setLocal] = useState<DefaultQuery>(FALLBACK_DEFAULT_QUERY);
-
-  useEffect(() => {
-    setLocal(getDefaultQuery());
-    const onChange = () => setLocal(getDefaultQuery());
-    window.addEventListener("maxus_search:list", onChange);
-    window.addEventListener("storage", onChange);
-    return () => {
-      window.removeEventListener("maxus_search:list", onChange);
-      window.removeEventListener("storage", onChange);
-    };
-  }, []);
+  const q = useSyncExternalStore(
+    subscribeListStorage,
+    getDefaultQuerySnapshot,
+    () => FALLBACK_DEFAULT_QUERY,
+  );
 
   const update = (partial: Partial<DefaultQuery>) => {
     const next = { ...q, ...partial };
     setDefaultQuery(next);
-    setLocal(next);
+    // setDefaultQuery → maxus_search:list イベント → snapshot 再読込
   };
 
   return [q, update];
