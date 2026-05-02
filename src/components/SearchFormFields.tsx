@@ -48,6 +48,10 @@ export type ConditionRankNonUnknown = Exclude<ConditionRank, "unknown">;
 export type ListingStatus = "sold" | "active";
 export const DEFAULT_LISTING_STATUS: ListingStatus = "sold";
 
+// 出品者種別フィルタ: 全て / ストア (法人/Shops) / 個人
+export type SellerTypeFilter = "all" | "store" | "individual";
+export const DEFAULT_SELLER_TYPE_FILTER: SellerTypeFilter = "all";
+
 export type SearchFormValues = {
   keyword: string;
   excludes: string;
@@ -56,6 +60,7 @@ export type SearchFormValues = {
   conditions: ConditionRankNonUnknown[];
   shipping: ShippingFilter;
   listingStatus: ListingStatus;
+  sellerType: SellerTypeFilter;
 };
 
 type Props = {
@@ -87,6 +92,9 @@ export function SearchFormFields({
   );
   const [listingStatus, setListingStatus] = useState<ListingStatus>(
     initial?.listingStatus ?? DEFAULT_LISTING_STATUS
+  );
+  const [sellerType, setSellerType] = useState<SellerTypeFilter>(
+    initial?.sellerType ?? DEFAULT_SELLER_TYPE_FILTER
   );
   const [keywordFocused, setKeywordFocused] = useState(false);
   const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -237,6 +245,9 @@ export function SearchFormFields({
       ...(listingStatus !== DEFAULT_LISTING_STATUS && {
         listingStatus,
       }),
+      ...(sellerType !== DEFAULT_SELLER_TYPE_FILTER && {
+        sellerType,
+      }),
     });
   }
 
@@ -255,6 +266,7 @@ export function SearchFormFields({
         conditions: selectedConditions,
         shipping,
         listingStatus,
+        sellerType,
       });
       toast({
         message: "オフラインのため検索を保留しました。回線復帰時に自動実行されます",
@@ -589,6 +601,35 @@ export function SearchFormFields({
             ※ ジモティーは元々出品中のみ表示
           </p>
         )}
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <span className="text-sm font-medium text-foreground">出品者</span>
+        <div className="grid grid-cols-3 gap-2">
+          {(
+            [
+              { v: "all", label: "全て" },
+              { v: "store", label: "ストア" },
+              { v: "individual", label: "個人" },
+            ] as { v: SellerTypeFilter; label: string }[]
+          ).map((opt) => (
+            <button
+              key={opt.v}
+              type="button"
+              onClick={() => setSellerType(opt.v)}
+              className={
+                sellerType === opt.v
+                  ? "h-11 rounded-lg border-2 border-primary bg-primary/5 text-primary font-semibold text-sm"
+                  : "h-11 rounded-lg border border-border bg-surface text-foreground text-sm hover:border-foreground/30"
+              }
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-[10px] text-muted">
+          ストア = 法人 / Mercari Shops / Yahoo!ストア
+        </p>
       </div>
 
       <button

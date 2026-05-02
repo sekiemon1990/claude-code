@@ -20,6 +20,7 @@ export type ListItemQuery = {
   conditions: ConditionRank[];
   shipping: ShippingFilter;
   listingStatus?: "sold" | "active";
+  sellerType?: "all" | "store" | "individual";
 };
 
 export type ListItemResult = {
