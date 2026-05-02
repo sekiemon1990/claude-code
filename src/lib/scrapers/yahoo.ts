@@ -1,5 +1,8 @@
 import * as cheerio from "cheerio";
 import type { Listing, SourceResult } from "@/lib/types";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("yahoo-scrape");
 
 /**
  * Yahoo オークション 落札相場 (closedsearch) スクレイパ
@@ -37,14 +40,14 @@ export async function scrapeYahooAuction(
   // 取れなかったが 1 ページ目が満杯なら「fetchCount 件以上」とみなす
   if (totalAvailable === undefined && listings.length >= fetchCount) {
     totalAvailable = fetchCount;
-    console.log(
-      "[yahoo-scrape] totalCount unknown, but page is full → assume >=",
+    log.info(
+      "totalCount unknown, but page is full → assume >=",
       fetchCount,
     );
   }
 
-  console.log("[yahoo-scrape] fetched:", listings.length, "/", fetchCount);
-  console.log("[yahoo-scrape] total available:", totalAvailable);
+  log.info("fetched:", listings.length, "/", fetchCount);
+  log.info("total available:", totalAvailable);
 
   return summarize("yahoo_auction", listings, totalAvailable);
 }
@@ -77,10 +80,7 @@ async function fetchYahooPage(
   });
 
   if (!res.ok) {
-    console.warn(
-      `[yahoo-scrape] page b=${startPosition} status:`,
-      res.status,
-    );
+    log.warn(`page b=${startPosition} status:`, res.status);
     return "";
   }
   return res.text();
@@ -109,15 +109,15 @@ function parseTotalCount(html: string): number | undefined {
       if (propsAny && typeof propsAny === "object") {
         const pageProps = (propsAny as { pageProps?: unknown }).pageProps;
         if (pageProps && typeof pageProps === "object") {
-          console.log(
-            "[yahoo-scrape] pageProps keys:",
+          log.info(
+            "pageProps keys:",
             Object.keys(pageProps as object).join(","),
           );
         }
       }
       const total = findTotalCount(data);
       if (total !== undefined) {
-        console.log("[yahoo-scrape] totalCount from __NEXT_DATA__:", total);
+        log.info("totalCount from __NEXT_DATA__:", total);
         return total;
       }
     } catch {
@@ -135,7 +135,7 @@ function parseTotalCount(html: string): number | undefined {
       if (Number.isFinite(n) && n > (candidate ?? 0)) candidate = n;
     }
     if (candidate !== undefined) {
-      console.log("[yahoo-scrape] totalCount via regex:", candidate);
+      log.info("totalCount via regex:", candidate);
       return candidate;
     }
   }
@@ -152,13 +152,13 @@ function parseTotalCount(html: string): number | undefined {
     if (m) {
       const n = Number(m[1].replace(/,/g, ""));
       if (Number.isFinite(n) && n > 0) {
-        console.log(`[yahoo-scrape] totalCount via HTML regex (${re}):`, n);
+        log.info(`totalCount via HTML regex (${re}):`, n);
         return n;
       }
     }
   }
 
-  console.log("[yahoo-scrape] totalCount not found");
+  log.info("totalCount not found");
   return undefined;
 }
 
@@ -210,37 +210,31 @@ function parseFromNextData(html: string): Listing[] | null {
     /<script\s+id="__NEXT_DATA__"\s+type="application\/json">([\s\S]*?)<\/script>/,
   );
   if (!match) {
-    console.log("[yahoo-scrape] __NEXT_DATA__ not found");
+    log.info("__NEXT_DATA__ not found");
     return null;
   }
   let data: unknown;
   try {
     data = JSON.parse(match[1]);
   } catch (e) {
-    console.error("[yahoo-scrape] __NEXT_DATA__ parse failed:", e);
+    log.error("__NEXT_DATA__ parse failed:", e);
     return null;
   }
 
   // 構造を診断ログに出す (初回のみ)
-  console.log(
-    "[yahoo-scrape] __NEXT_DATA__ top keys:",
+  log.info(
+    "__NEXT_DATA__ top keys:",
     typeof data === "object" && data ? Object.keys(data as object).join(",") : "(none)",
   );
 
   // 配列に「価格 / タイトル / 終了日 / オークションID」っぽいフィールドを持つ
   // オブジェクトを再帰探索する。
   const items = findAuctionItems(data);
-  console.log("[yahoo-scrape] __NEXT_DATA__ items found:", items.length);
+  log.info("__NEXT_DATA__ items found:", items.length);
   if (items.length > 0) {
-    console.log(
-      "[yahoo-scrape] sample item keys:",
-      Object.keys(items[0]).join(","),
-    );
+    log.info("sample item keys:", Object.keys(items[0]).join(","));
     // 全フィールドの調査ログ (1500 文字まで)
-    console.log(
-      "[yahoo-scrape] sample item full:",
-      JSON.stringify(items[0]).slice(0, 1500),
-    );
+    log.info("sample item full:", JSON.stringify(items[0]).slice(0, 1500));
   }
 
   const listings: Listing[] = [];
@@ -532,7 +526,7 @@ function parseYahooHtml(html: string): Listing[] {
   const seenIds = new Set<string>();
 
   const productLinks = $('a[href*="/auction/"]');
-  console.log("[yahoo-scrape] product link candidates:", productLinks.length);
+  log.info("product link candidates:", productLinks.length);
 
   productLinks.each((_, link) => {
     const $link = $(link);

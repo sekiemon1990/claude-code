@@ -1,4 +1,7 @@
 import type { Listing } from "@/lib/types";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("yahoo-item");
 
 /**
  * Yahoo オークション・PayPay フリマの個別商品ページ詳細取得
@@ -39,7 +42,7 @@ export async function scrapeYahooItem(
     ? `https://paypayfleamarket.yahoo.co.jp/item/${id}`
     : `https://auctions.yahoo.co.jp/jp/auction/${id}`;
 
-  console.log("[yahoo-item] fetching:", url);
+  log.info("fetching:", url);
 
   const res = await fetch(url, {
     headers: {
@@ -53,23 +56,20 @@ export async function scrapeYahooItem(
     redirect: "follow",
   });
 
-  console.log("[yahoo-item] status:", res.status, "final url:", res.url);
+  log.info("status:", res.status, "final url:", res.url);
   if (!res.ok) {
     throw new Error(`商品ページ取得エラー: ${res.status}`);
   }
 
   const html = await res.text();
-  console.log("[yahoo-item] html size:", html.length);
+  log.info("html size:", html.length);
 
   // __NEXT_DATA__ チェック
   const m = html.match(
     /<script\s+id="__NEXT_DATA__"\s+type="application\/json">([\s\S]*?)<\/script>/,
   );
   if (!m) {
-    console.log(
-      "[yahoo-item] __NEXT_DATA__ not found. HTML head sample:",
-      html.slice(0, 800),
-    );
+    log.info("__NEXT_DATA__ not found. HTML head sample:", html.slice(0, 800));
     return { id };
   }
 
@@ -77,12 +77,12 @@ export async function scrapeYahooItem(
   try {
     data = JSON.parse(m[1]);
   } catch (e) {
-    console.error("[yahoo-item] __NEXT_DATA__ parse failed:", e);
+    log.error("__NEXT_DATA__ parse failed:", e);
     return { id };
   }
 
-  console.log(
-    "[yahoo-item] __NEXT_DATA__ top keys:",
+  log.info(
+    "__NEXT_DATA__ top keys:",
     typeof data === "object" && data
       ? Object.keys(data as object).join(",")
       : "(none)",
@@ -91,15 +91,12 @@ export async function scrapeYahooItem(
   // ページ内の商品データを再帰探索
   const item = findItemNode(data);
   if (!item) {
-    console.log("[yahoo-item] item node not found in __NEXT_DATA__");
+    log.info("item node not found in __NEXT_DATA__");
     return { id };
   }
 
-  console.log("[yahoo-item] item keys:", Object.keys(item).join(","));
-  console.log(
-    "[yahoo-item] item sample (first 2000 chars):",
-    JSON.stringify(item).slice(0, 2000),
-  );
+  log.info("item keys:", Object.keys(item).join(","));
+  log.info("item sample (first 2000 chars):", JSON.stringify(item).slice(0, 2000));
 
   const detail: YahooItemDetail = {
     id,
@@ -123,7 +120,7 @@ export async function scrapeYahooItem(
     likes: extractLikes(item),
   };
 
-  console.log("[yahoo-item] mapped result:", {
+  log.info("mapped result:", {
     hasDescription: !!detail.description,
     descLen: detail.description?.length ?? 0,
     imageCount: detail.images?.length ?? 0,

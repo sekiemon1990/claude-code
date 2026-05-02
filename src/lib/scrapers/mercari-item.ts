@@ -1,4 +1,7 @@
 import { generateMercariDpop } from "./mercari-dpop";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("mercari-item");
 
 /**
  * メルカリ個別商品 API (DPoP 認証)
@@ -37,7 +40,7 @@ export async function scrapeMercariItem(
   const url = `https://api.mercari.jp/items/get?id=${encodeURIComponent(id)}`;
   const dpop = generateMercariDpop("GET", url);
 
-  console.log("[mercari-item] fetching:", url);
+  log.info("fetching:", url);
 
   const res = await fetch(url, {
     method: "GET",
@@ -49,25 +52,22 @@ export async function scrapeMercariItem(
     cache: "no-store",
   });
 
-  console.log("[mercari-item] status:", res.status);
+  log.info("status:", res.status);
 
   if (!res.ok) {
     const text = await res.text();
-    console.error("[mercari-item] error:", text.slice(0, 500));
+    log.error("error:", text.slice(0, 500));
     throw new Error(`メルカリ商品 API エラー: ${res.status}`);
   }
 
   const json = (await res.json()) as MercariItemResponse;
   const data = json.data;
   if (!data) {
-    console.warn("[mercari-item] no data field in response");
+    log.warn("no data field in response");
     return { id };
   }
 
-  console.log(
-    "[mercari-item] keys:",
-    Object.keys(data).slice(0, 30).join(","),
-  );
+  log.info("keys:", Object.keys(data).slice(0, 30).join(","));
 
   const photos = pickPhotos(data);
   const condition =
@@ -119,7 +119,7 @@ export async function scrapeMercariItem(
     likes: typeof data.num_likes === "number" ? data.num_likes : undefined,
   };
 
-  console.log("[mercari-item] mapped:", {
+  log.info("mapped:", {
     hasDescription: !!result.description,
     descLen: result.description?.length ?? 0,
     imageCount: result.images?.length ?? 0,
