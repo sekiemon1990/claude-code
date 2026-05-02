@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { scrapeYahooAuction } from "@/lib/scrapers/yahoo";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -11,6 +12,9 @@ type RequestBody = {
 };
 
 export async function POST(req: Request) {
+  const limited = enforceRateLimit(req, "scrape:yahoo", 30);
+  if (limited) return limited;
+
   let body: RequestBody;
   try {
     body = await req.json();

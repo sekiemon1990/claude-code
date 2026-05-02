@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const maxDuration = 15;
@@ -34,6 +35,10 @@ const SUGGEST_SCHEMA = {
 };
 
 export async function POST(req: Request) {
+  // 入力中の高頻度リクエストなので緩めに 120/分
+  const limited = enforceRateLimit(req, "ai:suggest", 120);
+  if (limited) return limited;
+
   if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json(
       { error: "ANTHROPIC_API_KEY が設定されていません" },

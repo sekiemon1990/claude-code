@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { scrapeMercariItem } from "@/lib/scrapers/mercari-item";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -9,6 +10,9 @@ type RequestBody = {
 };
 
 export async function POST(req: Request) {
+  const limited = enforceRateLimit(req, "scrape:mercari-item", 60);
+  if (limited) return limited;
+
   let body: RequestBody;
   try {
     body = await req.json();
