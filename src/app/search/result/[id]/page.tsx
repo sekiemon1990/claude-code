@@ -38,7 +38,7 @@ import {
   getPeriodLabel,
 } from "@/components/SearchFormFields";
 import { MOCK_RESULT } from "@/lib/mock-data";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import type { SourceResult } from "@/lib/types";
 import {
   formatYen,
@@ -139,9 +139,10 @@ function ResultInner({ resultId }: { resultId: string }) {
     mockMode !== "force" &&
     !!keyword.trim();
 
-  const yahooQuery = useQuery({
+  const yahooQuery = useInfiniteQuery({
     queryKey: ["scrape_yahoo", keyword, excludesParam, listingStatusParam],
-    queryFn: async (): Promise<SourceResult> => {
+    initialPageParam: 1 as number,
+    queryFn: async ({ pageParam }): Promise<SourceResult> => {
       const res = await fetch("/api/scrape/yahoo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -149,6 +150,7 @@ function ResultInner({ resultId }: { resultId: string }) {
           keyword,
           excludes: excludesParam || undefined,
           status: listingStatusParam,
+          page: pageParam,
         }),
       });
       if (!res.ok) {
@@ -158,6 +160,8 @@ function ResultInner({ resultId }: { resultId: string }) {
       const data = (await res.json()) as { result: SourceResult };
       return data.result;
     },
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage.hasNextPage ? allPages.length + 1 : undefined,
     enabled: yahooEnabled,
     staleTime: 5 * 60_000,
     refetchOnMount: false,
@@ -165,9 +169,10 @@ function ResultInner({ resultId }: { resultId: string }) {
     retry: 1,
   });
 
-  const mercariQuery = useQuery({
+  const mercariQuery = useInfiniteQuery({
     queryKey: ["scrape_mercari", keyword, excludesParam, listingStatusParam],
-    queryFn: async (): Promise<SourceResult> => {
+    initialPageParam: "" as string,
+    queryFn: async ({ pageParam }): Promise<SourceResult> => {
       const res = await fetch("/api/scrape/mercari", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -175,6 +180,7 @@ function ResultInner({ resultId }: { resultId: string }) {
           keyword,
           excludes: excludesParam || undefined,
           status: listingStatusParam,
+          pageToken: pageParam,
         }),
       });
       if (!res.ok) {
@@ -184,6 +190,10 @@ function ResultInner({ resultId }: { resultId: string }) {
       const data = (await res.json()) as { result: SourceResult };
       return data.result;
     },
+    getNextPageParam: (lastPage) =>
+      lastPage.hasNextPage && lastPage.nextPageToken
+        ? lastPage.nextPageToken
+        : undefined,
     enabled: mercariEnabled,
     staleTime: 5 * 60_000,
     refetchOnMount: false,
@@ -191,13 +201,18 @@ function ResultInner({ resultId }: { resultId: string }) {
     retry: 1,
   });
 
-  const jimotyQuery = useQuery({
+  const jimotyQuery = useInfiniteQuery({
     queryKey: ["scrape_jimoty", keyword, excludesParam],
-    queryFn: async (): Promise<SourceResult> => {
+    initialPageParam: 1 as number,
+    queryFn: async ({ pageParam }): Promise<SourceResult> => {
       const res = await fetch("/api/scrape/jimoty", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ keyword, excludes: excludesParam || undefined }),
+        body: JSON.stringify({
+          keyword,
+          excludes: excludesParam || undefined,
+          page: pageParam,
+        }),
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -206,12 +221,56 @@ function ResultInner({ resultId }: { resultId: string }) {
       const data = (await res.json()) as { result: SourceResult };
       return data.result;
     },
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage.hasNextPage ? allPages.length + 1 : undefined,
     enabled: jimotyEnabled,
     staleTime: 5 * 60_000,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     retry: 1,
   });
+
+  // 全ページの listings を結合 + 集計再計算
+  function mergePages(
+    source: SourceResult["source"],
+    pages: SourceResult[] | undefined,
+  ): SourceResult | undefined {
+    if (!pages || pages.length === 0) return undefined;
+    const allListings = pages.flatMap((p) => p.listings);
+    const prices = allListings.map((l) => l.price).sort((a, b) => a - b);
+    const count = allListings.length;
+    if (count === 0) {
+      return {
+        source,
+        count: 0,
+        median: 0,
+        min: 0,
+        max: 0,
+        listings: [],
+        totalAvailable: pages[0].totalAvailable,
+        hasNextPage: pages[pages.length - 1].hasNextPage,
+      };
+    }
+    const median =
+      count % 2 === 1
+        ? prices[Math.floor(count / 2)]
+        : Math.round((prices[count / 2 - 1] + prices[count / 2]) / 2);
+    return {
+      source,
+      count,
+      median,
+      min: prices[0],
+      max: prices[count - 1],
+      listings: allListings,
+      totalAvailable: pages[0].totalAvailable,
+      hasNextPage: pages[pages.length - 1].hasNextPage,
+      nextPageToken: pages[pages.length - 1].nextPageToken,
+    };
+  }
+
+  const yahooMerged = mergePages("yahoo_auction", yahooQuery.data?.pages);
+  const mercariMerged = mergePages("mercari", mercariQuery.data?.pages);
+  const jimotyMerged = mergePages("jimoty", jimotyQuery.data?.pages);
 
   const result = useMemo(() => {
     if (
@@ -225,16 +284,16 @@ function ResultInner({ resultId }: { resultId: string }) {
       query: { ...MOCK_RESULT.query, keyword },
       productGuess: keyword,
       sources: MOCK_RESULT.sources.map((s) => {
-        if (s.source === "yahoo_auction" && yahooQuery.data) return yahooQuery.data;
-        if (s.source === "mercari" && mercariQuery.data) return mercariQuery.data;
-        if (s.source === "jimoty" && jimotyQuery.data) return jimotyQuery.data;
+        if (s.source === "yahoo_auction" && yahooMerged) return yahooMerged;
+        if (s.source === "mercari" && mercariMerged) return mercariMerged;
+        if (s.source === "jimoty" && jimotyMerged) return jimotyMerged;
         return s;
       }),
     };
   }, [
-    yahooQuery.data,
-    mercariQuery.data,
-    jimotyQuery.data,
+    yahooMerged,
+    mercariMerged,
+    jimotyMerged,
     mockMode,
     yahooEnabled,
     mercariEnabled,
@@ -398,6 +457,24 @@ function ResultInner({ resultId }: { resultId: string }) {
       : pageSize * (1 + extraPages);
   const visibleListings = filteredListings.slice(0, visibleCount);
   const hasMore = visibleCount < filteredListings.length;
+
+  // 各媒体に未取得の次ページがあるか
+  const sourcesWithMore = [
+    yahooQuery.hasNextPage && yahooEnabled,
+    mercariQuery.hasNextPage && mercariEnabled,
+    jimotyQuery.hasNextPage && jimotyEnabled,
+  ].filter(Boolean).length;
+  const isFetchingMore =
+    yahooQuery.isFetchingNextPage ||
+    mercariQuery.isFetchingNextPage ||
+    jimotyQuery.isFetchingNextPage;
+
+  // 全ソースに次ページがある場合に呼ぶ
+  function fetchNextAll() {
+    if (yahooQuery.hasNextPage) yahooQuery.fetchNextPage();
+    if (mercariQuery.hasNextPage) mercariQuery.fetchNextPage();
+    if (jimotyQuery.hasNextPage) jimotyQuery.fetchNextPage();
+  }
 
   const summary = useMemo(() => {
     const prices = filteredListings.map((l) => l.price);
@@ -1089,6 +1166,19 @@ function ResultInner({ resultId }: { resultId: string }) {
                 className="h-12 rounded-lg border border-border bg-surface text-foreground text-sm font-medium hover:bg-surface-2 transition-colors"
               >
                 もっと見る ({filteredListings.length - visibleCount}件)
+              </button>
+            )}
+
+            {!hasMore && sourcesWithMore > 0 && (
+              <button
+                type="button"
+                onClick={fetchNextAll}
+                disabled={isFetchingMore}
+                className="h-12 rounded-lg border border-primary bg-primary/5 text-primary text-sm font-semibold hover:bg-primary/10 transition-colors disabled:opacity-60"
+              >
+                {isFetchingMore
+                  ? "取得中..."
+                  : `次のページから追加取得 (${sourcesWithMore}媒体)`}
               </button>
             )}
 

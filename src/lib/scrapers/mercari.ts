@@ -23,12 +23,14 @@ export type MercariScrapeOptions = {
   limit?: number;
   /** "sold": 売切のみ (デフォルト) / "active": 出品中 / "all" */
   status?: "sold" | "active" | "all";
+  /** ページネーション用のトークン (前回レスポンスの meta.nextPageToken) */
+  pageToken?: string;
 };
 
 export async function scrapeMercari(
   options: MercariScrapeOptions,
 ): Promise<SourceResult> {
-  const { keyword, excludes, limit = 30, status = "sold" } = options;
+  const { keyword, excludes, limit = 30, status = "sold", pageToken = "" } = options;
 
   // status: sold = STATUS_SOLD_OUT のみ、active = STATUS_ON_SALE のみ、all = 両方
   const statusFilter =
@@ -41,7 +43,7 @@ export async function scrapeMercari(
   const body = {
     userId: "",
     pageSize: limit,
-    pageToken: "",
+    pageToken,
     searchSessionId: randomUUID(),
     indexRouting: "INDEX_ROUTING_UNSPECIFIED",
     thumbnailTypes: [],
@@ -110,7 +112,7 @@ export async function scrapeMercari(
     if (listing) listings.push(listing);
   }
 
-  return summarize(listings, totalAvailable);
+  return summarize(listings, totalAvailable, json.meta?.nextPageToken);
 }
 
 // ---- レスポンスマッピング ----
@@ -266,9 +268,11 @@ function toIso(v: unknown): string {
 function summarize(
   listings: Listing[],
   totalAvailable?: number,
+  nextPageToken?: string,
 ): SourceResult {
   const prices = listings.map((l) => l.price).sort((a, b) => a - b);
   const count = listings.length;
+  const hasNextPage = !!nextPageToken && nextPageToken !== "";
   if (count === 0) {
     return {
       source: "mercari",
@@ -278,6 +282,8 @@ function summarize(
       max: 0,
       listings: [],
       totalAvailable,
+      hasNextPage,
+      nextPageToken,
     };
   }
   const median =
@@ -292,5 +298,7 @@ function summarize(
     max: prices[count - 1],
     listings,
     totalAvailable,
+    hasNextPage,
+    nextPageToken,
   };
 }

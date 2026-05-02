@@ -23,16 +23,19 @@ export type JimotyScrapeOptions = {
   limit?: number;
   /** "sold" / "active" / "all" - ジモティーは現状フィルタなし (全件返却) */
   status?: "sold" | "active" | "all";
+  /** 1-indexed ページ番号 (デフォルト 1) */
+  page?: number;
 };
 
 export async function scrapeJimoty(
   options: JimotyScrapeOptions,
 ): Promise<SourceResult> {
-  const { keyword, excludes, limit = 30 } = options;
+  const { keyword, excludes, limit = 30, page = 1 } = options;
 
   // Jimoty 検索: /all/sale?keyword=... が「売ります」全カテゴリの検索 URL
   const url = new URL("https://jmty.jp/all/sale");
   url.searchParams.set("keyword", keyword);
+  if (page > 1) url.searchParams.set("page", String(page));
 
   const res = await fetch(url.toString(), {
     headers: {
@@ -123,7 +126,9 @@ export async function scrapeJimoty(
     });
   }
 
-  return summarize(filtered, totalAvailable);
+  // 次ページ判定: 取得 listings が limit 一杯ならまだ続きがあると推定
+  const hasNextPage = listings.length >= limit;
+  return summarize(filtered, totalAvailable, hasNextPage);
 }
 
 function parseJimotyHtml(html: string, limit: number): Listing[] {
@@ -297,6 +302,7 @@ function parseTotalCount(html: string): number | undefined {
 function summarize(
   listings: Listing[],
   totalAvailable?: number,
+  hasNextPage?: boolean,
 ): SourceResult {
   const prices = listings.map((l) => l.price).sort((a, b) => a - b);
   const count = listings.length;
@@ -309,6 +315,7 @@ function summarize(
       max: 0,
       listings: [],
       totalAvailable,
+      hasNextPage,
     };
   }
   const median =
@@ -325,5 +332,6 @@ function summarize(
     max,
     listings,
     totalAvailable,
+    hasNextPage,
   };
 }

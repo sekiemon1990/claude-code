@@ -10,6 +10,7 @@ type RequestBody = {
   excludes?: string;
   limit?: number;
   status?: "sold" | "active" | "all";
+  pageToken?: string;
 };
 
 export async function POST(req: Request) {
@@ -36,6 +37,7 @@ export async function POST(req: Request) {
       excludes: body.excludes,
       limit: body.limit ?? 30,
       status: body.status,
+      pageToken: body.pageToken,
     });
     return NextResponse.json({ result });
   } catch (e) {

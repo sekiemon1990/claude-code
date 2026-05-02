@@ -67,6 +67,10 @@ export type SourceResult = {
   listings: Listing[];
   // 媒体側に存在する総件数 (取得した listings.length は表示分のみ)
   totalAvailable?: number;
+  // ページネーション情報 (次ページが存在すれば設定される)
+  hasNextPage?: boolean;
+  // メルカリ用の次ページトークン
+  nextPageToken?: string;
 };
 
 export type SearchResult = {
